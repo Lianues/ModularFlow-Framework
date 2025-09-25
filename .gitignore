@@ -1,0 +1,7 @@
+frontend_projects/manosaba_ai/
+backups/
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+ui美化规范.md
