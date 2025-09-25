@@ -90,11 +90,11 @@ Python 依赖见 [requirements.txt](requirements.txt)。主要包含：
 
 1) 克隆仓库
 ```bash
-git clone <your-repo-url> ModularFlow
+git clone https://github.com/Lianues/ModularFlow-Framework
 cd ModularFlow
 ```
 
-2) 创建并激活 Python 虚拟环境，安装依赖
+2) 创建并激活 Python 虚拟环境，安装依赖（可以跳过，直接安装Python依赖）
 ```bash
 # 创建虚拟环境
 python -m venv .venv
