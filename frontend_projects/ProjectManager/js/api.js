@@ -4,7 +4,7 @@
  */
 
 class APIClient {
-    constructor(baseURL = 'http://localhost:8050', apiPrefix = '/api/v1') {
+    constructor(baseURL = 'http://localhost:8050', apiPrefix = '/api') {
         this.baseURL = baseURL;
         this.apiPrefix = apiPrefix;
         this.websocket = null;
@@ -84,50 +84,50 @@ class APIClient {
      * 项目管理API
      */
     async getProjectStatus(projectName = null) {
-        const endpoint = projectName 
-            ? `/project_manager/get_status?project_name=${projectName}`
-            : '/project_manager/get_status';
-        return this.post(endpoint);
+        const endpoint = projectName
+            ? `/modules/project_manager/get_status?project_name=${encodeURIComponent(projectName)}`
+            : '/modules/project_manager/get_status';
+        return this.get(endpoint);
     }
 
     async startProject(projectName, component = 'all') {
-        return this.post('/project_manager/start_project', {
+        return this.post('/modules/project_manager/start_project', {
             project_name: projectName,
             component: component
         });
     }
 
     async stopProject(projectName, component = 'all') {
-        return this.post('/project_manager/stop_project', {
+        return this.post('/modules/project_manager/stop_project', {
             project_name: projectName,
             component: component
         });
     }
 
     async restartProject(projectName, component = 'all') {
-        return this.post('/project_manager/restart_project', {
+        return this.post('/modules/project_manager/restart_project', {
             project_name: projectName,
             component: component
         });
     }
 
     async getPortUsage() {
-        return this.post('/project_manager/get_ports');
+        return this.post('/modules/project_manager/get_ports');
     }
 
     async performHealthCheck() {
-        return this.post('/project_manager/health_check');
+        return this.post('/modules/project_manager/health_check');
     }
     
     /**
      * 项目管理API
      */
     async getManagedProjects() {
-        return this.post('/project_manager/get_managed_projects');
+        return this.post('/modules/project_manager/get_managed_projects');
     }
 
     async importProject(formData) {
-        const url = `${this.baseURL}${this.apiPrefix}/project_manager/import_project`;
+        const url = `${this.baseURL}${this.apiPrefix}/modules/project_manager/import_project`;
         
         try {
             const response = await fetch(url, {
@@ -154,7 +154,7 @@ class APIClient {
      * 后端函数：project_manager.embed_zip_into_image
      */
     async embedZipIntoImage(formData) {
-        const url = `${this.baseURL}${this.apiPrefix}/project_manager/embed_zip_into_image`;
+        const url = `${this.baseURL}${this.apiPrefix}/modules/project_manager/embed_zip_into_image`;
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -176,7 +176,7 @@ class APIClient {
      * 后端函数：project_manager.import_project_from_image
      */
     async importProjectFromImage(formData) {
-        const url = `${this.baseURL}${this.apiPrefix}/project_manager/import_project_from_image`;
+        const url = `${this.baseURL}${this.apiPrefix}/modules/project_manager/import_project_from_image`;
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -194,20 +194,20 @@ class APIClient {
     }
 
     async deleteProject(projectName) {
-        return this.post('/project_manager/delete_project', {
+        return this.post('/modules/project_manager/delete_project', {
             project_name: projectName
         });
     }
 
     async updateProjectPorts(projectName, ports) {
-        return this.post('/project_manager/update_ports', {
+        return this.post('/modules/project_manager/update_ports', {
             project_name: projectName,
             ports: ports
         });
     }
 
     async installProjectDependencies(projectName) {
-        return this.post('/project_manager/install_project', {
+        return this.post('/modules/project_manager/install_project', {
             project_name: projectName
         });
     }

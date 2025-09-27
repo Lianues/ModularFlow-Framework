@@ -2,8 +2,8 @@
 统一服务管理系统 (Unified Service Management System)
 
 提供框架级别的服务定位、动态模块发现与加载，以及共享资源访问的基础能力。
-本版本移除了对 backend_projects/backend-projects.json 的依赖，采用纯“动态注册”模式：
-- 启动时仅扫描框架根目录下的 modules/* 子包并导入其实现文件，从而触发各模块内的 @register_function 装饰器注册。
+本版本采用纯“API 封装层自动发现”模式：
+- 启动时仅扫描框架根目录下的 api/* 子包并导入其实现文件，从而触发封装层内的 @register_api 装饰器注册。
 - 不再维护项目列表/当前项目/项目配置的读写，相关接口已删除。
 """
 
@@ -61,37 +61,38 @@ class UnifiedServiceManager:
 
     def discover_modules(self) -> List[str]:
         """
-        在框架根目录下扫描 modules/*，发现每个子包的“实现文件”并返回可导入路径。
-
+        在框架根目录下仅扫描 api/*，发现每个子包的“实现文件”并返回可导入路径。
+        
         规则：
-        - 对于 modules/<pkg>/__init__.py 且存在 modules/<pkg>/<pkg>.py 时，
-          认为实现文件为 modules.<pkg>.<pkg>（例如：modules.api_gateway_module.api_gateway_module）
-        - 同时支持多级子包，如 modules/Smarttraven/image_binding_module/image_binding_module.py
-          对应导入路径 modules.Smarttraven.image_binding_module.image_binding_module
+        - 任意包含 __init__.py 的目录，若其中存在与目录同名的 .py 实现文件，则加入导入列表
+        - 例如：
+            api/modules/web_server/web_server.py         -> api.modules.web_server.web_server
+            api/workflow/image_binding/image_binding.py  -> api.workflow.image_binding.image_binding
         """
         module_paths: List[str] = []
-
-        modules_dir = self._base_path / "modules"
-        if not modules_dir.exists():
-            return module_paths
-
-        # 递归查找：任意包含 __init__.py 的目录，若其中存在同名实现文件，则加入导入列表
-        for init_file in modules_dir.rglob("__init__.py"):
-            package_dir = init_file.parent
-            # 尝试定位“实现文件”：与目录同名 .py 文件
-            impl_file = package_dir / f"{package_dir.name}.py"
-            if impl_file.exists():
-                try:
-                    relative_to_root = package_dir.relative_to(self._base_path)
-                    import_path = str(relative_to_root).replace(os.path.sep, ".")
-                    # 形成最终导入路径：<package path>.<impl filename>（不带后缀）
-                    full_import_path = f"{import_path}.{package_dir.name}"
-                    if full_import_path not in module_paths:
-                        module_paths.append(full_import_path)
-                except ValueError:
-                    # 不是在当前工程根下，跳过
-                    continue
-
+        
+        for root_name in ("api",):
+            root_dir = self._base_path / root_name
+            if not root_dir.exists():
+                continue
+            
+            # 递归查找：任意包含 __init__.py 的目录，若其中存在同名实现文件，则加入导入列表
+            for init_file in root_dir.rglob("__init__.py"):
+                package_dir = init_file.parent
+                # 尝试定位“实现文件”：与目录同名 .py 文件
+                impl_file = package_dir / f"{package_dir.name}.py"
+                if impl_file.exists():
+                    try:
+                        relative_to_root = package_dir.relative_to(self._base_path)
+                        import_path = str(relative_to_root).replace(os.path.sep, ".")
+                        # 形成最终导入路径：<package path>.<impl filename>（不带后缀）
+                        full_import_path = f"{import_path}.{package_dir.name}"
+                        if full_import_path not in module_paths:
+                            module_paths.append(full_import_path)
+                    except ValueError:
+                        # 不是在当前工程根下，跳过
+                        continue
+        
         return module_paths
 
     def load_project_modules(self) -> int:

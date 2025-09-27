@@ -39,7 +39,7 @@ API网关使用 `api-config.json` 进行配置：
     "cors_origins": ["http://localhost:3000"]
   },
   "api": {
-    "prefix": "/api/v1",
+    "prefix": "/api",
     "auto_discovery": true,
     "documentation": {
       "enabled": true,
@@ -72,18 +72,16 @@ gateway = get_api_gateway()
 gateway.start_server(background=True)
 ```
 
-### 2. 通过函数注册系统使用
+### 2. 通过统一 API 封装层调用
 
 ```python
-from core.function_registry import get_registered_function
+from core.api_client import call_api
 
-# 启动API网关
-start_api_gateway = get_registered_function("api_gateway.start")
-result = start_api_gateway(background=True)
+# 启动API网关（通过 api/modules 封装）
+resp = call_api("api_gateway.start", {"background": True}, namespace="modules")
 
 # 获取网关信息
-get_info = get_registered_function("api_gateway.info")
-info = get_info()
+info = call_api("api_gateway.info", method="GET", namespace="modules")
 ```
 
 ### 3. 添加自定义API端点
@@ -127,27 +125,27 @@ ws.onmessage = function(event) {
 
 ## 自动API发现
 
-当 `api-config.json` 中的 `auto_discovery` 设为 `true` 时，所有通过 `@register_function` 装饰器注册的函数都会自动暴露为API端点。
+当 `api.auto_discovery` 为 `true` 时，框架仅扫描 `api/*` 目录下通过 `@register_api` 注册的能力，并自动暴露为 RESTful API 端点。
 
-### 函数到API映射规则
+### 能力到API映射规则
 
-- 函数名: `user.get_profile` 
-- API路径: `/api/v1/user/get_profile`
+- 能力名: `user.get_profile`
+- API路径: `/api/modules/user/get_profile`（来源路径位于 `api/modules/...`）
 - 支持方法: GET, POST
 
-### 示例
+### 示例（封装层位于 `api/modules/user/user.py`）
 
 ```python
-from core.function_registry import register_function
+from core.api_registry import register_api
 
-@register_function(name="user.get_profile", outputs=["profile"])
+@register_api(name="user.get_profile", outputs=["profile"])
 def get_user_profile(user_id: int):
-    return {"user_id": user_id, "name": "用户名", "email": "user@example.com"}
+    return {"profile": {"user_id": user_id, "name": "用户名", "email": "user@example.com"}}
 ```
 
 自动生成的API:
-- `GET /api/v1/user/get_profile`
-- `POST /api/v1/user/get_profile` (带JSON请求体)
+- `GET /api/modules/user/get_profile`
+- `POST /api/modules/user/get_profile` (带JSON请求体)
 
 ## 中间件系统
 
@@ -179,8 +177,8 @@ gateway.router.add_middleware("custom", custom_middleware, priority=50)
 
 ### 系统端点
 
-- `GET /api/v1/health` - 健康检查
-- `GET /api/v1/info` - API信息和统计
+- `GET /api/health` - 健康检查
+- `GET /api/info` - API信息和统计
 - `GET /docs` - API文档 (Swagger UI)
 - `GET /redoc` - API文档 (ReDoc)
 
@@ -243,12 +241,12 @@ if __name__ == "__main__":
     main()
 ```
 
-## 注册的函数
+## 网关管理 API（通过 `api/modules/api_gateway` 封装）
 
-- `api_gateway.start` - 启动API网关服务器
-- `api_gateway.stop` - 停止API网关服务器  
-- `api_gateway.info` - 获取API网关信息
-- `api_gateway.broadcast` - WebSocket广播消息
+- `POST /api/modules/api_gateway/start` - 启动API网关服务器
+- `POST /api/modules/api_gateway/stop` - 停止API网关服务器
+- `GET /api/modules/api_gateway/info` - 获取API网关信息
+- `POST /api/modules/api_gateway/broadcast` - WebSocket广播消息
 
 ## 错误处理
 

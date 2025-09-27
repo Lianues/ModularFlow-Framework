@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from ..core.function_registry import get_registry, FunctionSpec
+from ..core.api_registry import get_registry, FunctionSpec
 
 
 @dataclass

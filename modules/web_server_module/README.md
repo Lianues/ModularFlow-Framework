@@ -65,7 +65,7 @@ Web服务器模块使用 `frontend_projects/frontend-projects.json` 进行项目
       "type": "react",
       "path": "frontend_projects/web_admin",
       "port": 3000,
-      "api_endpoint": "http://localhost:8050/api/v1",
+      "api_endpoint": "http://localhost:8050/api",
       "build_command": "npm run build",
       "dev_command": "npm start",
       "description": "基于React的管理后台界面",
@@ -95,18 +95,16 @@ for project in projects:
     print(f"项目: {project['display_name']} - 状态: {project['server_status']['status']}")
 ```
 
-### 2. 通过函数注册系统使用
+### 2. 通过统一 API 封装层调用
 
 ```python
-from core.function_registry import get_registered_function
+from core.api_client import call_api
 
-# 启动指定项目
-start_project = get_registered_function("web_server.start_project")
-result = start_project("SmartTavern", open_browser=True)
+# 启动指定项目（通过 api/modules 封装）
+result = call_api("web_server.start_project", {"project_name": "SmartTavern", "open_browser": True}, namespace="modules")
 
 # 查看运行中的服务器
-get_servers = get_registered_function("web_server.running_servers")
-servers = get_servers()
+servers = call_api("web_server.running_servers", namespace="modules")
 ```
 
 ### 3. 项目管理操作
@@ -160,26 +158,25 @@ project_name/
 └── .gitignore         # Git忽略文件
 ```
 
-## 注册的函数
-
-以下函数已注册到ModularFlow Framework：
+## 对外 API 端点（通过 `api/modules/web_server` 封装）
 
 ### 项目管理
-- `web_server.list_projects` - 列出所有前端项目
-- `web_server.start_project` - 启动指定前端项目
-- `web_server.stop_project` - 停止指定前端项目
-- `web_server.restart_project` - 重启指定前端项目
+- `GET/POST /api/modules/web_server/list_projects` - 列出所有前端项目
+- `POST /api/modules/web_server/start_project` - 启动指定前端项目
+- `POST /api/modules/web_server/stop_project` - 停止指定前端项目
+- `POST /api/modules/web_server/restart_project` - 重启指定前端项目
 
 ### 批量操作
-- `web_server.start_all` - 启动所有启用的项目
-- `web_server.stop_all` - 停止所有项目
+- `POST /api/modules/web_server/start_all` - 启动所有启用的项目
+- `POST /api/modules/web_server/stop_all` - 停止所有项目
 
 ### 信息查询
-- `web_server.project_info` - 获取项目详细信息
-- `web_server.running_servers` - 获取所有运行中的服务器
+- `GET/POST /api/modules/web_server/project_info` - 获取项目详细信息
+- `GET /api/modules/web_server/running_servers` - 获取所有运行中的服务器
 
 ### 项目结构
-- `web_server.create_structure` - 创建项目基础结构
+- `POST /api/modules/web_server/create_structure` - 创建项目基础结构
+- `POST /api/modules/web_server/load_project_config` - 加载项目特定配置
 
 ## 服务器状态
 

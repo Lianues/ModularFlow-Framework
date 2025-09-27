@@ -29,7 +29,7 @@ except ImportError:
     WebSocketState = None
     print("⚠️ FastAPI未安装，请运行: pip install fastapi uvicorn")
 
-from core.function_registry import register_function, get_registered_function, get_registry
+from core.api_registry import register_api, get_registered_api, get_registry
 from core.services import get_service_manager
 
 # 配置日志
@@ -67,7 +67,7 @@ class GatewayConfig:
     debug: bool = True
     
     # API配置
-    api_prefix: str = "/api/v1"
+    api_prefix: str = "/api"
     auto_discovery: bool = True
     
     # 文档配置
@@ -86,6 +86,11 @@ class GatewayConfig:
     # CORS配置
     cors_origins: List[str] = field(default_factory=lambda: ["*"])
     
+    # 安全与治理配置
+    auth_enabled: bool = False
+    rate_limit_enabled: bool = False
+    rate_limit_per_minute: int = 120
+
     # 其他配置
     title: str = "ModularFlow API Gateway"
     description: str = "统一API网关 - 集成ModularFlow Framework"
@@ -109,7 +114,7 @@ class GatewayConfig:
             cors_origins=server_config.get("cors_origins", ["*"]),
             
             # API配置
-            api_prefix=api_config.get("prefix", "/api/v1"),
+            api_prefix=api_config.get("prefix", "/api"),
             auto_discovery=api_config.get("auto_discovery", True),
             
             # 文档配置
@@ -206,8 +211,41 @@ class Middleware:
             logger.error(f"❌ API错误: {str(e)}")
             return JSONResponse(
                 status_code=500,
-                content={"error": "Internal Server Error", "detail": str(e)}
+                content={"error_code": "INTERNAL_ERROR", "message": "Internal Server Error", "detail": str(e)}
             )
+
+    @staticmethod
+    async def auth_middleware(request: Request, call_next):
+        """基础鉴权中间件（示例：要求 Authorization 头）"""
+        path = str(request.url.path)
+        # 放行基础系统端点
+        if path.endswith("/health") or path.endswith("/info"):
+            return await call_next(request)
+        auth = request.headers.get("Authorization")
+        if not auth:
+            return JSONResponse(status_code=401, content={"error_code": "UNAUTHORIZED", "message": "缺少Authorization头"})
+        return await call_next(request)
+
+    # 简易限流存储（内存）
+    _rate_store: Dict[str, Dict[str, Any]] = {}
+
+    @staticmethod
+    async def rate_limit_middleware(request: Request, call_next):
+        """基础限流中间件（每IP每分钟限次）"""
+        try:
+            client_ip = request.client.host if request.client else "unknown"
+            now_minute = datetime.now().strftime("%Y%m%d%H%M")
+            key = f"{client_ip}:{now_minute}"
+            record = Middleware._rate_store.get(key, {"count": 0})
+            record["count"] += 1
+            Middleware._rate_store[key] = record
+            # 默认限流阈值（如需读取配置，可在此扩展）
+            limit = 120
+            if record["count"] > limit:
+                return JSONResponse(status_code=429, content={"error_code": "RATE_LIMITED", "message": "请求过于频繁"})
+        except Exception as e:
+            logger.warning(f"限流中间件异常: {e}")
+        return await call_next(request)
 
 
 class APIGateway:
@@ -315,7 +353,7 @@ class APIGateway:
                 "cors_origins": api_gateway_config.get("cors_origins", ["*"])
             },
             "api": {
-                "prefix": "/api/v1",
+                "prefix": "/api",
                 "auto_discovery": True,
                 "documentation": {
                     "enabled": True,
@@ -358,8 +396,13 @@ class APIGateway:
     
     def _setup_default_middlewares(self):
         """设置默认中间件"""
+        # 基础中间件
         self.router.add_middleware("logging", Middleware.logging_middleware, priority=100)
         self.router.add_middleware("error_handling", Middleware.error_handling_middleware, priority=90)
+        # 注册到 FastAPI 应用
+        if self.app:
+            for m in self.router.get_middlewares():
+                self.app.middleware("http")(m.handler)
     
     def _setup_default_routes(self):
         """设置默认路由"""
@@ -419,6 +462,59 @@ class APIGateway:
                 self.app.put(full_path, tags=endpoint.tags, summary=endpoint.summary)(endpoint.handler)
             elif endpoint.method == "DELETE":
                 self.app.delete(full_path, tags=endpoint.tags, summary=endpoint.summary)(endpoint.handler)
+
+        # 基于注册表构建简化版 OpenAPI（仅用于外部文档展示）
+        try:
+            registry = get_registry()
+            specs = [registry.get_spec(n) for n in registry.list_functions()]
+            paths = {}
+            for spec in specs:
+                if not spec:
+                    continue
+                # 根据函数来源模块，为 OpenAPI 路径添加 /modules 或 /workflow 前缀；仅包含 api/* 层的能力
+                fn = None
+                try:
+                    fn = get_registered_api(spec.name)
+                except Exception:
+                    fn = None
+                origin_mod = getattr(fn, "__module__", "") if fn else ""
+                if origin_mod.startswith("api.modules"):
+                    prefix_seg = "/modules"
+                elif origin_mod.startswith("api.workflow"):
+                    prefix_seg = "/workflow"
+                else:
+                    # 跳过实现层注册项
+                    continue
+                path = f"{self.config.api_prefix}{prefix_seg}/{spec.name.replace('.', '/')}"
+                # GET
+                paths.setdefault(path, {})
+                paths[path]["get"] = {
+                    "summary": f"调用: {spec.name}",
+                    "responses": {"200": {"description": "OK"}}
+                }
+                # POST
+                # 构建简单的请求体 schema
+                req_schema = {
+                    "type": "object",
+                    "properties": {inp: {"type": "string"} for inp in (spec.inputs or [])},
+                    "required": spec.inputs or []
+                }
+                paths[path]["post"] = {
+                    "summary": f"调用: {spec.name}",
+                    "requestBody": {
+                        "required": bool(spec.inputs),
+                        "content": {"application/json": {"schema": req_schema}}
+                    },
+                    "responses": {"200": {"description": "OK"}}
+                }
+            self.app.openapi_schema = {
+                "openapi": "3.0.0",
+                "info": {"title": self.config.title, "version": self.config.version},
+                "paths": paths
+            }
+            self.app.openapi = lambda: self.app.openapi_schema
+        except Exception as e:
+            logger.warning(f"⚠️ 构建OpenAPI失败: {e}")
     
     def discover_and_register_functions(self):
         """自动发现并注册函数作为API端点"""
@@ -431,10 +527,18 @@ class APIGateway:
         
         for func_name in function_names:
             try:
-                func = get_registered_function(func_name)
+                func = get_registered_api(func_name)
                 if func:
-                    # 将函数名转换为API路径
-                    api_path = f"/{func_name.replace('.', '/')}"
+                    # 仅暴露 api/* 层注册的能力，并基于来源目录自动添加前缀 /modules 或 /workflow
+                    origin_mod = getattr(func, "__module__", "") or ""
+                    if origin_mod.startswith("api.modules"):
+                        prefix_seg = "/modules"
+                    elif origin_mod.startswith("api.workflow"):
+                        prefix_seg = "/workflow"
+                    else:
+                        # 来自实现层（modules/* 等）的注册不对外暴露，跳过
+                        continue
+                    api_path = f"{prefix_seg}/{func_name.replace('.', '/')}"
                     
                     # 创建API处理器
                     def create_handler(fn=func, name=func_name):
@@ -517,12 +621,93 @@ class APIGateway:
                                                     mapped[k2] = v
                                             data = mapped
                                 
-                                # 调用注册的函数
-                                result = fn(**data) if data else fn()
-                                
-                                return {"success": True, "data": result, "function": name}
+                                # 输入必填校验（基于注册表 + 函数签名判断可选/默认）
+                                spec = get_registry().get_spec(name)
+                                expected_inputs = spec.inputs if spec else []
+                                if expected_inputs:
+                                    import inspect as _ins
+                                    from typing import get_origin as _get_origin, get_args as _get_args, Union as _Union
+                                    required_inputs = []
+                                    try:
+                                        sig = _ins.signature(fn)
+                                        for param in sig.parameters.values():
+                                            pname = param.name
+                                            if pname not in expected_inputs:
+                                                continue
+                                            ann = param.annotation
+                                            has_default = param.default is not _ins._empty
+                                            is_optional = False
+                                            try:
+                                                origin = _get_origin(ann)
+                                                args = _get_args(ann)
+                                                is_optional = (origin is _Union) and (type(None) in args)
+                                            except Exception:
+                                                is_optional = False
+                                            if not has_default and not is_optional:
+                                                required_inputs.append(pname)
+                                    except Exception:
+                                        # 退化到全部期望输入为必填
+                                        required_inputs = list(expected_inputs)
+                                    missing = [k for k in required_inputs if k not in (data or {})]
+                                    if missing:
+                                        return JSONResponse(status_code=400, content={
+                                            "error_code": "MISSING_REQUIRED",
+                                            "message": "缺少必填字段",
+                                            "missing": missing
+                                        })
+
+                                # 基于函数签名的简单类型校验（仅对 application/json 生效）
+                                try:
+                                    import typing as _t
+                                    from typing import get_origin as _get_origin, get_args as _get_args
+                                except Exception:
+                                    _t = None
+                                    _get_origin = lambda t: None
+                                    _get_args = lambda t: ()
+
+                                if _t is not None:
+                                    try:
+                                        hints = _t.get_type_hints(fn)
+                                    except Exception:
+                                        hints = {}
+                                    if hints and isinstance(data, dict) and "application/json" in (content_type or "").lower():
+                                        type_errors = []
+                                        for k in expected_inputs or []:
+                                            if k in data and k in hints:
+                                                expected = hints[k]
+                                                v = data[k]
+                                                origin = _get_origin(expected)
+                                                # 仅做基础类型与容器判断，复杂联合类型留空
+                                                ok = True
+                                                if origin is list:
+                                                    ok = isinstance(v, list)
+                                                elif origin is dict:
+                                                    ok = isinstance(v, dict)
+                                                elif expected in (str, int, float, bool, list, dict):
+                                                    ok = isinstance(v, expected)
+                                                # 其余注解（如 Optional/Union/自定义）暂不强制
+                                                if not ok:
+                                                    type_errors.append({
+                                                        "field": k,
+                                                        "expected": str(expected),
+                                                        "actual": type(v).__name__
+                                                    })
+                                        if type_errors:
+                                            return JSONResponse(status_code=422, content={
+                                                "error_code": "INVALID_TYPE",
+                                                "message": "参数类型不匹配",
+                                                "details": type_errors
+                                            })
+
+                                # 协程/同步统一调用
+                                import inspect
+                                if inspect.iscoroutinefunction(fn):
+                                    result = await fn(**(data or {}))
+                                else:
+                                    result = fn(**(data or {})) if data else fn()
+                                return result
                             except Exception as e:
-                                return {"success": False, "error": str(e), "function": name}
+                                return {"error": str(e)}
                         return handler
                     
                     handler = create_handler()
@@ -613,7 +798,7 @@ class APIGateway:
                 func_name = message.get("function")
                 params = message.get("params", {})
                 
-                func = get_registered_function(func_name)
+                func = get_registered_api(func_name)
                 if func:
                     result = func(**params) if params else func()
                     return {
@@ -767,7 +952,7 @@ def create_api_gateway_for_project(project_config_path: str) -> APIGateway:
 
 
 # 注册函数到ModularFlow Framework
-@register_function(name="api_gateway.start", outputs=["result"])
+@register_api(name="api_gateway.start", outputs=["result"])
 def start_api_gateway(
     background: bool = True,
     config_file: Optional[str] = None,
@@ -778,14 +963,14 @@ def start_api_gateway(
     gateway.start_server(background=background)
     return {"status": "started", "background": background}
 
-@register_function(name="api_gateway.stop", outputs=["result"])
+@register_api(name="api_gateway.stop", outputs=["result"])
 def stop_api_gateway():
     """停止API网关服务器"""
     gateway = get_api_gateway()
     gateway.stop_server()
     return {"status": "stopped"}
 
-@register_function(name="api_gateway.info", outputs=["info"])
+@register_api(name="api_gateway.info", outputs=["info"])
 def get_api_gateway_info(config_file: Optional[str] = None):
     """获取API网关信息"""
     gateway = get_api_gateway(config_file=config_file)
@@ -796,14 +981,14 @@ def get_api_gateway_info(config_file: Optional[str] = None):
         "config": gateway.config.__dict__ if gateway.config else None
     }
 
-@register_function(name="api_gateway.broadcast", outputs=["result"])
+@register_api(name="api_gateway.broadcast", outputs=["result"])
 async def broadcast_to_websockets(message: Dict[str, Any]):
     """向所有WebSocket连接广播消息"""
     gateway = get_api_gateway()
     await gateway.broadcast_message(message)
     return {"broadcasted": True, "connections": len(gateway.websocket_connections)}
 
-@register_function(name="api_gateway.create_for_project", outputs=["result"])
+@register_api(name="api_gateway.create_for_project", outputs=["result"])
 def create_gateway_for_project(project_config_path: str):
     """为特定项目创建API网关"""
     try:

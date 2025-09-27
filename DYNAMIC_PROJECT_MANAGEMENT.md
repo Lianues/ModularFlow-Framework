@@ -118,7 +118,7 @@ class MyProjectConfig:
     
     def get_api_config(self):
         return {
-            "api_endpoint": f"http://localhost:{BACKEND_PORT}/api/v1",
+            "api_endpoint": f"http://localhost:{BACKEND_PORT}/api",
             "websocket_url": f"ws://localhost:{WEBSOCKET_PORT}/ws",
             "cors_origins": [f"http://localhost:{FRONTEND_PORT}"]
         }

@@ -23,7 +23,6 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
 from modules.Smarttraven.image_binding_module.image_binding_module import ImageBindingModule
-from core.function_registry import register_function
 from core.services import get_current_globals
 from core.project_config_interface import load_project_config, ProjectConfigInterface, DefaultProjectConfig
 
@@ -229,7 +228,7 @@ class ProjectManager:
         # 检查后端健康状态
         if status.backend_running and status.backend_port:
             try:
-                response = requests.get(f"http://localhost:{status.backend_port}/api/v1/health", timeout=5)
+                response = requests.get(f"http://localhost:{status.backend_port}/api/health", timeout=5)
                 if response.status_code == 200:
                     status.backend_running = True
                 else:
@@ -694,37 +693,31 @@ def get_project_manager() -> ProjectManager:
 
 
 # 注册函数到ModularFlow Framework
-@register_function(name="project_manager.start_project", outputs=["result"])
 def start_managed_project(project_name: str, component: str = "all"):
     """启动被管理的项目"""
     manager = get_project_manager()
     return manager.start_project(project_name, component)
 
-@register_function(name="project_manager.stop_project", outputs=["result"])
 def stop_managed_project(project_name: str, component: str = "all"):
     """停止被管理的项目"""
     manager = get_project_manager()
     return manager.stop_project(project_name, component)
 
-@register_function(name="project_manager.restart_project", outputs=["result"])
 def restart_managed_project(project_name: str, component: str = "all"):
     """重启被管理的项目"""
     manager = get_project_manager()
     return manager.restart_project(project_name, component)
 
-@register_function(name="project_manager.get_status", outputs=["status"])
 def get_managed_project_status(project_name: str = None):
     """获取项目状态"""
     manager = get_project_manager()
     return manager.get_project_status(project_name)
 
-@register_function(name="project_manager.get_ports", outputs=["ports"])
 def get_port_usage():
     """获取端口使用情况"""
     manager = get_project_manager()
     return manager.get_port_usage()
 
-@register_function(name="project_manager.health_check", outputs=["health"])
 def perform_health_check():
     """执行健康检查"""
     manager = get_project_manager()
@@ -736,7 +729,6 @@ def perform_health_check():
     
     return results
 
-@register_function(name="project_manager.get_managed_projects", outputs=["projects"])
 def get_managed_projects():
     """获取可管理项目列表"""
     manager = get_project_manager()
@@ -758,10 +750,20 @@ def get_managed_projects():
         return None
     
     for project_name, status in manager.projects.items():
-        if status.config:
-            project_info = status.config.get_project_info()
-            runtime_config = status.config.get_runtime_config()
-            api_config = status.config.get_api_config()
+        # 实时加载配置脚本：每次获取列表时都重新读取 modularflow_config.py
+        current_config = None
+        try:
+            current_config = load_project_config(Path(status.project_path))
+            # 更新内存中的配置引用，保持最新
+            status.config = current_config
+        except Exception:
+            # 读取失败则回退使用已缓存的配置
+            current_config = status.config
+
+        if current_config:
+            project_info = current_config.get_project_info()
+            runtime_config = current_config.get_runtime_config()
+            api_config = current_config.get_api_config()
             
             # 统一端口映射（优先使用状态端口，其次使用配置端点推断）
             frontend_dev_port = status.frontend_port or runtime_config.get("port")
@@ -800,7 +802,6 @@ def get_managed_projects():
     
     return projects_list
 
-@register_function(name="project_manager.import_project", outputs=["result"])
 def import_project(project_archive):
     """导入项目（强化校验：必须包含 modularflow_config.py），失败时清理解压内容"""
     manager = get_project_manager()
@@ -893,7 +894,6 @@ def import_project(project_archive):
             pass
         return {"success": False, "error": str(e)}
 
-@register_function(name="project_manager.delete_project", outputs=["result"])
 def delete_project(project_name: str):
     """删除项目"""
     manager = get_project_manager()
@@ -934,7 +934,6 @@ def delete_project(project_name: str):
         logger.error(f"删除项目失败: {str(e)}")
         return {"success": False, "error": str(e)}
 
-@register_function(name="project_manager.update_ports", outputs=["result"])
 def update_project_ports(project_name: str, ports: dict):
     """更新项目端口配置"""
     manager = get_project_manager()
@@ -1006,7 +1005,6 @@ def update_project_ports(project_name: str, ports: dict):
         return {"success": False, "error": str(e)}
 
 
-@register_function(name="project_manager.refresh_projects", outputs=["result"])
 def refresh_projects():
     """重新扫描和加载所有项目"""
     manager = get_project_manager()
@@ -1036,7 +1034,6 @@ def refresh_projects():
         return {"success": False, "error": str(e)}
 
 
-@register_function(name="project_manager.install_project", outputs=["result"])
 def install_project_dependencies(project_name: str):
     """安装项目依赖"""
     manager = get_project_manager()
@@ -1070,9 +1067,8 @@ def install_project_dependencies(project_name: str):
         return {"success": False, "error": str(e)}
 
 
-@register_function(name="project_manager.get_project_config", outputs=["config"])
 def get_project_config_info(project_name: str):
-    """获取项目配置信息"""
+    """获取项目配置信息（实时从配置脚本读取最新内容）"""
     manager = get_project_manager()
     
     try:
@@ -1080,17 +1076,22 @@ def get_project_config_info(project_name: str):
             return {"error": f"项目 {project_name} 不存在"}
         
         status = manager.projects[project_name]
-        if not status.config:
+        # 实时加载配置脚本
+        try:
+            cfg = load_project_config(Path(status.project_path))
+            status.config = cfg
+            return cfg.get_full_config()
+        except Exception:
+            # 回退使用已缓存配置
+            if status.config:
+                return status.config.get_full_config()
             return {"error": f"项目 {project_name} 配置未加载"}
-        
-        return status.config.get_full_config()
         
     except Exception as e:
         logger.error(f"获取项目配置失败: {str(e)}")
         return {"error": str(e)}
 
 
-@register_function(name="project_manager.validate_config_script", outputs=["result"])
 def validate_project_config_script(project_name: str):
     """验证项目配置脚本"""
     manager = get_project_manager()
@@ -1118,7 +1119,6 @@ def validate_project_config_script(project_name: str):
         logger.error(f"验证配置脚本失败: {str(e)}")
         return {"success": False, "error": str(e)}
 # === 图像绑定扩展：ZIP 嵌入与提取 ===
-@register_function(name="project_manager.embed_zip_into_image", outputs=["result"])
 def embed_zip_into_image(image, archive):
     """将zip压缩包嵌入到PNG图片中，返回嵌入后图片的base64字符串"""
     temp_dir = None
@@ -1186,7 +1186,6 @@ def embed_zip_into_image(image, archive):
             pass
 
 
-@register_function(name="project_manager.extract_zip_from_image", outputs=["result"])
 def extract_zip_from_image(image):
     """从PNG图片中提取嵌入的zip文件，返回zip的临时路径与文件清单"""
     temp_dir = None
@@ -1241,7 +1240,6 @@ def extract_zip_from_image(image):
         pass
 
 
-@register_function(name="project_manager.import_project_from_image", outputs=["result"])
 def import_project_from_image(image):
     """从PNG图片反嵌入zip并导入项目（要求项目根含 modularflow_config.py）"""
     manager = get_project_manager()

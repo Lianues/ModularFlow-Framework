@@ -25,7 +25,6 @@ try:
 except ImportError as e:
     print(f"⚠️ 导入Web服务器模块失败: {e}")
 
-from core.function_registry import register_function
 from core.services import get_service_manager
 
 # 配置日志
@@ -652,13 +651,11 @@ def create_web_server_for_project(project_config_path: str) -> WebServer:
 
 
 # 注册函数到ModularFlow Framework
-@register_function(name="web_server.list_projects", outputs=["projects"])
 def list_frontend_projects(config_path: Optional[str] = None):
     """列出所有前端项目"""
     server = get_web_server(config_path=config_path)
     return server.list_projects()
 
-@register_function(name="web_server.start_project", outputs=["result"])
 def start_frontend_project(project_name: str, open_browser: bool = True, config_path: Optional[str] = None):
     """启动前端项目"""
     server = get_web_server(config_path=config_path)
@@ -669,7 +666,6 @@ def start_frontend_project(project_name: str, open_browser: bool = True, config_
         "message": f"项目 {project_name} {'启动成功' if success else '启动失败'}"
     }
 
-@register_function(name="web_server.stop_project", outputs=["result"])
 def stop_frontend_project(project_name: str, config_path: Optional[str] = None):
     """停止前端项目"""
     server = get_web_server(config_path=config_path)
@@ -680,7 +676,6 @@ def stop_frontend_project(project_name: str, config_path: Optional[str] = None):
         "message": f"项目 {project_name} {'停止成功' if success else '停止失败'}"
     }
 
-@register_function(name="web_server.restart_project", outputs=["result"])
 def restart_frontend_project(project_name: str, config_path: Optional[str] = None):
     """重启前端项目"""
     server = get_web_server(config_path=config_path)
@@ -691,7 +686,6 @@ def restart_frontend_project(project_name: str, config_path: Optional[str] = Non
         "message": f"项目 {project_name} {'重启成功' if success else '重启失败'}"
     }
 
-@register_function(name="web_server.start_all", outputs=["results"])
 def start_all_projects(config_path: Optional[str] = None):
     """启动所有启用的项目"""
     server = get_web_server(config_path=config_path)
@@ -702,7 +696,6 @@ def start_all_projects(config_path: Optional[str] = None):
         "successful": sum(1 for success in results.values() if success)
     }
 
-@register_function(name="web_server.stop_all", outputs=["results"])
 def stop_all_projects(config_path: Optional[str] = None):
     """停止所有项目"""
     server = get_web_server(config_path=config_path)
@@ -713,20 +706,17 @@ def stop_all_projects(config_path: Optional[str] = None):
         "successful": sum(1 for success in results.values() if success)
     }
 
-@register_function(name="web_server.project_info", outputs=["info"])
 def get_project_information(project_name: str, config_path: Optional[str] = None):
     """获取项目详细信息"""
     server = get_web_server(config_path=config_path)
     info = server.get_project_info(project_name)
     return info if info else {"error": f"项目不存在: {project_name}"}
 
-@register_function(name="web_server.running_servers", outputs=["servers"])
 def get_running_servers(config_path: Optional[str] = None):
     """获取所有运行中的服务器"""
     server = get_web_server(config_path=config_path)
     return server.dev_server.list_running_servers()
 
-@register_function(name="web_server.create_structure", outputs=["result"])
 def create_project_structure(project_name: str, config_path: Optional[str] = None):
     """创建项目基础结构"""
     server = get_web_server(config_path=config_path)
@@ -737,7 +727,6 @@ def create_project_structure(project_name: str, config_path: Optional[str] = Non
         "message": f"项目结构 {'创建成功' if success else '创建失败'}"
     }
 
-@register_function(name="web_server.load_project_config", outputs=["result"])
 def load_project_config(project_name: str, project_config_path: str):
     """加载项目特定配置"""
     server = get_web_server()

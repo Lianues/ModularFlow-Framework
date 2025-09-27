@@ -27,7 +27,7 @@ try:
     from modules.web_server_module import get_web_server
     from modules.ProjectManager.project_manager_module.project_manager_module import get_project_manager
     from core.services import get_service_manager
-    from core.function_registry import get_registry
+    from core.api_registry import get_registry
 except ImportError as e:
     print(f"❌ 导入模块失败: {e}")
     print(f"请确保在框架根目录 {framework_root} 下运行此脚本")
@@ -78,7 +78,7 @@ class ProjectManagerBackend:
                     "port": 8050,
                     "host": "localhost",
                     "cors_origins": ["http://localhost:8055", "*"],
-                    "endpoint": "http://localhost:8050/api/v1"
+                    "endpoint": "http://localhost:8050/api"
                 },
                 "websocket": {
                     "enabled": True,
@@ -140,7 +140,7 @@ class ProjectManagerBackend:
                     "type": "html",
                     "path": frontend_config.get("path", "frontend_projects/ProjectManager"),
                     "port": frontend_config.get("port", 8080),
-                    "api_endpoint": f"http://localhost:{api_gateway_config.get('port', 8050)}/api/v1",
+                    "api_endpoint": f"http://localhost:{api_gateway_config.get('port', 8050)}/api",
                     "dev_command": frontend_config.get("dev_command", ""),
                     "description": project_info.get("description", "统一项目管理控制台"),
                     "enabled": True
@@ -229,7 +229,7 @@ class ProjectManagerBackend:
         # 检查API网关
         try:
             import requests
-            response = requests.get(f"http://localhost:{api_port}/api/v1/health", timeout=2)
+            response = requests.get(f"http://localhost:{api_port}/api/health", timeout=2)
             if response.status_code == 200:
                 print("✅ API网关: 运行正常")
             else:

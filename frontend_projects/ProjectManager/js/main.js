@@ -284,35 +284,20 @@ class ProjectManagerApp {
             console.log('端口结果:', portResult);
             console.log('项目管理结果:', managedProjectsResult);
 
-            // 处理项目状态数据
-            if (statusResult.status) {
-                this.projects = statusResult.status;
-            } else if (statusResult.result) {
-                this.projects = statusResult.result;
-            } else if (statusResult.data) {
-                this.projects = statusResult.data;
+            // 规范化为字典映射（新格式适配）
+            const statusMap = this.coerceStatusDict(statusResult);
+            const portsMap = this.coercePortsDict(portResult);
+
+            // 处理可管理项目（兼容多种返回包装；也兼容直接返回数组）
+            let mp = null;
+            if (Array.isArray(managedProjectsResult)) {
+                mp = managedProjectsResult;
             } else {
-                console.warn('未找到项目状态数据:', statusResult);
-                this.projects = {};
+                mp = managedProjectsResult?.projects
+                    || managedProjectsResult?.result
+                    || (managedProjectsResult?.data && (managedProjectsResult.data.projects || managedProjectsResult.data));
             }
 
-            // 处理端口数据
-            if (portResult.ports) {
-                this.portUsage = portResult.ports;
-            } else if (portResult.result) {
-                this.portUsage = portResult.result;
-            } else if (portResult.data) {
-                this.portUsage = portResult.data;
-            } else {
-                console.warn('未找到端口数据:', portResult);
-                this.portUsage = {};
-            }
-
-            // 处理可管理项目数据（兼容 API 网关 data 包装）
-            const mp = managedProjectsResult.projects
-                || managedProjectsResult.result
-                || (managedProjectsResult.data && (managedProjectsResult.data.projects || managedProjectsResult.data));
-            
             if (Array.isArray(mp)) {
                 this.managedProjects = mp;
             } else if (mp && typeof mp === 'object' && Array.isArray(mp.projects)) {
@@ -322,28 +307,33 @@ class ProjectManagerApp {
                 this.managedProjects = [];
             }
 
-            // 如果没有项目状态数据，但有端口数据，从端口数据构建项目信息
-            if (Object.keys(this.projects).length === 0 && Object.keys(this.portUsage).length > 0) {
-                console.log('从端口数据构建项目信息');
-                Object.entries(this.portUsage).forEach(([projectName, ports]) => {
+            // 保存端口使用原始映射
+            this.portUsage = portsMap;
+
+            // 合并生成统一结构的 this.projects
+            this.projects = this.mergeProjectsData(this.managedProjects, statusMap, portsMap);
+
+            // 兜底：若仍为空且存在端口映射，则直接由端口推断基本状态
+            if (Object.keys(this.projects).length === 0 && Object.keys(portsMap).length > 0) {
+                console.log('从端口数据构建项目信息（兜底）');
+                Object.entries(portsMap).forEach(([projectName, ports]) => {
                     this.projects[projectName] = {
                         name: projectName,
                         namespace: projectName,
                         enabled: true,
-                        frontend_running: ports.frontend?.running || false,
-                        backend_running: ports.backend?.running || false,
-                        frontend_port: ports.frontend?.port || null,
-                        backend_port: ports.backend?.port || null,
-                        frontend_pid: ports.frontend?.pid || null,
-                        backend_pid: ports.backend?.pid || null,
-                        health_status: (ports.frontend?.running || ports.backend?.running) ? 'healthy' : 'stopped',
+                        frontend_running: !!(ports.frontend && ports.frontend.running),
+                        backend_running: !!(ports.backend && ports.backend.running),
+                        frontend_port: this.ensureNumber(ports.frontend && ports.frontend.port),
+                        backend_port: this.ensureNumber(ports.backend && ports.backend.port),
+                        frontend_pid: (ports.frontend && ports.frontend.pid) || null,
+                        backend_pid: (ports.backend && ports.backend.pid) || null,
+                        health_status: ((ports.frontend && ports.frontend.running) || (ports.backend && ports.backend.running)) ? 'healthy' : 'stopped',
                         errors: 0
                     };
                 });
             }
 
             this.updateUI();
-            
         } catch (error) {
             console.error('加载数据失败:', error);
             this.showToast('error', '加载失败', error.message);
@@ -413,25 +403,40 @@ class ProjectManagerApp {
         }
 
         this.elements.projectsGrid.innerHTML = projectList.map(([name, project]) => {
+            const displayName = project.display_name || name;
+            const subtitle = project.description || project.namespace || '';
+            const version = project.version ? `v${project.version}` : '';
+            const health = project.health_status || (project.frontend_running || project.backend_running ? 'healthy' : 'stopped');
+
             const frontendStatus = project.frontend_running ? 'running' : 'stopped';
             const backendStatus = project.backend_running ? 'running' : 'stopped';
             const overallStatus = (project.frontend_running || project.backend_running) ? 'running' : 'stopped';
-            
+
             return `
                 <div class="bg-white project-card p-6">
                     <div class="flex items-center justify-between mb-4">
                         <div>
-                            <h3 class="text-lg font-semibold text-gray-900">${name}</h3>
-                            <p class="text-sm text-gray-600">${project.namespace}</p>
+                            <h3 class="text-lg font-semibold text-gray-900">${displayName}</h3>
+                            <p class="text-sm text-gray-600">
+                                ${version ? `<span class="font-mono mr-2">${version}</span>` : ''}
+                                ${subtitle}
+                            </p>
                         </div>
-                        <div class="flex items-center">
-                            <span class="status-dot status-${overallStatus}"></span>
-                            <span class="text-sm font-medium ${overallStatus === 'running' ? 'text-green-600' : 'text-red-600'}">
-                                ${overallStatus === 'running' ? '运行中' : '已停止'}
-                            </span>
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <span class="status-dot status-${overallStatus}"></span>
+                                <span class="text-sm font-medium ${overallStatus === 'running' ? 'text-green-600' : 'text-red-600'}">
+                                    ${overallStatus === 'running' ? '运行中' : '已停止'}
+                                </span>
+                            </div>
+                            <span class="text-xs px-2 py-1 rounded-4 border ${
+                                health === 'healthy' ? 'border-green-600 text-green-600' :
+                                health === 'degraded' ? 'border-yellow-600 text-yellow-600' :
+                                'border-gray-500 text-gray-500'
+                            }">健康: ${health}</span>
                         </div>
                     </div>
-                    
+
                     <div class="space-y-3 mb-4">
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-gray-600">前端</span>
@@ -443,7 +448,7 @@ class ProjectManagerApp {
                                 </span>
                             </div>
                         </div>
-                        
+
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-gray-600">后端</span>
                             <div class="flex items-center space-x-2">
@@ -455,7 +460,7 @@ class ProjectManagerApp {
                             </div>
                         </div>
                     </div>
-                    
+
                     ${project.errors && project.errors > 0 ? `
                         <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                             <div class="flex items-center">
@@ -464,7 +469,7 @@ class ProjectManagerApp {
                             </div>
                         </div>
                     ` : ''}
-                    
+
                     <div class="flex space-x-2">
                         <button onclick="app.startProject('${name}')"
                                 class="flex-1 btn-primary px-3 py-2 rounded text-sm flex items-center justify-center space-x-1"
@@ -472,25 +477,25 @@ class ProjectManagerApp {
                             <i data-lucide="play" class="w-4 h-4"></i>
                             <span>启动</span>
                         </button>
-                        
+
                         <button onclick="app.stopProject('${name}')"
                                 class="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center space-x-1"
                                 ${overallStatus === 'stopped' ? 'disabled opacity-50' : ''}>
-                            <i data-lucide="stop" class="w-4 h-4"></i>
+                            <i data-lucide="stop-circle" class="w-4 h-4"></i>
                             <span>停止</span>
                         </button>
-                        
+
                         <button onclick="app.installProjectDependencies('${name}')"
                                 class="bg-gray-900 hover:bg-black text-white px-3 py-2 rounded text-sm flex items-center justify-center space-x-1">
                             <i data-lucide="download" class="w-4 h-4"></i>
                             <span>安装</span>
                         </button>
-                        
+
                         <button onclick="app.restartProject('${name}')"
                                 class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
                             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                         </button>
-                        
+
                         ${project.frontend_port ? `
                             <a href="http://localhost:${project.frontend_port}" target="_blank"
                                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
@@ -501,7 +506,7 @@ class ProjectManagerApp {
                 </div>
             `;
         }).join('');
-        
+
         lucide.createIcons();
     }
 
@@ -738,52 +743,161 @@ class ProjectManagerApp {
         };
     }
     /**
-     * 解析 URL 端口
+     * 数据结构规范化与合并（新格式适配）
      */
-    parsePortFromUrl(url) {
-        if (!url || typeof url !== 'string') return null;
-        try {
-            const u = new URL(url);
-            if (u.port) return parseInt(u.port, 10);
-            // 未显式端口时返回协议默认端口
-            if (u.protocol === 'http:' || u.protocol === 'ws:') return 80;
-            if (u.protocol === 'https:' || u.protocol === 'wss:') return 443;
-            return null;
-        } catch {
-            // 简单回退解析
-            const m = url.match(/:(\d{2,5})(?:\/|$)/);
-            return m ? parseInt(m[1], 10) : null;
-        }
+
+    // 将可能带有包装（status/result/data）的返回，规范化为 { [projectName]: statusObj } 映射
+    coerceStatusDict(res) {
+        if (!res) return {};
+        const pick = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+        if (res.status) return pick(res.status);
+        if (res.result) return pick(res.result);
+        if (res.data) return pick(res.data);
+        // 直接返回字典
+        return pick(res);
     }
 
-    /**
-     * 统一获取项目端口（支持后端未返回 ports 时的回退）
-     */
-    getProjectPorts(project) {
-        // 优先使用后端提供的 ports 字段
-        if (project && project.ports && typeof project.ports === 'object') {
-            return {
-                frontend_dev: project.ports.frontend_dev ?? '未设置',
-                api_gateway: project.ports.api_gateway ?? '未设置',
-                websocket: project.ports.websocket ?? (project.ports.api_gateway ?? '未设置'),
-            };
-        }
-        // 回退：从各字段推断
-        const frontend_dev = project.frontend_port || (project.runtime && project.runtime.port) || null;
-        const api_gateway =
-            project.backend_port ||
-            this.parsePortFromUrl(project.api && project.api.api_endpoint) ||
-            null;
-        const websocket =
-            this.parsePortFromUrl(project.api && project.api.websocket_url) ||
-            api_gateway ||
-            null;
+    // 将可能带有包装（ports/result/data）的返回，规范化为 { [projectName]: { frontend, backend } } 映射
+    coercePortsDict(res) {
+        if (!res) return {};
+        const pick = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+        if (res.ports) return pick(res.ports);
+        if (res.result) return pick(res.result);
+        if (res.data) return pick(res.data);
+        // 直接返回字典
+        return pick(res);
+    }
 
-        return {
-            frontend_dev: frontend_dev ?? '未设置',
-            api_gateway: api_gateway ?? '未设置',
-            websocket: websocket ?? '未设置',
-        };
+    // 归一项目Key，优先 name，其次 namespace
+    normalizeProjectKey(project) {
+        if (!project) return null;
+        return project.name || project.namespace || project.project_name || null;
+        // 若后续需要从路径推断，可在此扩展
+    }
+
+    ensureNumber(v) {
+        const n = (typeof v === 'string' && v.trim() !== '') ? Number(v) : Number(v);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    ensureBoolean(v) {
+        if (v === undefined || v === null) return false;
+        if (typeof v === 'boolean') return v;
+        if (typeof v === 'number') return v !== 0;
+        if (typeof v === 'string') {
+            const s = v.trim().toLowerCase();
+            return s === 'true' || s === '1' || s === 'yes';
+        }
+        return !!v;
+    }
+
+    // 合并 managedProjects（列表） + statusMap（状态映射） + portsMap（端口映射）为统一字典
+    mergeProjectsData(managedProjects, statusMap, portsMap) {
+        const merged = {};
+
+        if (Array.isArray(managedProjects) && managedProjects.length > 0) {
+            for (const item of managedProjects) {
+                const key = this.normalizeProjectKey(item);
+                if (!key) continue;
+
+                const s = statusMap[key] || {};
+                const p = portsMap[key] || {};
+
+                const frontend_port = this.ensureNumber(
+                    s.frontend_port ?? (p.frontend && p.frontend.port) ?? (item.ports && item.ports.frontend_dev) ?? item.frontend_port ?? (item.runtime && item.runtime.port)
+                );
+                const backend_port = this.ensureNumber(
+                    s.backend_port ?? (p.backend && p.backend.port) ?? (item.ports && item.ports.api_gateway) ?? item.backend_port
+                );
+
+                merged[key] = {
+                    name: key,
+                    namespace: item.namespace || key,
+                    display_name: item.display_name || item.name || key,
+                    version: item.version || null,
+                    description: item.description || '',
+                    enabled: (typeof item.enabled !== 'undefined') ? this.ensureBoolean(item.enabled) : true,
+
+                    frontend_running: this.ensureBoolean(s.frontend_running ?? (p.frontend && p.frontend.running)),
+                    backend_running: this.ensureBoolean(s.backend_running ?? (p.backend && p.backend.running)),
+
+                    frontend_port,
+                    backend_port,
+
+                    frontend_pid: s.frontend_pid ?? (p.frontend && p.frontend.pid) ?? null,
+                    backend_pid: s.backend_pid ?? (p.backend && p.backend.pid) ?? null,
+
+                    health_status: s.health_status || ((this.ensureBoolean(s.frontend_running) || this.ensureBoolean(s.backend_running)) ? 'healthy' : 'stopped'),
+                    errors: typeof s.errors === 'number' ? s.errors : 0,
+
+                    // 保留原有可选字段，方便详情或配置编辑
+                    ports: item.ports || undefined,
+                    runtime: item.runtime || undefined,
+                    api: item.api || undefined,
+                };
+            }
+            return merged;
+        }
+
+        // 无 managedProjects 时，使用 statusMap 为主
+        const statusKeys = Object.keys(statusMap || {});
+        if (statusKeys.length > 0) {
+            for (const key of statusKeys) {
+                const s = statusMap[key] || {};
+                const p = portsMap[key] || {};
+                merged[key] = {
+                    name: key,
+                    namespace: key,
+                    display_name: key,
+                    version: null,
+                    description: '',
+
+                    enabled: true,
+                    frontend_running: this.ensureBoolean(s.frontend_running ?? (p.frontend && p.frontend.running)),
+                    backend_running: this.ensureBoolean(s.backend_running ?? (p.backend && p.backend.running)),
+
+                    frontend_port: this.ensureNumber(s.frontend_port ?? (p.frontend && p.frontend.port)),
+                    backend_port: this.ensureNumber(s.backend_port ?? (p.backend && p.backend.port)),
+
+                    frontend_pid: s.frontend_pid ?? (p.frontend && p.frontend.pid) ?? null,
+                    backend_pid: s.backend_pid ?? (p.backend && p.backend.pid) ?? null,
+
+                    health_status: s.health_status || ((this.ensureBoolean(s.frontend_running) || this.ensureBoolean(s.backend_running)) ? 'healthy' : 'stopped'),
+                    errors: typeof s.errors === 'number' ? s.errors : 0,
+                };
+            }
+            return merged;
+        }
+
+        // 再次兜底：仅有 portsMap
+        const portKeys = Object.keys(portsMap || {});
+        if (portKeys.length > 0) {
+            for (const key of portKeys) {
+                const p = portsMap[key] || {};
+                merged[key] = {
+                    name: key,
+                    namespace: key,
+                    display_name: key,
+                    version: null,
+                    description: '',
+
+                    enabled: true,
+                    frontend_running: this.ensureBoolean(p.frontend && p.frontend.running),
+                    backend_running: this.ensureBoolean(p.backend && p.backend.running),
+
+                    frontend_port: this.ensureNumber(p.frontend && p.frontend.port),
+                    backend_port: this.ensureNumber(p.backend && p.backend.port),
+
+                    frontend_pid: (p.frontend && p.frontend.pid) || null,
+                    backend_pid: (p.backend && p.backend.pid) || null,
+
+                    health_status: ((p.frontend && p.frontend.running) || (p.backend && p.backend.running)) ? 'healthy' : 'stopped',
+                    errors: 0,
+                };
+            }
+        }
+
+        return merged;
     }
 
     /**
