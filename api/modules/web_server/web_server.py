@@ -1,12 +1,12 @@
 """
 API 封装层：模块能力对外接口 (api/modules)
 为 web_server 模块提供统一的 @register_api 注册入口，并在路由层自动添加 '/modules' 前缀。
-注意：此层仅作为对外 API 适配，实际实现位于 modules/web_server_module/web_server_module.py
+注意：此层仅作为对外 API 适配，实际实现位于 api/modules/web_server/impl.py
 """
 
 from typing import Any, Dict, Optional
 from core.api_registry import register_api
-from modules.web_server_module.web_server_module import get_web_server
+from api.modules.web_server.impl import get_web_server
 
 
 @register_api(name="web_server.list_projects", outputs=["projects"], description="列出所有前端项目")

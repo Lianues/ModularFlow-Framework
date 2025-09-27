@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
-from modules.Smarttraven.image_binding_module.image_binding_module import ImageBindingModule
+from api.modules.Smarttraven.image_binding.impl import ImageBindingModule
 from core.services import get_current_globals
 from core.project_config_interface import load_project_config, ProjectConfigInterface, DefaultProjectConfig
 
@@ -764,7 +764,6 @@ def perform_health_check():
     """执行健康检查"""
     manager = get_project_manager()
     results = {}
-    
     for project_name in manager.projects.keys():
         manager._check_project_health(project_name)
         results[project_name] = manager.get_project_status(project_name)

@@ -23,9 +23,9 @@ framework_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(framework_root))
 
 try:
-    from modules.api_gateway_module import get_api_gateway
-    from modules.web_server_module import get_web_server
-    from modules.ProjectManager.project_manager_module.project_manager_module import get_project_manager
+    from core.api_gateway import get_api_gateway
+    from api.modules.web_server.impl import get_web_server
+    from api.modules.project_manager.impl import get_project_manager
     from core.services import get_service_manager
     from core.api_registry import get_registry
 except ImportError as e:

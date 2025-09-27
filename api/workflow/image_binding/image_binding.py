@@ -1,7 +1,7 @@
 """
 API 封装层：工作流能力对外接口 (api/workflow)
 为图像绑定工作流提供统一的 @register_api 注册入口，并在路由层自动添加 '/workflow' 前缀。
-注意：此层仅作为对外 API 适配，实际实现位于 workflows/image_binding_workflow.py 或 modules/Smarttraven/image_binding_module/image_binding_module.py
+注意：此层仅作为对外 API 适配，实际实现位于 api/modules/Smarttraven/image_binding/impl.py 或 workflows/image_binding_workflow.py
 """
 
 import os
@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from core.api_registry import register_api
-from modules.Smarttraven.image_binding_module.image_binding_module import ImageBindingModule
-from modules.Smarttraven.image_binding_module.variables import FILE_TYPE_TAGS
+from api.modules.Smarttraven.image_binding.impl import ImageBindingModule
+from api.modules.Smarttraven.image_binding.variables import FILE_TYPE_TAGS
 
 
 @register_api(

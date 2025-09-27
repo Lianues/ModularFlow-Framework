@@ -1,14 +1,13 @@
 """
 API 封装层：模块能力对外接口 (api/modules)
 为 ProjectManager 模块提供统一的 @register_api 注册入口，并在路由层自动添加 '/modules' 前缀。
-注意：此层仅作为对外 API 适配，实际实现位于 modules/ProjectManager/project_manager_module/project_manager_module.py
+注意：此层仅作为对外 API 适配，实际实现位于 api/modules/project_manager/impl.py
 """
 
 from typing import Any, Dict, Optional
 from core.api_registry import register_api
-from modules.ProjectManager.project_manager_module.project_manager_module import (
+from api.modules.project_manager.impl import (
     get_project_manager,
-    # 直接复用模块内现有的顶层函数（更复杂的参数处理已在实现层封装）
     import_project as _import_project,
     delete_project as _delete_project,
     update_project_ports as _update_project_ports,
@@ -19,6 +18,7 @@ from modules.ProjectManager.project_manager_module.project_manager_module import
     embed_zip_into_image as _embed_zip_into_image,
     extract_zip_from_image as _extract_zip_from_image,
     import_project_from_image as _import_project_from_image,
+    get_managed_projects as _get_managed_projects,
 )
 
 
@@ -68,11 +68,6 @@ def health_check() -> Dict[str, Any]:
 
 @register_api(name="project_manager.get_managed_projects", outputs=["projects"], description="获取可管理项目列表")
 def get_managed_projects() -> Any:
-    # 直接复用实现层函数的逻辑较为复杂，这里可简单组合，也可直接复用实现层已有顶层函数
-    # 为保持行为一致，这里复用实现层函数（若未来抽象为 manager 方法，可改为 manager 调用）
-    manager = get_project_manager()
-    # 直接使用实现层已有的顶层函数以保持输出结构一致
-    from modules.ProjectManager.project_manager_module.project_manager_module import get_managed_projects as _get_managed_projects
     return _get_managed_projects()
 
 

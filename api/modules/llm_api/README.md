@@ -17,7 +17,7 @@
 ### 基本使用
 
 ```python
-from modules.llm_api_module import LLMAPIManager, APIConfiguration
+from api.modules.llm_api import LLMAPIManager, APIConfiguration
 
 # 创建API配置
 config = APIConfiguration(

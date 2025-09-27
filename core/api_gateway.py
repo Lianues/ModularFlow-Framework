@@ -1,5 +1,5 @@
 """
-API网关模块
+API网关模块（核心层 - core）
 
 提供统一的API入口、路由管理、中间件处理和与ModularFlow Framework的集成。
 支持RESTful API、WebSocket连接和自动API发现功能。
@@ -29,7 +29,7 @@ except ImportError:
     WebSocketState = None
     print("⚠️ FastAPI未安装，请运行: pip install fastapi uvicorn")
 
-from core.api_registry import register_api, get_registered_api, get_registry
+from core.api_registry import get_registered_api, get_registry
 from core.services import get_service_manager
 
 # 配置日志
@@ -538,7 +538,7 @@ class APIGateway:
                     else:
                         # 来自实现层（modules/* 等）的注册不对外暴露，跳过
                         continue
-                    api_path = f"{prefix_seg}/{func_name.replace('.', '/')}"
+                    api_path = f"{prefix_seg}/{func_name.replace('.', '/')}"""
                     
                     # 创建API处理器
                     def create_handler(fn=func, name=func_name):
@@ -664,7 +664,7 @@ class APIGateway:
                                     _t = None
                                     _get_origin = lambda t: None
                                     _get_args = lambda t: ()
-
+                                
                                 if _t is not None:
                                     try:
                                         hints = _t.get_type_hints(fn)
@@ -949,61 +949,6 @@ def create_api_gateway_for_project(project_config_path: str) -> APIGateway:
             logger.error(f"❌ 加载项目配置失败: {e}")
     
     return APIGateway()
-
-
-# 注册函数到ModularFlow Framework
-@register_api(name="api_gateway.start", outputs=["result"])
-def start_api_gateway(
-    background: bool = True,
-    config_file: Optional[str] = None,
-    project_config: Optional[Dict[str, Any]] = None
-):
-    """启动API网关服务器"""
-    gateway = get_api_gateway(config_file=config_file, project_config=project_config)
-    gateway.start_server(background=background)
-    return {"status": "started", "background": background}
-
-@register_api(name="api_gateway.stop", outputs=["result"])
-def stop_api_gateway():
-    """停止API网关服务器"""
-    gateway = get_api_gateway()
-    gateway.stop_server()
-    return {"status": "stopped"}
-
-@register_api(name="api_gateway.info", outputs=["info"])
-def get_api_gateway_info(config_file: Optional[str] = None):
-    """获取API网关信息"""
-    gateway = get_api_gateway(config_file=config_file)
-    return {
-        "endpoints": len(gateway.router.get_endpoints()),
-        "middlewares": len(gateway.router.get_middlewares()), 
-        "websocket_connections": len(gateway.websocket_connections),
-        "config": gateway.config.__dict__ if gateway.config else None
-    }
-
-@register_api(name="api_gateway.broadcast", outputs=["result"])
-async def broadcast_to_websockets(message: Dict[str, Any]):
-    """向所有WebSocket连接广播消息"""
-    gateway = get_api_gateway()
-    await gateway.broadcast_message(message)
-    return {"broadcasted": True, "connections": len(gateway.websocket_connections)}
-
-@register_api(name="api_gateway.create_for_project", outputs=["result"])
-def create_gateway_for_project(project_config_path: str):
-    """为特定项目创建API网关"""
-    try:
-        gateway = create_api_gateway_for_project(project_config_path)
-        return {
-            "success": True,
-            "message": f"API网关已为项目配置创建: {project_config_path}",
-            "config": gateway.config.__dict__ if gateway.config else None
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"创建API网关失败: {project_config_path}"
-        }
 
 
 if __name__ == "__main__":

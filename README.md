@@ -8,9 +8,9 @@
 
 核心代码参考：
 - 后端入口脚本：[backend_projects/ProjectManager/start_server.py](backend_projects/ProjectManager/start_server.py)
-- API 网关模块：[modules/api_gateway_module/api_gateway_module.py](modules/api_gateway_module/api_gateway_module.py)
+- API 网关模块（核心）：[core/api_gateway.py](core/api_gateway.py)
 - Web 服务器模块：[modules/web_server_module/web_server_module.py](modules/web_server_module/web_server_module.py)
-- 项目管理器主模块：[modules/ProjectManager/project_manager_module/project_manager_module.py](modules/ProjectManager/project_manager_module/project_manager_module.py)
+- 项目管理器主模块：[api/modules/project_manager/impl.py](api/modules/project_manager/impl.py)
 - 图片绑定模块：[image_binding_module/image_binding_module.py](image_binding_module/image_binding_module.py)
 - 项目管理前端（静态站点）：[frontend_projects/ProjectManager/index.html](frontend_projects/ProjectManager/index.html)、[frontend_projects/ProjectManager/js/api.js](frontend_projects/ProjectManager/js/api.js)、[frontend_projects/ProjectManager/js/main.js](frontend_projects/ProjectManager/js/main.js)
 
@@ -38,10 +38,10 @@ UI 风格规范：
 - API 文档自动生成（/docs）
 
 关键后端函数（可从 API 网关自动暴露为 HTTP 接口）：
-- [project_manager.embed_zip_into_image()](modules/ProjectManager/project_manager_module/project_manager_module.py:1134)
-- [project_manager.extract_zip_from_image()](modules/ProjectManager/project_manager_module/project_manager_module.py:1202)
-- [project_manager.import_project_from_image()](modules/ProjectManager/project_manager_module/project_manager_module.py:1257)
-- [project_manager.import_project()](modules/ProjectManager/project_manager_module/project_manager_module.py:805)
+- [project_manager.embed_zip_into_image()](api/modules/project_manager/impl.py:1201)
+- [project_manager.extract_zip_from_image()](api/modules/project_manager/impl.py:1268)
+- [project_manager.import_project_from_image()](api/modules/project_manager/impl.py:1322)
+- [project_manager.import_project()](api/modules/project_manager/impl.py:884)
 
 图片绑定实现要点：
 - 嵌入： [ImageBindingModule.embed_files_to_image()](image_binding_module/image_binding_module.py:170)
@@ -55,9 +55,9 @@ UI 风格规范：
 
 - 后端启动脚本： [backend_projects/ProjectManager/start_server.py](backend_projects/ProjectManager/start_server.py)
 - 后端模块：
-  - API 网关：[modules/api_gateway_module/api_gateway_module.py](modules/api_gateway_module/api_gateway_module.py)
+  - API 网关（核心）：[core/api_gateway.py](core/api_gateway.py)
   - Web 服务器：[modules/web_server_module/web_server_module.py](modules/web_server_module/web_server_module.py)
-  - 项目管理器：[modules/ProjectManager/project_manager_module/project_manager_module.py](modules/ProjectManager/project_manager_module/project_manager_module.py)
+  - 项目管理器：[api/modules/project_manager/impl.py](api/modules/project_manager/impl.py)
 - 前端管理面板（静态 HTML）：
   - 页面：[frontend_projects/ProjectManager/index.html](frontend_projects/ProjectManager/index.html)
   - 逻辑：[frontend_projects/ProjectManager/js/main.js](frontend_projects/ProjectManager/js/main.js)
@@ -172,7 +172,7 @@ API 文档（Swagger UI）地址：
    - 打开管理面板，点击“导出前端卡”
    - 选择前端项目压缩包（.zip）与一张 PNG 图片（.png）
    - 提交后生成“嵌入后的 PNG”，浏览器自动下载
-   - 背后调用：[project_manager.embed_zip_into_image()](modules/ProjectManager/project_manager_module/project_manager_module.py:1134)
+   - 背后调用：[project_manager.embed_zip_into_image()](api/modules/project_manager/impl.py:1201)
    - 注意：已取消大小上限（[MAX_FILE_SIZE](image_binding_module/variables.py:18) 为无限），但请注意文件体积
 
 2) 从图片导入项目（自动反嵌入）
@@ -180,16 +180,16 @@ API 文档（Swagger UI）地址：
    - 将自动提取 zip 并解压
    - 解压后必须在前端项目根目录发现 `modularflow_config.py`，否则报错并清理解压的临时内容
    - 成功导入后自动复制到 `frontend_projects/` 并重新发现项目
-   - 背后调用：[project_manager.import_project_from_image()](modules/ProjectManager/project_manager_module/project_manager_module.py:1257)
+   - 背后调用：[project_manager.import_project_from_image()](api/modules/project_manager/impl.py:1322)
 
 3) 直接导入 zip（不通过图片）
    - 在管理面板“导入项目”处上传 zip
    - 要求同上：压缩包解压后的前端项目根目录必须包含 `modularflow_config.py`
-   - 背后调用：[project_manager.import_project()](modules/ProjectManager/project_manager_module/project_manager_module.py:805)
+   - 背后调用：[project_manager.import_project()](api/modules/project_manager/impl.py:884)
 
 4) 手动提取图片内文件（仅查看/提取）
    - 背后实现： [ImageBindingModule.extract_files_from_image()](image_binding_module/image_binding_module.py:256)
-   - API 函数： [project_manager.extract_zip_from_image()](modules/ProjectManager/project_manager_module/project_manager_module.py:1202)
+   - API 函数： [project_manager.extract_zip_from_image()](api/modules/project_manager/impl.py:1268)
 
 打包 zip 提示：
 - 请在前端项目的根目录（包含 `modularflow_config.py` 的目录）执行打包

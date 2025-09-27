@@ -1,12 +1,12 @@
 """
 API 封装层：API 网关对外接口 (api/modules)
 将 API 网关管理能力以 @register_api 方式统一暴露为 HTTP 端点（带 '/modules' 前缀）。
-注意：实际实现位于 modules/api_gateway_module/api_gateway_module.py
+注意：核心实现位于 core/api_gateway.py
 """
 
 from typing import Any, Dict, Optional
 from core.api_registry import register_api
-from modules.api_gateway_module.api_gateway_module import get_api_gateway
+from core.api_gateway import get_api_gateway
 
 
 @register_api(name="api_gateway.start", outputs=["result"], description="启动API网关服务器")

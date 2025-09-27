@@ -218,7 +218,7 @@ class DevServer:
             if project.name in self.servers:
                 self.servers[project.name].status = "error"
             return False
-    
+        
     def stop_project_server(self, project_name: str) -> bool:
         """停止项目开发服务器"""
         if project_name not in self.servers:
@@ -241,7 +241,7 @@ class DevServer:
         except Exception as e:
             logger.error(f"❌ 停止项目服务器失败 {project_name}: {e}")
             return False
-    
+        
     def get_server_status(self, project_name: str) -> Dict[str, Any]:
         """获取服务器状态"""
         if project_name not in self.servers:
