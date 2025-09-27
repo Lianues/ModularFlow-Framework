@@ -133,7 +133,8 @@ class ProjectManager:
             preferred_backend_port = backend_port_from_config or 8050
             backend_port = self._allocate_port(preferred_backend_port, f"{project_name}_backend")
             
-            return ProjectStatus(
+            # 构建状态对象后，立即探测端口以“实时”确定运行状态（而不是默认False）
+            status_obj = ProjectStatus(
                 name=project_info["name"],
                 namespace=project_info["name"],  # 使用项目名作为命名空间
                 project_path=str(project_dir),
@@ -143,6 +144,9 @@ class ProjectManager:
                 backend_port=backend_port,
                 config=config
             )
+            # 实时检测（端口探测）
+            self._update_running_flags(status_obj)
+            return status_obj
             
         except Exception as e:
             logger.error(f"❌ 加载项目配置失败 {project_name}: {e}")
@@ -179,6 +183,35 @@ class ProjectManager:
         logger.error(f"❌ 无法为 {project_identifier} 分配端口")
         return preferred_port
     
+    def _update_running_flags(self, status: ProjectStatus):
+        """通过端口探测实时更新运行标记，避免仅初始化时的静态状态"""
+        # 探测前端
+        frontend_ok = False
+        if status.frontend_port:
+            try:
+                resp = requests.get(f"http://localhost:{status.frontend_port}", timeout=3)
+                # 2xx~4xx 视为端口活跃（静态站点返回200，某些服务可能返回404）
+                frontend_ok = 200 <= resp.status_code < 500
+            except Exception:
+                frontend_ok = False
+        status.frontend_running = frontend_ok
+
+        # 探测后端（API网关通常提供 /api/health）
+        backend_ok = False
+        if status.backend_port:
+            try:
+                resp = requests.get(f"http://localhost:{status.backend_port}/api/health", timeout=3)
+                backend_ok = resp.status_code == 200
+            except Exception:
+                backend_ok = False
+        status.backend_running = backend_ok
+
+        # 依据探测结果更新整体健康状态
+        if status.frontend_running or status.backend_running:
+            status.health_status = "healthy"
+        else:
+            status.health_status = "unknown"
+
     def _start_health_check(self):
         """启动健康检查线程"""
         if not self.health_check_running:
@@ -211,22 +244,22 @@ class ProjectManager:
         status.last_health_check = datetime.now()
         status.errors.clear()
         
-        # 检查前端健康状态
-        if status.frontend_running and status.frontend_port:
+        # 检查前端健康状态（直接探测端口，不依赖已有运行标记）
+        if status.frontend_port:
             frontend_url = f"http://localhost:{status.frontend_port}"
             try:
                 response = requests.get(frontend_url, timeout=5)
-                if response.status_code == 200:
+                if 200 <= response.status_code < 500:
                     status.frontend_running = True
                 else:
                     status.errors.append(f"前端响应异常: {response.status_code}")
                     status.frontend_running = False
-            except Exception as e:
-                status.errors.append(f"前端连接失败: {str(e)}")
+            except Exception:
+                # 连接失败时，不累计错误，仅标记为未运行，避免将整体状态误判为不健康
                 status.frontend_running = False
         
-        # 检查后端健康状态
-        if status.backend_running and status.backend_port:
+        # 检查后端健康状态（直接探测端口，不依赖已有运行标记）
+        if status.backend_port:
             try:
                 response = requests.get(f"http://localhost:{status.backend_port}/api/health", timeout=5)
                 if response.status_code == 200:
@@ -234,8 +267,8 @@ class ProjectManager:
                 else:
                     status.errors.append(f"后端响应异常: {response.status_code}")
                     status.backend_running = False
-            except Exception as e:
-                status.errors.append(f"后端连接失败: {str(e)}")
+            except Exception:
+                # 连接失败不累计错误，标记为未运行
                 status.backend_running = False
         
         # 更新整体健康状态
@@ -478,12 +511,17 @@ class ProjectManager:
         return self.start_project(project_name, component)
     
     def get_project_status(self, project_name: str = None) -> Dict[str, Any]:
-        """获取项目状态"""
+        """获取项目状态（实时探测端口以更新运行标志与健康状态）"""
         if project_name:
             if project_name not in self.projects:
                 return {"error": f"项目 {project_name} 不存在"}
             
             status = self.projects[project_name]
+            try:
+                self._update_running_flags(status)
+            except Exception:
+                pass
+
             return {
                 "name": status.name,
                 "namespace": status.namespace,
@@ -500,9 +538,14 @@ class ProjectManager:
                 "errors": status.errors
             }
         else:
-            # 返回所有项目状态
-            return {
-                name: {
+            # 返回所有项目状态（逐项实时探测）
+            result: Dict[str, Any] = {}
+            for name, status in self.projects.items():
+                try:
+                    self._update_running_flags(status)
+                except Exception:
+                    pass
+                result[name] = {
                     "name": status.name,
                     "namespace": status.namespace,
                     "enabled": status.enabled,
@@ -513,8 +556,7 @@ class ProjectManager:
                     "health_status": status.health_status,
                     "errors": len(status.errors)
                 }
-                for name, status in self.projects.items()
-            }
+            return result
     
     def get_port_usage(self) -> Dict[str, Any]:
         """获取端口使用情况"""
@@ -730,7 +772,7 @@ def perform_health_check():
     return results
 
 def get_managed_projects():
-    """获取可管理项目列表"""
+    """获取可管理项目列表（实时同步文件系统与配置脚本）"""
     manager = get_project_manager()
     projects_list = []
 
@@ -748,23 +790,58 @@ def get_managed_projects():
         except Exception:
             pass
         return None
-    
+
+    # 增量同步：发现新项目目录并加载到管理器
+    try:
+        if manager.frontend_projects_path.exists():
+            for project_dir in manager.frontend_projects_path.iterdir():
+                if project_dir.is_dir() and not project_dir.name.startswith('.'):
+                    pname = project_dir.name
+                    if pname not in manager.projects:
+                        ps = manager._load_project_from_directory(project_dir)
+                        if ps:
+                            manager.projects[ps.name] = ps
+    except Exception:
+        # 发现异常时忽略，不阻塞后续流程
+        pass
+
+    # 实时清理：移除文件系统中已不存在或配置脚本丢失的项目
+    for name, status in list(manager.projects.items()):
+        try:
+            project_dir = Path(status.project_path)
+            if not project_dir.exists():
+                # 清理端口注册并移除项目
+                if status.frontend_port:
+                    manager.port_registry.pop(status.frontend_port, None)
+                if status.backend_port:
+                    manager.port_registry.pop(status.backend_port, None)
+                manager.projects.pop(name, None)
+                continue
+            # 若声明了配置脚本路径但文件已不存在，同样移除
+            if status.config_script_path:
+                cfg_path = Path(status.config_script_path)
+                if not cfg_path.exists():
+                    if status.frontend_port:
+                        manager.port_registry.pop(status.frontend_port, None)
+                    if status.backend_port:
+                        manager.port_registry.pop(status.backend_port, None)
+                    manager.projects.pop(name, None)
+                    continue
+        except Exception:
+            # 任意异常视作项目无效，移除之
+            manager.projects.pop(name, None)
+            continue
+
+    # 逐项实时读取配置并构造返回；读取失败时跳过该项目，避免返回过期数据
     for project_name, status in manager.projects.items():
-        # 实时加载配置脚本：每次获取列表时都重新读取 modularflow_config.py
-        current_config = None
         try:
             current_config = load_project_config(Path(status.project_path))
-            # 更新内存中的配置引用，保持最新
             status.config = current_config
-        except Exception:
-            # 读取失败则回退使用已缓存的配置
-            current_config = status.config
 
-        if current_config:
             project_info = current_config.get_project_info()
             runtime_config = current_config.get_runtime_config()
             api_config = current_config.get_api_config()
-            
+
             # 统一端口映射（优先使用状态端口，其次使用配置端点推断）
             frontend_dev_port = status.frontend_port or runtime_config.get("port")
             api_gateway_port = status.backend_port
@@ -777,7 +854,7 @@ def get_managed_projects():
                 websocket_port = _parse_port_from_url(ws_url)
             if not websocket_port:
                 websocket_port = api_gateway_port
-            
+
             project_data = {
                 "name": project_info.get("name", project_name),
                 "display_name": project_info.get("display_name", project_name),
@@ -799,7 +876,10 @@ def get_managed_projects():
                 }
             }
             projects_list.append(project_data)
-    
+        except Exception:
+            # 配置读取失败则跳过该项目
+            continue
+
     return projects_list
 
 def import_project(project_archive):
