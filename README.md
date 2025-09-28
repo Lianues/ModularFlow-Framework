@@ -9,9 +9,9 @@
 核心代码参考：
 - 后端入口脚本：[backend_projects/ProjectManager/start_server.py](backend_projects/ProjectManager/start_server.py)
 - API 网关模块（核心）：[core/api_gateway.py](core/api_gateway.py)
-- Web 服务器模块：[modules/web_server_module/web_server_module.py](modules/web_server_module/web_server_module.py)
+- Web 服务器模块：[api/modules/web_server/web_server.py](api/modules/web_server/web_server.py)
 - 项目管理器主模块：[api/modules/project_manager/impl.py](api/modules/project_manager/impl.py)
-- 图片绑定模块：[image_binding_module/image_binding_module.py](image_binding_module/image_binding_module.py)
+- 图片绑定模块：[api/modules/Smarttraven/image_binding/impl.py](api/modules/Smarttraven/image_binding/impl.py)
 - 项目管理前端（静态站点）：[frontend_projects/ProjectManager/index.html](frontend_projects/ProjectManager/index.html)、[frontend_projects/ProjectManager/js/api.js](frontend_projects/ProjectManager/js/api.js)、[frontend_projects/ProjectManager/js/main.js](frontend_projects/ProjectManager/js/main.js)
 
 示例 Next.js 项目（可由管理面板管理并示范导入/导出流程）：
@@ -44,10 +44,10 @@ UI 风格规范：
 - [project_manager.import_project()](api/modules/project_manager/impl.py:884)
 
 图片绑定实现要点：
-- 嵌入： [ImageBindingModule.embed_files_to_image()](image_binding_module/image_binding_module.py:170)
-- 提取： [ImageBindingModule.extract_files_from_image()](image_binding_module/image_binding_module.py:256)
-- 嵌入检测： [ImageBindingModule.is_image_with_embedded_files()](image_binding_module/image_binding_module.py:386)
-- 取消大小限制变量（已设为无限）：[MAX_FILE_SIZE](image_binding_module/variables.py:18)
+- 嵌入： [api/modules/Smarttraven/image_binding/impl.py](api/modules/Smarttraven/image_binding/impl.py)
+- 提取： [api/modules/Smarttraven/image_binding/impl.py](api/modules/Smarttraven/image_binding/impl.py)
+- 嵌入检测： [api/modules/Smarttraven/image_binding/impl.py](api/modules/Smarttraven/image_binding/impl.py)
+- 取消大小限制变量（已设为无限）：[api/modules/Smarttraven/image_binding/variables.py](api/modules/Smarttraven/image_binding/variables.py)
 
 ---
 
@@ -188,7 +188,7 @@ API 文档（Swagger UI）地址：
    - 背后调用：[project_manager.import_project()](api/modules/project_manager/impl.py:884)
 
 4) 手动提取图片内文件（仅查看/提取）
-   - 背后实现： [ImageBindingModule.extract_files_from_image()](image_binding_module/image_binding_module.py:256)
+   - 背后实现： [api/modules/Smarttraven/image_binding/impl.py](api/modules/Smarttraven/image_binding/impl.py)
    - API 函数： [project_manager.extract_zip_from_image()](api/modules/project_manager/impl.py:1268)
 
 打包 zip 提示：
@@ -268,3 +268,199 @@ pnpm dev
 ```bash
 npm install
 npm run dev
+---
+
+## API 规范（新）
+
+本框架已全面改为“API 优先”的注册与消费方式，统一规范如下：
+
+- 装饰器签名（推荐顺序）：
+  - `@register_api(name, description, path, input_schema, output_schema)`
+  - path 使用“斜杠路径”，不再使用点式名称，且不包含传输层前缀（不带 /api）。
+  - 命名空间由文件路径自动解析：
+    - 位于 api/modules/* 下 → 命名空间为 modules → 对外路由前缀为 /api/modules
+    - 位于 api/workflow/* 下 → 命名空间为 workflow → 对外路由前缀为 /api/workflow
+  - input_schema / output_schema 为 JSON Schema（draft-07/2020-12），作为唯一接口契约来源，严禁再使用 inputs/outputs 列表式定义。
+
+- 对外 HTTP 路由：
+  - 最终对外路径统一为 /api/{namespace}/{path}
+  - 例如在 [python.web_server.py](api/modules/web_server/web_server.py) 中注册 path="web_server/start_project"，对外路由为：
+    - POST /api/modules/web_server/start_project
+    - GET  /api/modules/web_server/start_project（便捷调用，无请求体）
+
+- SDK 调用（核心模式）：
+  - 统一通过 SDK（HTTP）调用，禁止直接 import API 模块，避免耦合。
+  - 斜杠路径调用示例：
+    - Python（SDK）：
+      - `resp = call_api("project_manager/start_project", {"project_name": "ProjectManager"}, method="POST", namespace="modules")` 见 [python.call_api()](core/api_client.py:227)
+    - 若未指定 namespace，SDK 将自动按 modules → workflow 顺序尝试。
+
+- WebSocket function_call 规范：
+  - 消息结构示例：
+    ```json
+    {
+      "type": "function_call",
+      "function": "project_manager/start_project",
+      "params": { "project_name": "ProjectManager" }
+    }
+    ```
+  - function 必须为“斜杠路径”；如果包含点号“.”或反斜杠“\”，网关将返回错误（FUNCTION_PATH_FORMAT）。
+  - 行为见 [python.APIGateway._handle_websocket_message()](core/api_gateway.py:676)
+
+- OpenAPI 文档：
+  - 网关在 [python.APIGateway._register_endpoints_to_fastapi()](core/api_gateway.py:449) 阶段基于注册表自动生成 OpenAPI，仅展示 api/* 层能力，严格使用 JSON Schema 描述请求与响应结构。
+  - 文档路径：/docs（默认 http://localhost:8050/docs）
+
+- 列出所有已注册 API：
+  - 通过模块端点：`GET /api/modules/api_gateway/list_apis`
+  - 返回字段：name（推荐作为展示名）、description、path、namespace、input_schema、output_schema
+  - 实现位置：[python.api_gateway_list_apis](api/modules/api_gateway/api_gateway.py:97)
+
+### 示例：模块级 API（image_binding）
+
+在 [python.image_binding.py](api/modules/Smarttraven/image_binding/image_binding.py:1) 内注册模块对外 API，示例（节选）：
+
+```python
+@register_api(
+    path="smarttraven/image_binding/embed_files_to_image",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "image_path": {"type": "string"},
+            "file_paths": {"type": "array", "items": {"type": "string"}},
+            "output_path": {"type": "string"}
+        },
+        "required": ["image_path", "file_paths"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "output_path": {"type": "string"},
+            "relative_path": {"type": "string"}
+        },
+        "required": ["success"]
+    },
+    description="将文件嵌入到PNG图片中"
+)
+def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Optional[str] = None) -> Dict[str, Any]:
+    ...
+```
+
+对外路由为：
+- POST /api/modules/smarttraven/image_binding/embed_files_to_image
+
+### 示例：工作流级 API（转发模块 API）
+
+在 [python.image_binding.py](api/workflow/image_binding/image_binding.py:1) 中注册工作流 API 并通过 SDK 转发调用模块 API，示例（节选）：
+
+```python
+@register_api(
+    path="image_binding/get_embedded_files_info",
+    input_schema={
+        "type": "object",
+        "properties": {"image_path": {"type": "string"}},
+        "required": ["image_path"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "files_info": {"type": "array", "items": {"type": "object", "additionalProperties": True}}
+        },
+        "required": ["success"]
+    },
+    description="获取PNG图片中嵌入的文件信息"
+)
+def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
+    payload = {"image_path": image_path}
+    return call_api("smarttraven/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
+```
+
+对外路由为：
+- GET /api/workflow/image_binding/get_embedded_files_info
+
+---
+
+## 迁移指南（Breaking Changes）
+
+- 已移除旧装饰器格式
+  - 旧：`@register_api(name="a.b.c", inputs=[...], outputs=[...])`
+  - 新：`@register_api(path="domain/action", input_schema={...}, output_schema={...})`
+  - 说明：必须提供 JSON Schema；inputs/outputs 列表不再支持。
+
+- 统一使用斜杠路径
+  - SDK：`call_api("project_manager/start_project", {...})` 而非 `"project_manager.start_project"`
+  - WebSocket：function 字段必须为斜杠路径。
+
+- 自动命名空间
+  - 装饰器不再接受/需要 namespace；路由层根据文件所在目录自动选择 modules 或 workflow。
+
+- 文档与契约统一
+  - JSON Schema 为接口契约的唯一来源；OpenAPI 基于 Schema 自动生成。
+
+---
+
+## 关键路径与参考实现（更新）
+
+- 注册中心与装饰器（新规范）：[python.api_registry.register_api()](core/api_registry.py:167)
+- 网关：自动发现与路由、OpenAPI、WS 规范
+  - [python.APIGateway.discover_and_register_functions()](core/api_gateway.py:511)
+  - [python.APIGateway._register_endpoints_to_fastapi()](core/api_gateway.py:449)
+  - [python.APIGateway._handle_websocket_message()](core/api_gateway.py:676)
+- SDK 客户端（斜杠路径约束）：[python.ApiClient._paths_for()](core/api_client.py:86)、[python.call_api()](core/api_client.py:227)
+
+---
+
+## 自检清单
+
+为避免遗漏，请按下列清单检查：
+
+- 适配器层（api/modules/* 与 api/workflow/*）
+  - 所有 @register_api 已改为新签名（path + JSON Schema），路径为斜杠风格。
+- SDK 调用
+  - repo 内所有 call_api() 入参均为斜杠路径；不再出现点式字符串。
+- WebSocket
+  - function_call 的 function 字段为斜杠路径；网关对点式明确报错。
+- 文档与路由
+  - /docs 展示的路径为 /api/{namespace}/{path}，Schema 符合预期。
+
+---
+
+## API 列表接口与示例（获取全部注册 API 定义）
+
+- 端点：GET /api/modules/api_gateway/list_apis
+- 返回字段：
+  - name（展示名，建议用于工作流编辑器的节点标题）
+  - description（描述）
+  - path（相对业务路径，斜杠风格）
+  - namespace（modules 或 workflow）
+  - input_schema（JSON Schema 请求结构）
+  - output_schema（JSON Schema 响应结构）
+  - total（总数）
+- 实现位置： [python.api_gateway_list_apis](api/modules/api_gateway/api_gateway.py:120)
+
+示例（curl）：
+```bash
+curl -s http://localhost:8050/api/modules/api_gateway/list_apis | python -m json.tool
+```
+
+示例（Python SDK）：
+```python
+from core.api_client import call_api
+
+# API 网关应已启动（参考 backend_projects/ProjectManager/start_server.py 或自行启动 APIGateway）
+result = call_api("api_gateway/list_apis", method="GET", namespace="modules")
+print("total:", result.get("total"))
+for i, api in enumerate(result.get("apis", [])[:5], start=1):
+    print(f"{i}. [{api['namespace']}] {api['name']} -> {api['path']}")
+```
+
+装饰器签名（推荐顺序）：
+- `@register_api(name, description, path, input_schema, output_schema)`
+- 说明：
+  - path 使用斜杠风格（不含 /api），命名空间由文件所在路径自动解析（api/modules → modules，api/workflow → workflow）。
+  - input_schema / output_schema 均为 JSON Schema（draft-07/2020-12），是接口契约的唯一来源。
+  - name 必填（用于工作流编辑器显示等）；如未填写，注册中心会使用函数名作为内部标识，但建议显式提供。

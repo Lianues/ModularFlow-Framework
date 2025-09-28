@@ -463,49 +463,41 @@ class APIGateway:
             elif endpoint.method == "DELETE":
                 self.app.delete(full_path, tags=endpoint.tags, summary=endpoint.summary)(endpoint.handler)
 
-        # 基于注册表构建简化版 OpenAPI（仅用于外部文档展示）
+        # 基于注册表构建 OpenAPI（仅展示 api/* 层能力，按新规范）
         try:
             registry = get_registry()
-            specs = [registry.get_spec(n) for n in registry.list_functions()]
             paths = {}
-            for spec in specs:
+            for path in registry.list_functions():
+                spec = registry.get_spec(path)
                 if not spec:
                     continue
-                # 根据函数来源模块，为 OpenAPI 路径添加 /modules 或 /workflow 前缀；仅包含 api/* 层的能力
-                fn = None
-                try:
-                    fn = get_registered_api(spec.name)
-                except Exception:
-                    fn = None
-                origin_mod = getattr(fn, "__module__", "") if fn else ""
-                if origin_mod.startswith("api.modules"):
-                    prefix_seg = "/modules"
-                elif origin_mod.startswith("api.workflow"):
-                    prefix_seg = "/workflow"
-                else:
-                    # 跳过实现层注册项
-                    continue
-                path = f"{self.config.api_prefix}{prefix_seg}/{spec.name.replace('.', '/')}"
-                # GET
-                paths.setdefault(path, {})
-                paths[path]["get"] = {
-                    "summary": f"调用: {spec.name}",
-                    "responses": {"200": {"description": "OK"}}
+                full_path = f"{self.config.api_prefix}/{spec.namespace}/{spec.path}"
+                paths.setdefault(full_path, {})
+                # GET 仅用于便捷调用（不携带请求体）
+                paths[full_path]["get"] = {
+                    "summary": f"{spec.description or 'API 调用'}",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {"application/json": {"schema": spec.output_schema or {"type": "object"}}}
+                        }
+                    }
                 }
-                # POST
-                # 构建简单的请求体 schema
-                req_schema = {
-                    "type": "object",
-                    "properties": {inp: {"type": "string"} for inp in (spec.inputs or [])},
-                    "required": spec.inputs or []
-                }
-                paths[path]["post"] = {
-                    "summary": f"调用: {spec.name}",
+                # POST 使用严格请求体 Schema
+                paths[full_path]["post"] = {
+                    "summary": f"{spec.description or 'API 调用'}",
                     "requestBody": {
-                        "required": bool(spec.inputs),
-                        "content": {"application/json": {"schema": req_schema}}
+                        "required": True if spec.input_schema and spec.input_schema.get("required") else False,
+                        "content": {
+                            "application/json": {"schema": spec.input_schema or {"type": "object"}}
+                        }
                     },
-                    "responses": {"200": {"description": "OK"}}
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {"application/json": {"schema": spec.output_schema or {"type": "object"}}}
+                        }
+                    }
                 }
             self.app.openapi_schema = {
                 "openapi": "3.0.0",
@@ -517,222 +509,117 @@ class APIGateway:
             logger.warning(f"⚠️ 构建OpenAPI失败: {e}")
     
     def discover_and_register_functions(self):
-        """自动发现并注册函数作为API端点"""
+        """自动发现并注册函数作为API端点（新规范）"""
         if not self.config or not self.config.auto_discovery:
             return
-            
-        # 直接从函数注册表获取函数列表
+
         registry = get_registry()
-        function_names = registry.list_functions()
-        
-        for func_name in function_names:
+        for path in registry.list_functions():
             try:
-                func = get_registered_api(func_name)
-                if func:
-                    # 仅暴露 api/* 层注册的能力，并基于来源目录自动添加前缀 /modules 或 /workflow
-                    origin_mod = getattr(func, "__module__", "") or ""
-                    if origin_mod.startswith("api.modules"):
-                        prefix_seg = "/modules"
-                    elif origin_mod.startswith("api.workflow"):
-                        prefix_seg = "/workflow"
-                    else:
-                        # 来自实现层（modules/* 等）的注册不对外暴露，跳过
-                        continue
-                    api_path = f"{prefix_seg}/{func_name.replace('.', '/')}"""
-                    
-                    # 创建API处理器
-                    def create_handler(fn=func, name=func_name):
-                        async def handler(request: Request = None):
-                            try:
-                                data = {}
-                                # 统一将请求数据映射为函数所需的入参，避免错误解析二进制内容为JSON
-                                if request:
-                                    method = request.method.upper()
-                                    content_type = (request.headers.get("content-type", "") or "").lower()
-                                    body_bytes = await request.body()
-                                    
-                                    # 获取函数输入规范，以便做键名映射（如 camelCase -> snake_case）
-                                    registry = get_registry()
-                                    spec = registry.get_spec(name) if registry else None
-                                    expected_inputs = spec.inputs if spec else []
-                                    
-                                    def to_snake(s: str) -> str:
-                                        out = []
-                                        for ch in s:
-                                            if ch.isupper():
-                                                out.append('_')
-                                                out.append(ch.lower())
-                                            else:
-                                                out.append(ch)
-                                        return ''.join(out).lstrip('_')
-                                    
-                                    if method == "POST":
-                                        if "multipart/form-data" in content_type:
-                                            # 解析表单与文件，避免将二进制当作UTF-8解码
-                                            form = await request.form()
-                                            
-                                            if len(expected_inputs) == 1:
-                                                key = expected_inputs[0]
-                                                # 优先尝试按预期键名获取
-                                                val = form.get(key)
-                                                if val is None:
-                                                    # 尝试获取任意文件字段
-                                                    for k, v in form.items():
-                                                        if hasattr(v, "file"):  # UploadFile 或类似对象
-                                                            val = v
-                                                            break
-                                                    # 仍未获取到文件则退回第一个值
-                                                    if val is None and form:
-                                                        try:
-                                                            val = list(form.values())[0]
-                                                        except Exception:
-                                                            val = None
-                                                data = {key: val} if val is not None else {}
-                                            else:
-                                                # 多参数场景：按规范匹配（支持 camelCase -> snake_case）
-                                                mapped = {}
-                                                for k, v in form.items():
-                                                    k2 = to_snake(k)
-                                                    if not expected_inputs or k2 in expected_inputs:
-                                                        mapped[k2] = v
-                                                data = mapped
-                                        
-                                        elif "application/json" in content_type:
-                                            # 仅在明确为JSON时解析
-                                            data = await request.json() if body_bytes else {}
-                                        
-                                        else:
-                                            # 原始二进制或其他类型
-                                            if body_bytes:
-                                                if len(expected_inputs) == 1:
-                                                    data = {expected_inputs[0]: body_bytes}
-                                                else:
-                                                    data = {}
-                                            else:
-                                                data = {}
+                func = get_registered_api(path)
+                spec = registry.get_spec(path)
+                if not func or not spec:
+                    continue
+
+                api_path = f"/{spec.namespace}/{spec.path}"
+
+                # 创建API处理器（基于 JSON Schema 的简单校验）
+                def create_handler(fn=func, _spec=spec):
+                    async def handler(request: Request = None):
+                        try:
+                            data = {}
+                            content_type = ""
+                            method = "GET"
+                            body_bytes = b""
+
+                            if request:
+                                method = request.method.upper()
+                                content_type = (request.headers.get("content-type", "") or "").lower()
+                                body_bytes = await request.body()
+
+                            expected_props = list((_spec.input_schema or {}).get("properties", {}).keys())
+                            required_inputs = list((_spec.input_schema or {}).get("required", []) or [])
+
+                            def to_snake(s: str) -> str:
+                                out = []
+                                for ch in s:
+                                    if ch.isupper():
+                                        out.append('_')
+                                        out.append(ch.lower())
                                     else:
-                                        # GET 等其他方法：从查询参数获取，并做键名转换
-                                        q = dict(request.query_params) if request else {}
-                                        if q:
-                                            mapped = {}
-                                            for k, v in q.items():
-                                                k2 = to_snake(k)
-                                                if not expected_inputs or k2 in expected_inputs:
-                                                    mapped[k2] = v
-                                            data = mapped
-                                
-                                # 输入必填校验（基于注册表 + 函数签名判断可选/默认）
-                                spec = get_registry().get_spec(name)
-                                expected_inputs = spec.inputs if spec else []
-                                if expected_inputs:
-                                    import inspect as _ins
-                                    from typing import get_origin as _get_origin, get_args as _get_args, Union as _Union
-                                    required_inputs = []
-                                    try:
-                                        sig = _ins.signature(fn)
-                                        for param in sig.parameters.values():
-                                            pname = param.name
-                                            if pname not in expected_inputs:
-                                                continue
-                                            ann = param.annotation
-                                            has_default = param.default is not _ins._empty
-                                            is_optional = False
-                                            try:
-                                                origin = _get_origin(ann)
-                                                args = _get_args(ann)
-                                                is_optional = (origin is _Union) and (type(None) in args)
-                                            except Exception:
-                                                is_optional = False
-                                            if not has_default and not is_optional:
-                                                required_inputs.append(pname)
-                                    except Exception:
-                                        # 退化到全部期望输入为必填
-                                        required_inputs = list(expected_inputs)
-                                    missing = [k for k in required_inputs if k not in (data or {})]
-                                    if missing:
-                                        return JSONResponse(status_code=400, content={
-                                            "error_code": "MISSING_REQUIRED",
-                                            "message": "缺少必填字段",
-                                            "missing": missing
-                                        })
+                                        out.append(ch)
+                                return ''.join(out).lstrip('_')
 
-                                # 基于函数签名的简单类型校验（仅对 application/json 生效）
-                                try:
-                                    import typing as _t
-                                    from typing import get_origin as _get_origin, get_args as _get_args
-                                except Exception:
-                                    _t = None
-                                    _get_origin = lambda t: None
-                                    _get_args = lambda t: ()
-                                
-                                if _t is not None:
-                                    try:
-                                        hints = _t.get_type_hints(fn)
-                                    except Exception:
-                                        hints = {}
-                                    if hints and isinstance(data, dict) and "application/json" in (content_type or "").lower():
-                                        type_errors = []
-                                        for k in expected_inputs or []:
-                                            if k in data and k in hints:
-                                                expected = hints[k]
-                                                v = data[k]
-                                                origin = _get_origin(expected)
-                                                # 仅做基础类型与容器判断，复杂联合类型留空
-                                                ok = True
-                                                if origin is list:
-                                                    ok = isinstance(v, list)
-                                                elif origin is dict:
-                                                    ok = isinstance(v, dict)
-                                                elif expected in (str, int, float, bool, list, dict):
-                                                    ok = isinstance(v, expected)
-                                                # 其余注解（如 Optional/Union/自定义）暂不强制
-                                                if not ok:
-                                                    type_errors.append({
-                                                        "field": k,
-                                                        "expected": str(expected),
-                                                        "actual": type(v).__name__
-                                                    })
-                                        if type_errors:
-                                            return JSONResponse(status_code=422, content={
-                                                "error_code": "INVALID_TYPE",
-                                                "message": "参数类型不匹配",
-                                                "details": type_errors
-                                            })
-
-                                # 协程/同步统一调用
-                                import inspect
-                                if inspect.iscoroutinefunction(fn):
-                                    result = await fn(**(data or {}))
+                            if method == "POST":
+                                if "multipart/form-data" in content_type:
+                                    form = await request.form()
+                                    mapped = {}
+                                    for k, v in form.items():
+                                        k2 = to_snake(k)
+                                        if not expected_props or k2 in expected_props:
+                                            mapped[k2] = v
+                                    data = mapped
+                                elif "application/json" in content_type:
+                                    data = await request.json() if body_bytes else {}
                                 else:
-                                    result = fn(**(data or {})) if data else fn()
-                                return result
-                            except Exception as e:
-                                return {"error": str(e)}
-                        return handler
-                    
-                    handler = create_handler()
-                    
-                    # 注册为API端点 (支持GET和POST)
-                    self.router.add_endpoint(
-                        api_path, 
-                        "GET", 
-                        handler,
-                        tags=["functions"],
-                        summary=f"调用函数: {func_name}"
-                    )
-                    
-                    self.router.add_endpoint(
-                        api_path, 
-                        "POST", 
-                        handler,
-                        tags=["functions"], 
-                        summary=f"调用函数: {func_name}"
-                    )
-                    
-                    logger.info(f"✓ 自动注册函数API: {func_name} -> {api_path}")
-                    
+                                    # 原始体：仅在单参数且必填时映射
+                                    if body_bytes and len(required_inputs) == 1:
+                                        data = {required_inputs[0]: body_bytes}
+                                    else:
+                                        data = {}
+                            else:
+                                # GET：从查询参数获取
+                                q = dict(request.query_params) if request else {}
+                                if q:
+                                    mapped = {}
+                                    for k, v in q.items():
+                                        k2 = to_snake(k)
+                                        if not expected_props or k2 in expected_props:
+                                            mapped[k2] = v
+                                    data = mapped
+
+                            # 必填校验
+                            missing = [k for k in required_inputs if k not in (data or {})]
+                            if missing:
+                                return JSONResponse(status_code=400, content={
+                                    "error_code": "MISSING_REQUIRED",
+                                    "message": "缺少必填字段",
+                                    "missing": missing
+                                })
+
+                            # 协程/同步统一调用
+                            import inspect as _ins
+                            if _ins.iscoroutinefunction(fn):
+                                result = await fn(**(data or {}))
+                            else:
+                                result = fn(**(data or {})) if data else fn()
+                            return result
+                        except Exception as e:
+                            return {"error": str(e)}
+                    return handler
+
+                handler = create_handler()
+
+                # 注册为API端点 (支持GET和POST)
+                self.router.add_endpoint(
+                    api_path,
+                    "GET",
+                    handler,
+                    tags=["functions"],
+                    summary=f"{spec.description or 'API 调用'}"
+                )
+                self.router.add_endpoint(
+                    api_path,
+                    "POST",
+                    handler,
+                    tags=["functions"],
+                    summary=f"{spec.description or 'API 调用'}"
+                )
+
+                logger.info(f"✓ 自动注册函数API: {spec.namespace}:{spec.path} -> {api_path}")
+
             except Exception as e:
-                logger.error(f"❌ 注册函数API失败 {func_name}: {e}")
+                logger.error(f"❌ 注册函数API失败 {path}: {e}")
     
     def setup_websocket(self):
         """设置WebSocket支持"""
@@ -787,32 +674,45 @@ class APIGateway:
                 logger.info(f"✓ WebSocket连接断开: {len(self.websocket_connections)}个活跃连接")
     
     async def _handle_websocket_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
-        """处理WebSocket消息"""
+        """处理WebSocket消息（新规范：函数路径必须为斜杠风格）"""
         try:
             msg_type = message.get("type", "ping")
             
             if msg_type == "ping":
                 return {"type": "pong", "timestamp": datetime.now().isoformat()}
             elif msg_type == "function_call":
-                # 调用注册的函数
-                func_name = message.get("function")
-                params = message.get("params", {})
+                # 斜杠路径，禁止点式与反斜杠
+                func_path = message.get("function", "") or ""
+                params = message.get("params", {}) or {}
                 
-                func = get_registered_api(func_name)
+                if "." in func_path or "\\" in func_path:
+                    return {
+                        "type": "function_result",
+                        "function": func_path,
+                        "success": False,
+                        "error": "FUNCTION_PATH_FORMAT",
+                        "message": "函数路径必须为斜杠形式（例如 'project_manager/start_project'），不再支持点式名称"
+                    }
+                
+                try:
+                    func = get_registered_api(func_path)
+                except Exception:
+                    func = None
+                
                 if func:
                     result = func(**params) if params else func()
                     return {
                         "type": "function_result",
-                        "function": func_name,
+                        "function": func_path,
                         "success": True,
                         "result": result
                     }
                 else:
                     return {
-                        "type": "function_result", 
-                        "function": func_name,
+                        "type": "function_result",
+                        "function": func_path,
                         "success": False,
-                        "error": f"函数不存在: {func_name}"
+                        "error": f"函数不存在: {func_path}"
                     }
             else:
                 return {"type": "error", "error": f"不支持的消息类型: {msg_type}"}

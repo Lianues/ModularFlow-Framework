@@ -1,7 +1,6 @@
 """
 API 封装层：工作流能力对外接口 (api/workflow)
-为图像绑定工作流提供统一的 @register_api 注册入口，并在路由层自动添加 '/workflow' 前缀。
-注意：此层仅作为对外 API 适配，实际实现位于 api/modules/Smarttraven/image_binding/impl.py 或 workflows/image_binding_workflow.py
+新规范：斜杠 path + JSON Schema；工作流适配器转发调用模块级API。
 """
 
 import os
@@ -11,97 +10,178 @@ from pathlib import Path
 from core.api_registry import register_api
 from core.api_client import call_api
 
-
+# embed_files_to_image
 @register_api(
-    name="image_binding.embed_files_to_image",
-    inputs=["image_path", "file_paths", "output_path"],
-    outputs=["success", "message", "output_path", "relative_path"],
-    description="将文件嵌入到PNG图片中"
+    name="工作流:嵌入文件到图片",
+    description="将文件嵌入到PNG图片中",
+    path="image_binding/embed_files_to_image",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "image_path": {"type": "string"},
+            "file_paths": {"type": "array", "items": {"type": "string"}},
+            "output_path": {"type": "string"}
+        },
+        "required": ["image_path", "file_paths"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "output_path": {"type": "string"},
+            "relative_path": {"type": "string"}
+        },
+        "required": ["success"]
+    }
 )
 def api_embed_files_to_image(image_path: str, file_paths: List[str], output_path: Optional[str] = None) -> Dict[str, Any]:
     try:
-        payload = {
-            "image_path": image_path,
-            "file_paths": file_paths,
-            "output_path": output_path
-        }
-        result = call_api("smarttraven.image_binding.embed_files_to_image", payload, method="POST", namespace="modules")
+        payload = {"image_path": image_path, "file_paths": file_paths, "output_path": output_path}
+        result = call_api("smarttraven/image_binding/embed_files_to_image", payload, method="POST", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"嵌入文件失败: {str(e)}"}
 
-
+# extract_files_from_image
 @register_api(
-    name="image_binding.extract_files_from_image",
-    inputs=["image_path", "output_dir", "filter_types"],
-    outputs=["success", "message", "files"],
-    description="从PNG图片中提取文件"
+    name="工作流:从图片提取文件",
+    description="从PNG图片中提取文件",
+    path="image_binding/extract_files_from_image",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "image_path": {"type": "string"},
+            "output_dir": {"type": "string"},
+            "filter_types": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["image_path"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "files": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["success"]
+    }
 )
 def api_extract_files_from_image(image_path: str, output_dir: Optional[str] = None, filter_types: Optional[List[str]] = None) -> Dict[str, Any]:
     try:
-        payload = {
-            "image_path": image_path,
-            "output_dir": output_dir,
-            "filter_types": filter_types
-        }
-        result = call_api("smarttraven.image_binding.extract_files_from_image", payload, method="POST", namespace="modules")
+        payload = {"image_path": image_path, "output_dir": output_dir, "filter_types": filter_types}
+        result = call_api("smarttraven/image_binding/extract_files_from_image", payload, method="POST", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"提取文件失败: {str(e)}", "files": []}
 
-
+# get_embedded_files_info
 @register_api(
-    name="image_binding.get_embedded_files_info",
-    inputs=["image_path"],
-    outputs=["success", "message", "files_info"],
-    description="获取PNG图片中嵌入的文件信息"
+    name="工作流:获取嵌入文件信息",
+    description="获取PNG图片中嵌入的文件信息",
+    path="image_binding/get_embedded_files_info",
+    input_schema={
+        "type": "object",
+        "properties": {"image_path": {"type": "string"}},
+        "required": ["image_path"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "files_info": {"type": "array", "items": {"type": "object", "additionalProperties": True}}
+        },
+        "required": ["success"]
+    }
 )
 def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path}
-        result = call_api("smarttraven.image_binding.get_embedded_files_info", payload, method="GET", namespace="modules")
+        result = call_api("smarttraven/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"获取文件信息失败: {str(e)}", "files_info": []}
 
-
+# is_image_with_embedded_files
 @register_api(
-    name="image_binding.is_image_with_embedded_files",
-    inputs=["image_path"],
-    outputs=["success", "has_embedded_files", "message"],
-    description="检查PNG图片是否包含嵌入文件"
+    name="工作流:检测图片是否包含嵌入文件",
+    description="检查PNG图片是否包含嵌入文件",
+    path="image_binding/is_image_with_embedded_files",
+    input_schema={
+        "type": "object",
+        "properties": {"image_path": {"type": "string"}},
+        "required": ["image_path"]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "has_embedded_files": {"type": "boolean"},
+            "message": {"type": "string"}
+        },
+        "required": ["success", "has_embedded_files"]
+    }
 )
 def api_is_image_with_embedded_files(image_path: str) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path}
-        result = call_api("smarttraven.image_binding.is_image_with_embedded_files", payload, method="GET", namespace="modules")
+        result = call_api("smarttraven/image_binding/is_image_with_embedded_files", payload, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "has_embedded_files": False, "message": f"检查图片失败: {str(e)}"}
 
-
+# get_file_type_tags
 @register_api(
-    name="image_binding.get_file_type_tags",
-    outputs=["success", "file_type_tags"],
-    description="获取所有支持的文件类型标签"
+    name="工作流:获取文件类型标签",
+    description="获取所有支持的文件类型标签",
+    path="image_binding/get_file_type_tags",
+    input_schema={"type": "object", "properties": {}},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "file_type_tags": {"type": "array", "items": {"type": "string"}},
+            "message": {"type": "string"}
+        },
+        "required": ["success", "file_type_tags"]
+    }
 )
 def api_get_file_type_tags() -> Dict[str, Any]:
     try:
-        result = call_api("smarttraven.image_binding.get_file_type_tags", None, method="GET", namespace="modules")
+        result = call_api("smarttraven/image_binding/get_file_type_tags", None, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"获取文件类型标签失败: {str(e)}"}
 
-
+# test
 @register_api(
-    name="image_binding.test",
-    inputs=["image_path", "test_files"],
-    outputs=["success", "message", "embed_result", "info_result", "extract_result", "test_output_image", "test_output_dir"],
-    description="测试图像绑定模块的功能"
+    name="工作流:图像绑定测试",
+    description="测试图像绑定模块的功能",
+    path="image_binding/test",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "image_path": {"type": "string"},
+            "test_files": {"type": "array", "items": {"type": "string"}}
+        }
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "embed_result": {"type": "object", "additionalProperties": True},
+            "info_result": {"type": "object", "additionalProperties": True},
+            "extract_result": {"type": "object", "additionalProperties": True},
+            "test_output_image": {"type": "string"},
+            "test_output_dir": {"type": "string"}
+        },
+        "required": ["success"]
+    }
 )
 def api_test_image_binding(image_path: Optional[str] = None, test_files: Optional[List[str]] = None) -> Dict[str, Any]:
     try:
-        # 默认参数
         image_path = image_path or "shared/SmartTavern/测试图片.png"
         if not test_files:
             test_files = [
@@ -110,16 +190,13 @@ def api_test_image_binding(image_path: Optional[str] = None, test_files: Optiona
                 "shared/SmartTavern/presets/Default.json",
                 "shared/SmartTavern/user_preferences.json"
             ]
-        # 路径处理
         img = str(Path(image_path))
         files = [str(Path(p)) for p in test_files]
-        # 目录准备
         test_dir = Path("shared/SmartTavern/test_image_binding")
         test_dir.mkdir(exist_ok=True)
         test_output_image = str(test_dir / "test_embedded.png")
         test_output_dir = str(test_dir / "extracted")
         Path(test_output_dir).mkdir(exist_ok=True)
-        # 执行
         embed_result = api_embed_files_to_image(img, files, test_output_image)
         if not embed_result.get("success"):
             return embed_result

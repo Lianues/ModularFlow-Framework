@@ -10,16 +10,16 @@
 用法示例:
     from core.api_client import ApiClient, call_api
 
-    # 直接使用全局客户端
-    resp = call_api("web_server.restart_project", {"project_name": "ProjectManager"})  # 自动尝试 /modules 和 /workflow
+    # 直接使用全局客户端（使用斜杠路径）
+    resp = call_api("web_server/restart_project", {"project_name": "ProjectManager"})  # 自动尝试 /modules 和 /workflow
     print(resp)
 
     # 指定命名空间
-    resp = call_api("image_binding.embed_files_to_image", {"image_path": "...", "file_paths": [...]}, namespace="workflow")
+    resp = call_api("image_binding/embed_files_to_image", {"image_path": "...", "file_paths": [...]}, namespace="workflow")
 
     # 或者自定义客户端实例
     client = ApiClient(base_url="http://127.0.0.1:8050", api_prefix="/api", timeout=15)
-    resp = client.call("project_manager.get_status", {"project_name": "ProjectManager"}, method="GET", namespace="modules")
+    resp = client.call("project_manager/get_status", {"project_name": "ProjectManager"}, method="GET", namespace="modules")
 """
 
 from typing import Any, Dict, Optional, Union, Tuple, List
@@ -58,11 +58,14 @@ class ApiClient:
 
     def _paths_for(self, name: str, namespace: Optional[str]) -> List[str]:
         """
-        根据函数名与命名空间生成可能的路径列表
-        - namespace 可为 'modules' | 'workflow' | None
-        - 当为 None 时，按 modules -> workflow 顺序尝试
+        根据斜杠路径与命名空间生成可能的请求路径
+        - name 必须为斜杠风格（不含点号与反斜杠）
+        - namespace 可为 'modules' | 'workflow' | None；当为 None 时，按 modules -> workflow 顺序尝试
         """
-        name_path = name.replace(".", "/").lstrip("/")
+        name_path = name.lstrip("/")
+        if "." in name_path or "\\" in name_path:
+            raise ValueError(f"API name must be a slash-separated path, got: {name}")
+
         if namespace is None:
             return [
                 f"{self.api_prefix}/modules/{name_path}",
@@ -247,6 +250,6 @@ if __name__ == "__main__":
     print("health:", status, body)
     # 示例调用（若注册了对应 API）
     try:
-        print(call_api("api_gateway.info", method="GET", namespace="modules"))
+        print(call_api("api_gateway/info", method="GET", namespace="modules"))
     except Exception as e:
         print("call failed:", e)

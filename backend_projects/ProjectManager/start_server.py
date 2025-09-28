@@ -179,7 +179,7 @@ class ProjectManagerBackend:
             
             # 通过 SDK 调用模块 API 启动项目前端
             result = call_api(
-                "project_manager.start_project",
+                "project_manager/start_project",
                 {"project_name": project_name, "component": "frontend"},
                 method="POST",
                 namespace="modules"
@@ -248,7 +248,7 @@ class ProjectManagerBackend:
         # 检查项目管理器（通过 SDK 调用）
         try:
             projects = call_api(
-                "project_manager.get_managed_projects",
+                "project_manager/get_managed_projects",
                 None,
                 method="GET",
                 namespace="modules"
@@ -261,7 +261,7 @@ class ProjectManagerBackend:
         # 检查注册的函数
         registry = get_registry()
         functions = registry.list_functions()
-        project_manager_functions = [f for f in functions if f.startswith('project_manager.')]
+        project_manager_functions = [f for f in functions if f.startswith('project_manager/')]
         print(f"📝 项目管理函数: {len(project_manager_functions)} 个")
         
         print()
@@ -314,7 +314,7 @@ class ProjectManagerBackend:
             try:
                 print("🛑 停止前端服务器...")
                 _ = call_api(
-                    "project_manager.stop_project",
+                    "project_manager/stop_project",
                     {"project_name": project_name, "component": "frontend"},
                     method="POST",
                     namespace="modules"

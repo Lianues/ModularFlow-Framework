@@ -488,7 +488,7 @@ class ProjectManager:
                 try:
                     from core.api_client import call_api
                     _ = call_api(
-                        "web_server.stop_project",
+                        "web_server/stop_project",
                         {"project_name": project_name},
                         method="POST",
                         namespace="modules"
