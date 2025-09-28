@@ -24,6 +24,29 @@ UI 风格规范：
 - [ui美化规范.md](ui美化规范.md)
 
 ---
+## 开发者指南（统一）
+
+本项目的开发规范已统一收敛至开发者文档，便于前后端与公共 API 的一致性协作。
+
+- 统一文档入口
+  - 请阅读 [DEVELOPMENT_NOTES.md](DEVELOPMENT_NOTES.md)，其中已融合“核心方法（Core Methods）”与“动态项目管理”全部内容。
+  - 历史文档 [CORE_METHODS.md](CORE_METHODS.md) 与 [DYNAMIC_PROJECT_MANAGEMENT.md](DYNAMIC_PROJECT_MANAGEMENT.md) 已合并至开发者文档并删除。
+
+- 关键原则（摘要）
+  - 私有端口声明：前端/后端/WebSocket 均在项目根的 modularflow_config.py 中声明，并保持同一项目的端口策略一致性：
+    - 前端示例： [frontend_projects/ProjectManager/modularflow_config.py](frontend_projects/ProjectManager/modularflow_config.py)
+    - 后端示例： [backend_projects/ProjectManager/modularflow_config.py](backend_projects/ProjectManager/modularflow_config.py)
+  - 公共 API 调用范式（强制）：统一使用 import core 门面与本地 SDK 客户端，不关注具体文件路径：
+    - SDK 入口： [python.call_api()](core/api_client.py:234)、[python.get_client()](core/api_client.py:216)
+    - 注册器/装饰器： [python.register_api()](core/api_registry.py:146)
+    - 网关暴露： [core/api_gateway.py](core/api_gateway.py)
+  - 公共模块/工作流 API 注册与导入规范：
+    - 压缩包导入时，唯一 .py 文件路径前缀必须与类型匹配：
+      - 模块：api/modules/...
+      - 工作流：api/workflow/...
+    - 面板导入会强制校验规范，详见： [api/modules/api_files/api_files.py](api/modules/api_files/api_files.py)
+  - 项目内部模块/工作流无需对外暴露：置于各自前端/后端文件夹内，通过内部端口调用即可。
+  - 项目导入压缩包结构必须以 myproject/ 为根目录；不能将文件平铺在压缩包根。
 
 ## 功能特性概览
 
@@ -520,3 +543,45 @@ for i, api in enumerate(result.get("apis", [])[:5], start=1):
 - function 名必须为“斜杠路径”；点式与反斜杠将被网关拒绝，详见 [python.APIGateway._handle_websocket_message()](core/api_gateway.py:676)。
 
 如遇到文档与行为不一致，请以上述“API 优先、import core 门面、私有端口在 modularflow_config.py 注册”的原则为准，并参照核心代码链接进行校验。
+
+## 通用 API 文件管理（模块/工作流）
+
+管理面板提供“通用 API 文件管理”能力，以“注册 API 脚本所在文件夹”为单位进行查看、分页与删除，并支持直接导入模块/工作流 API 脚本（zip 或嵌入于 PNG）。
+
+- 界面入口与布局
+  - 页面位置： [frontend_projects/ProjectManager/index.html](frontend_projects/ProjectManager/index.html)
+  - 前端逻辑： [frontend_projects/ProjectManager/js/main.js](frontend_projects/ProjectManager/js/main.js)、[frontend_projects/ProjectManager/js/api.js](frontend_projects/ProjectManager/js/api.js)
+  - 布局：双面板（模块 modules / 工作流 workflow），每页 10 项，默认折叠以显示更紧凑的列表；展开后展示文件夹下的已注册 API
+  - API 条目显示：
+    - namespace + path
+    - 名称（加粗）
+    - 描述（如有）
+
+- 后端接口（api/modules/api_files/api_files.py）
+  - 列表：列出 modules/workflow 两类 API 脚本所在的文件夹（按注册来源归并）  
+    - [api/modules/api_files/api_files.py](api/modules/api_files/api_files.py)
+  - 删除：危险操作，递归删除指定命名空间下的文件夹  
+    - [api/modules/api_files/api_files.py](api/modules/api_files/api_files.py)
+  - 导入脚本（zip）：仅允许包含“唯一一个 .py 文件”的压缩包，且路径前缀必须与所选类型一致  
+    - 模块：api/modules/...  
+    - 工作流：api/workflow/...  
+    - [api/modules/api_files/api_files.py](api/modules/api_files/api_files.py)
+  - 从图片导入脚本（PNG）：从嵌入 zip 的 PNG 中反嵌入并导入，前缀规范同上  
+    - [api/modules/api_files/api_files.py](api/modules/api_files/api_files.py)
+
+- 导入使用说明（在“导入项目”与“从图片导入”入口内）
+  - 导入类型新增：
+    - “API脚本（模块）”：zip 或 png
+    - “API脚本（工作流）”：zip 或 png
+  - 约束：
+    - zip 内必须且仅包含 1 个 .py 脚本
+    - 模块脚本路径必须以 api/modules/ 开头
+    - 工作流脚本路径必须以 api/workflow/ 开头
+  - 成功导入后将自动动态 import 注册，面板会刷新显示对应文件夹与其 API
+
+- 删除提示（危险操作）
+  - 在面板上删除将“递归删除该文件夹及其子文件”，不可恢复；请谨慎操作
+
+- 开发规范与约束（重要）
+  - 公共 API 注册与导入前缀规范、内部模块/工作流不对外暴露、端口与配置统一收敛等规范，详见统一开发者文档：  
+    - [DEVELOPMENT_NOTES.md](DEVELOPMENT_NOTES.md)
