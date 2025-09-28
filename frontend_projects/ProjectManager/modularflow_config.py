@@ -7,12 +7,12 @@ ProjectManager 简化配置脚本（常量式）
 # 基本端口
 FRONTEND_PORT = 8055
 BACKEND_PORT = 8050
-WEBSOCKET_PORT = 8051
+WEBSOCKET_PORT = 8050
 
 # 项目信息
 PROJECT_NAME = "ProjectManager"
 DISPLAY_NAME = "项目管理器"
-PROJECT_TYPE = "html"
+PROJECT_ROLE = "frontend"
 # 新增：版本与描述（供前端展示）
 VERSION = "1.0.0"
 DESCRIPTION = "ModularFlow前端项目（html）"

@@ -269,3 +269,35 @@ def extract_zip_from_image(image) -> Dict[str, Any]:
 )
 def import_project_from_image(image) -> Dict[str, Any]:
     return _import_project_from_image(image)
+
+# 新增：后端项目导入（zip）
+@core.register_api(
+    name="导入后端项目",
+    description="导入后端项目（要求根含 modularflow_config.py）",
+    path="project_manager/import_backend_project",
+    input_schema={
+        "type": "object",
+        "properties": {"project_archive": {"type": "string"}}
+    },
+    output_schema={"type": "object", "additionalProperties": True}
+)
+def import_backend_project(project_archive) -> Dict[str, Any]:
+    # 为减少对顶部import块的改动，这里进行局部导入
+    from .impl import import_backend_project as _impl_import_backend_project
+    return _impl_import_backend_project(project_archive)
+
+# 新增：后端项目导入（从PNG反嵌入zip）
+@core.register_api(
+    name="从图片导入后端项目",
+    description="从PNG反嵌入zip并导入后端项目",
+    path="project_manager/import_backend_project_from_image",
+    input_schema={
+        "type": "object",
+        "properties": {"image": {"type": "string"}},
+        "required": ["image"]
+    },
+    output_schema={"type": "object", "additionalProperties": True}
+)
+def import_backend_project_from_image(image) -> Dict[str, Any]:
+    from .impl import import_backend_project_from_image as _impl_import_backend_project_from_image
+    return _impl_import_backend_project_from_image(image)

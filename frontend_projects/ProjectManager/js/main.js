@@ -53,6 +53,8 @@ class ProjectManagerApp {
             
             // 项目网格
             projectsGrid: document.getElementById('projectsGrid'),
+            projectsGridFrontend: document.getElementById('projectsGridFrontend'),
+            projectsGridBackend: document.getElementById('projectsGridBackend'),
             
             // 端口使用
             portUsage: document.getElementById('portUsage'),
@@ -435,28 +437,19 @@ class ProjectManagerApp {
      * 更新项目网格
      */
     updateProjectsGrid() {
-        const projectList = Object.entries(this.projects);
+        const entries = Object.entries(this.projects || {});
         const host = (() => {
             try { return new URL(window.apiClient?.baseURL || 'http://localhost').hostname; }
             catch { return 'localhost'; }
         })();
-        
-        if (projectList.length === 0) {
-            this.elements.projectsGrid.innerHTML = `
-                <div class="col-span-full text-center py-12">
-                    <i data-lucide="folder-x" class="w-12 h-12 text-gray-400 mx-auto mb-4"></i>
-                    <p class="text-gray-500">暂无项目数据</p>
-                    <p class="text-gray-400 text-sm mt-2">请检查项目配置或后端连接</p>
-                    <button onclick="app.loadData(true)" class="mt-4 btn-primary px-4 py-2 rounded-lg text-sm">
-                        重新加载
-                    </button>
-                </div>
-            `;
-            lucide.createIcons();
-            return;
-        }
 
-        this.elements.projectsGrid.innerHTML = projectList.map(([name, project]) => {
+        const isFrontendProject = (p) => {
+            const r = String((p && p.role) || '').toLowerCase();
+            // 不做旧兼容：仅依据 role 分类
+            return r === 'frontend';
+        };
+
+        const renderCards = (items) => items.map(([name, project]) => {
             const displayName = project.display_name || name;
             const subtitle = project.description || project.namespace || '';
             const version = project.version ? `v${project.version}` : '';
@@ -465,6 +458,8 @@ class ProjectManagerApp {
             const frontendStatus = project.frontend_running ? 'running' : 'stopped';
             const backendStatus = project.backend_running ? 'running' : 'stopped';
             const overallStatus = (project.frontend_running || project.backend_running) ? 'running' : 'stopped';
+            const ports = this.getProjectPorts(project);
+            const websocketPort = ports.websocket;
 
             return `
                 <div class="bg-white project-card p-6">
@@ -479,11 +474,11 @@ class ProjectManagerApp {
                         <div class="flex items-center space-x-3">
                             <div class="flex items-center">
                                 <span class="status-dot status-${overallStatus}"></span>
-                                <span class="text-sm font-medium ${overallStatus === 'running' ? 'text-green-600' : 'text-red-600'}">
+                                <span class="text-sm font-medium whitespace-nowrap flex-none ${overallStatus === 'running' ? 'text-green-600' : 'text-red-600'}">
                                     ${overallStatus === 'running' ? '运行中' : '已停止'}
                                 </span>
                             </div>
-                            <span class="text-xs px-2 py-1 rounded-4 border ${
+                            <span class="text-xs px-2 py-1 rounded-4 whitespace-nowrap flex-none border ${
                                 health === 'healthy' ? 'border-green-600 text-green-600' :
                                 health === 'degraded' ? 'border-yellow-600 text-yellow-600' :
                                 'border-gray-500 text-gray-500'
@@ -513,6 +508,17 @@ class ProjectManagerApp {
                                 </span>
                             </div>
                         </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">WebSocket</span>
+                            <div class="flex items-center space-x-2">
+                                ${websocketPort && websocketPort !== '未设置' ? `<span class="port-badge">:${websocketPort}</span>` : ''}
+                                <span class="status-dot status-${backendStatus}"></span>
+                                <span class="text-sm ${backendStatus === 'running' ? 'text-green-600' : 'text-gray-500'}">
+                                    ${backendStatus === 'running' ? '运行' : '停止'}
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     ${project.errors && project.errors > 0 ? `
@@ -526,14 +532,14 @@ class ProjectManagerApp {
 
                     <div class="flex space-x-2">
                         <button onclick="app.startProject('${name}')"
-                                class="flex-1 btn-primary px-3 py-2 rounded text-sm flex items-center justify-center space-x-1"
+                                class="btn-primary px-3 py-2 rounded text-sm flex items-center justify-center space-x-1 w-28 whitespace-nowrap flex-none"
                                 ${overallStatus === 'running' ? 'disabled opacity-50' : ''}>
                             <i data-lucide="play" class="w-4 h-4"></i>
                             <span>启动</span>
                         </button>
 
                         <button onclick="app.stopProject('${name}')"
-                                class="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center space-x-1"
+                                class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center space-x-1 w-28 whitespace-nowrap flex-none"
                                 ${overallStatus === 'stopped' ? 'disabled opacity-50' : ''}>
                             <i data-lucide="stop-circle" class="w-4 h-4"></i>
                             <span>停止</span>
@@ -561,15 +567,37 @@ class ProjectManagerApp {
             `;
         }).join('');
 
+        // 分离前端/后端
+        const frontendItems = entries.filter(([_, p]) => isFrontendProject(p));
+        const backendItems = entries.filter(([_, p]) => !isFrontendProject(p));
+
+        const emptyHtml = `
+            <div class="col-span-full text-center py-12">
+                <i data-lucide="folder-x" class="w-12 h-12 text-gray-400 mx-auto mb-4"></i>
+                <p class="text-gray-500">暂无项目数据</p>
+                <p class="text-gray-400 text-sm mt-2">请检查项目配置或后端连接</p>
+                <button onclick="app.loadData(true)" class="mt-4 btn-primary px-4 py-2 rounded-lg text-sm">
+                    重新加载
+                </button>
+            </div>
+        `;
+
+        const frontendContainer = this.elements.projectsGridFrontend || this.elements.projectsGrid;
+        const backendContainer = this.elements.projectsGridBackend || this.elements.projectsGrid;
+
+        frontendContainer.innerHTML = frontendItems.length ? renderCards(frontendItems) : emptyHtml;
+        backendContainer.innerHTML = backendItems.length ? renderCards(backendItems) : emptyHtml;
+
         lucide.createIcons();
     }
 
     /**
-     * 更新端口使用情况
+     * 更新端口使用情况（按端口分组 + 系统 API Core 标注 + 前端/后端/WS 分区）
+     * - 第一行以“端口”为核心：:port + 使用状态 + 共享项目数 + API Core 标注（从全局 API 客户端 baseURL 解析端口）
+     * - 将使用该端口的项目按前端/后端/WebSocket分开展示，列出各项目的真实使用情况（含PID）
      */
     updatePortUsage() {
-        const portEntries = Object.entries(this.portUsage);
-        
+        const portEntries = Object.entries(this.portUsage || {});
         if (portEntries.length === 0) {
             this.elements.portUsage.innerHTML = `
                 <p class="text-gray-500 text-center py-4">暂无端口使用数据</p>
@@ -577,28 +605,146 @@ class ProjectManagerApp {
             return;
         }
 
-        this.elements.portUsage.innerHTML = portEntries.map(([projectName, ports]) => {
-            const portList = Object.entries(ports).map(([type, info]) => {
-                const statusClass = info.running ? 'text-green-600' : 'text-gray-500';
-                const statusText = info.running ? '使用中' : '空闲';
-                
+        // 系统 API Core 端口（从全局 API 客户端读取）
+        const baseCorePort = this.parsePortFromUrl(window.apiClient?.baseURL || '');
+
+        // 构建聚合：port -> { port, items: [{project,type,running,pid}], runningAny, types:Set }
+        const agg = new Map();
+        for (const [projectName, ports] of portEntries) {
+            for (const [type, info] of Object.entries(ports || {})) {
+                if (!info || !info.port) continue;
+                const port = Number(info.port);
+                if (!agg.has(port)) {
+                    agg.set(port, { port, items: [], runningAny: false, types: new Set(), pids: [] });
+                }
+                const g = agg.get(port);
+                g.items.push({
+                    project: projectName,
+                    type, // 'frontend' | 'backend'
+                    running: !!info.running,
+                    pid: info.pid || null,
+                });
+                if (info.running) g.runningAny = true;
+                if (info.pid) g.pids.push(info.pid);
+                g.types.add(type);
+            }
+        }
+
+        // 将 WS 端口也纳入统计（从 this.projects 推断）
+        const projectsArray = Object.values(this.projects || {});
+        for (const p of projectsArray) {
+            const { websocket } = this.getProjectPorts(p);
+            const wsPort = Number(this.ensureNumber(websocket));
+            if (wsPort) {
+                if (!agg.has(wsPort)) {
+                    agg.set(wsPort, { port: wsPort, items: [], runningAny: false, types: new Set(), pids: [] });
+                }
+                const g = agg.get(wsPort);
+                g.items.push({
+                    project: p.name || p.namespace,
+                    type: 'ws',
+                    running: !!p.backend_running, // WS 随后端运行
+                    pid: p.backend_pid || null
+                });
+                g.types.add('ws');
+                if (p.backend_running) g.runningAny = true;
+            }
+        }
+
+        // 与项目状态联动：若任一项目在该端口运行，则将该端口整体标记为使用中
+        for (const g of agg.values()) {
+            const runningFromProjects =
+                projectsArray.some(p => (p.backend_port === g.port && !!p.backend_running) ||
+                                        (p.frontend_port === g.port && !!p.frontend_running));
+            if (runningFromProjects) g.runningAny = true;
+        }
+
+        // 排序：按端口号升序
+        const groups = Array.from(agg.values()).sort((a, b) => a.port - b.port);
+
+        // 渲染聚合视图（端口为核心 + 分区展示）
+        this.elements.portUsage.innerHTML = groups.map(group => {
+            const statusClass = group.runningAny ? 'text-green-600' : 'text-gray-500';
+            const statusText = group.runningAny ? '使用中' : '空闲';
+            const shareLabel = group.items.length > 1 ? `<span class="text-xs text-gray-500 ml-2">共享: ${group.items.length} 项目</span>` : '';
+
+            const apiCoreBadge = (baseCorePort && group.port === baseCorePort)
+                ? `<span class="text-xs px-2 py-1 rounded-4 border border-black text-black whitespace-nowrap">API Core</span>`
+                : '';
+
+            // 分区聚合
+            const frontendRows = group.items.filter(i => i.type === 'frontend').map(i => {
+                const rc = i.running ? 'text-green-600' : 'text-gray-500';
+                const rt = i.running ? '使用中' : '空闲';
+                const pidText = i.pid ? `<span class="text-xs text-gray-400">PID: ${i.pid}</span>` : '';
                 return `
                     <div class="flex items-center justify-between">
-                        <span class="text-sm">${projectName} - ${type}</span>
+                        <span class="text-sm">${i.project} - 前端</span>
                         <div class="flex items-center space-x-2">
-                            <span class="port-badge">:${info.port}</span>
-                            <span class="text-sm ${statusClass}">${statusText}</span>
-                            ${info.pid ? `<span class="text-xs text-gray-400">PID: ${info.pid}</span>` : ''}
+                            <span class="text-sm ${rc}">${rt}</span>
+                            ${pidText}
                         </div>
                     </div>
                 `;
             }).join('');
-            
+
+            const backendRows = group.items.filter(i => i.type === 'backend').map(i => {
+                const rc = i.running ? 'text-green-600' : 'text-gray-500';
+                const rt = i.running ? '使用中' : '空闲';
+                const pidText = i.pid ? `<span class="text-xs text-gray-400">PID: ${i.pid}</span>` : '';
+                return `
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">${i.project} - 后端</span>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm ${rc}">${rt}</span>
+                            ${pidText}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const wsRows = group.items.filter(i => i.type === 'ws').map(i => {
+                const rc = i.running ? 'text-green-600' : 'text-gray-500';
+                const rt = i.running ? '使用中' : '空闲';
+                const pidText = i.pid ? `<span class="text-xs text-gray-400">PID: ${i.pid}</span>` : '';
+                return `
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">${i.project} - WebSocket</span>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm ${rc}">${rt}</span>
+                            ${pidText}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const sections = [
+                { title: 'frontend', html: frontendRows },
+                { title: 'backend', html: backendRows },
+                { title: 'ws', html: wsRows },
+            ].filter(s => !!s.html);
+
             return `
                 <div class="border border-gray-200 rounded-lg p-4">
-                    <h4 class="font-medium text-gray-900 mb-3">${projectName}</h4>
-                    <div class="space-y-2">
-                        ${portList}
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-mono port-badge">:${group.port}</span>
+                            <span class="text-sm ${statusClass}">${statusText}</span>
+                            ${shareLabel}
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            ${apiCoreBadge}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        ${sections.map(sec => `
+                            <div class="border border-gray-200 rounded-4 p-3">
+                                <div class="text-xs text-gray-600 mb-2">${sec.title}</div>
+                                <div class="space-y-2">
+                                    ${sec.html}
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>
             `;
@@ -776,7 +922,7 @@ class ProjectManagerApp {
             return {
                 frontend_dev: project.ports.frontend_dev ?? '未设置',
                 api_gateway: project.ports.api_gateway ?? '未设置',
-                websocket: project.ports.websocket ?? (project.ports.api_gateway ?? '未设置'),
+                websocket: project.ports.websocket ?? '未设置',
             };
         }
         // 回退：从各字段推断
@@ -787,7 +933,6 @@ class ProjectManagerApp {
             null;
         const websocket =
             this.parsePortFromUrl(project.api && project.api.websocket_url) ||
-            api_gateway ||
             null;
 
         return {
@@ -888,6 +1033,10 @@ class ProjectManagerApp {
                     ports: item.ports || undefined,
                     runtime: item.runtime || undefined,
                     api: item.api || undefined,
+
+                    // 新增：类型（历史字段，前端分类改用 role）
+                    type: item.type || 'web',
+                    role: item.role || undefined,
                 };
             }
             return merged;
@@ -1150,7 +1299,8 @@ class ProjectManagerApp {
     }
 
     /**
-     * 处理导出前端卡提交（zip+png -> 嵌入png）
+     * 处理导出项目卡提交（zip+png -> 嵌入png）
+     * 支持导出类型区分（前端/后端），目前对嵌入流程无差异，仅用于命名与后续扩展
      */
     async handleExportCard(event) {
         event.preventDefault();
@@ -1158,6 +1308,7 @@ class ProjectManagerApp {
         const imgInput = document.getElementById('exportImageFile');
         const zipFile = zipInput?.files?.[0];
         const imgFile = imgInput?.files?.[0];
+        // 导出卡片为通用格式，无需区分前后端
 
         if (!zipFile || !imgFile) {
             this.showToast('error', '输入错误', '请同时选择压缩包(.zip)与PNG图片(.png)');
@@ -1178,6 +1329,8 @@ class ProjectManagerApp {
             const formData = new FormData();
             formData.append('archive', zipFile);
             formData.append('image', imgFile);
+            // 可选：标记类型，便于后端或后续扩展识别
+            // formData.append('card_type', exportType);
 
             const result = await window.apiClient.embedZipIntoImage(formData);
             const ok = result.success || (result.result && result.result.success);
@@ -1190,7 +1343,8 @@ class ProjectManagerApp {
             }
 
             const base64 = (data.image_base64) || (data.result && data.result.image_base64);
-            const filename = (data.filename) || (data.result && data.result.filename) || 'embedded.png';
+            const fallbackName = 'project_card.png';
+            const filename = (data.filename) || (data.result && data.result.filename) || fallbackName;
             if (!base64) {
                 this.showToast('error', '生成失败', '未获取到嵌入图片数据');
                 return;
@@ -1219,13 +1373,23 @@ class ProjectManagerApp {
             return;
         }
 
+        // 读取导入类型（前端/后端）
+        const typeEl = document.querySelector('input[name="importFromImageType"]:checked');
+        const importType = typeEl ? typeEl.value : 'frontend';
+
         this.hideImportFromImageModal();
         this.showLoading('正在从图片解析并导入项目...');
         try {
             const formData = new FormData();
             formData.append('image', file);
 
-            const result = await window.apiClient.importProjectFromImage(formData);
+            let result;
+            if (importType === 'backend') {
+                result = await window.apiClient.importBackendProjectFromImage(formData);
+            } else {
+                result = await window.apiClient.importProjectFromImage(formData);
+            }
+
             const ok = result.success || (result.result && result.result.success);
             const data = ok ? (result.data || result) : null;
 
@@ -1279,7 +1443,7 @@ const ports = this.getProjectPorts(project);
 // 设置表单字段值（"未设置" 显示为空）
 this.elements.frontendPort.value = (ports.frontend_dev && ports.frontend_dev !== '未设置') ? ports.frontend_dev : '';
 this.elements.backendPort.value = (ports.api_gateway && ports.api_gateway !== '未设置') ? ports.api_gateway : '';
-this.elements.websocketPort.value = (ports.websocket && ports.websocket !== '未设置') ? ports.websocket : ((ports.api_gateway && ports.api_gateway !== '未设置') ? ports.api_gateway : '');
+this.elements.websocketPort.value = (ports.websocket && ports.websocket !== '未设置') ? ports.websocket : '';
         
         // 显示模态框
         this.elements.editPortModal.classList.remove('hidden');
@@ -1308,12 +1472,21 @@ this.elements.websocketPort.value = (ports.websocket && ports.websocket !== '未
             this.showToast('error', '导入失败', '请选择有效的项目压缩包');
             return;
         }
+
+        // 读取导入类型（前端/后端）
+        const typeEl = document.querySelector('input[name="importType"]:checked');
+        const importType = typeEl ? typeEl.value : 'frontend';
         
         this.hideImportProjectModal();
         this.showLoading('正在导入项目...');
         
         try {
-            const result = await window.apiClient.importProject(formData);
+            let result;
+            if (importType === 'backend') {
+                result = await window.apiClient.importBackendProject(formData);
+            } else {
+                result = await window.apiClient.importProject(formData);
+            }
             
             if (result.success || (result.result && result.result.success)) {
                 const projectName = result.project_name || (result.result && result.result.project_name) || '新项目';

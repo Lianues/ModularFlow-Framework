@@ -156,6 +156,25 @@ class APIClient {
         }
     }
 
+    // 新增：导入后端项目（zip）
+    async importBackendProject(formData) {
+        const url = `${this.baseURL}${this.apiPrefix}/modules/project_manager/import_backend_project`;
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        } catch (error) {
+            console.error('导入后端项目失败:', error);
+            throw error;
+        }
+    }
+
     /**
      * 将zip嵌入PNG图片
      * 后端函数：project_manager.embed_zip_into_image
@@ -196,6 +215,25 @@ class APIClient {
             return data;
         } catch (error) {
             console.error('从图片导入项目失败:', error);
+            throw error;
+        }
+    }
+
+    // 新增：从图片导入后端项目
+    async importBackendProjectFromImage(formData) {
+        const url = `${this.baseURL}${this.apiPrefix}/modules/project_manager/import_backend_project_from_image`;
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || data.message || `HTTP ${response.status}`);
+            }
+            return data;
+        } catch (error) {
+            console.error('从图片导入后端项目失败:', error);
             throw error;
         }
     }
@@ -319,50 +357,15 @@ class APIClient {
 }
 
 /**
- * 加载前端配置并初始化全局API客户端
- * - 配置来源：frontend_projects/ProjectManager/mf_frontend_config.json
- * - 若未找到配置，则回退到默认值（http://localhost:8050 + /api）
+ * 简化初始化：不再依赖 mf_frontend_config.json
+ * 统一使用后端端口 + /api 作为默认配置
+ * WebSocket 走后端端口 /ws
  */
-async function loadFrontendConfig() {
-    try {
-        const resp = await fetch('./mf_frontend_config.json', { cache: 'no-store' });
-        if (resp.ok) {
-            return await resp.json();
-        }
-    } catch (e) {
-        console.warn('加载前端配置失败，使用默认配置:', e);
-    }
-    return null;
-}
 
-function deriveApiSettings(cfg) {
-    const fallbackBase = 'http://localhost:8050';
-    const fallbackPrefix = '/api';
-    const getOrigin = (ep) => {
-        try { return new URL(ep).origin; } catch { return null; }
-    };
-
-    const apiBase = (cfg?.global_config?.api_base_url)
-        || getOrigin(cfg?.projects?.[0]?.api_endpoint)
-        || fallbackBase;
-
-    let apiPrefix = fallbackPrefix;
-    const ep = cfg?.projects?.[0]?.api_endpoint;
-    if (ep) {
-        const origin = getOrigin(ep);
-        if (origin && ep.startsWith(origin)) {
-            apiPrefix = ep.slice(origin.length) || fallbackPrefix;
-        }
-    }
-    if (!apiPrefix.startsWith('/')) apiPrefix = `/${apiPrefix}`;
-    apiPrefix = apiPrefix.replace(/\/+$/, ''); // 移除尾部斜杠
-
-    return { baseURL: apiBase, apiPrefix };
-}
 
 async function initApiClient() {
-    const cfg = await loadFrontendConfig();
-    const { baseURL, apiPrefix } = deriveApiSettings(cfg);
+    const baseURL = 'http://localhost:8050';
+    const apiPrefix = '/api';
     window.apiClient = new APIClient(baseURL, apiPrefix);
 }
 

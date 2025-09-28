@@ -131,12 +131,12 @@
                             <span>刷新状态</span>
                         </button>
                         <button id="importProjectBtn" class="btn-primary px-4 py-2 flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:ring-offset-2">
-                            <i data-lucide="upload" class="w-4 h-4"></i>
+                            <i data-lucide="package-plus" class="w-4 h-4"></i>
                             <span>导入项目</span>
                         </button>
                         <button id="exportCardBtn" class="btn-secondary px-4 py-2 flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:ring-offset-2">
-                            <i data-lucide="package-plus" class="w-4 h-4"></i>
-                            <span>导出前端卡</span>
+                            <i data-lucide="upload" class="w-4 h-4"></i>
+                            <span>导出项目卡</span>
                         </button>
                         <button id="importFromImageBtn" class="btn-secondary px-4 py-2 flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:ring-offset-2">
                             <i data-lucide="image" class="w-4 h-4"></i>
@@ -224,8 +224,25 @@
                 </div>
             </div>
 
-            <div id="projectsGrid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                <!-- Projects will be loaded here -->
+            <!-- 前端项目列表 -->
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-black mb-2 flex items-center">
+                    <i data-lucide="monitor" class="w-4 h-4 mr-2 text-black"></i>
+                    前端项目
+                </h3>
+                <div id="projectsGridFrontend" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <!-- Frontend projects will be loaded here -->
+                </div>
+            </div>
+            <!-- 后端项目列表 -->
+            <div>
+                <h3 class="text-base font-semibold text-black mb-2 flex items-center">
+                    <i data-lucide="server" class="w-4 h-4 mr-2 text-black"></i>
+                    后端项目
+                </h3>
+                <div id="projectsGridBackend" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <!-- Backend projects will be loaded here -->
+                </div>
             </div>
         </div>
 
@@ -239,7 +256,7 @@
                 <p class="text-gray-600 text-sm mb-4">您可以在这里管理项目，包括导入新项目和删除不需要的项目。</p>
                 <div class="flex space-x-3">
                     <button id="importProjectBtnSection" class="btn-primary px-4 py-2 flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:ring-offset-2">
-                        <i data-lucide="upload" class="w-4 h-4"></i>
+                        <i data-lucide="package-plus" class="w-4 h-4"></i>
                         <span>导入项目</span>
                     </button>
                 </div>
@@ -294,7 +311,7 @@
         <div class="bg-white rounded-4 p-8 max-w-lg w-full mx-4">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-bold text-black flex items-center">
-                    <i data-lucide="upload" class="w-5 h-5 mr-2 text-black"></i>
+                    <i data-lucide="package-plus" class="w-5 h-5 mr-2 text-black"></i>
                     导入项目
                 </h3>
                 <button id="closeImportModal" class="text-gray-500 hover:text-black">
@@ -305,6 +322,19 @@
                 选择一个项目压缩包进行导入。项目压缩包应该包含前端、后端和共享资源目录。
             </p>
             <form id="importProjectForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">导入类型</label>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importType" value="frontend" checked class="form-radio">
+                            <span class="text-sm text-gray-700">前端项目</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importType" value="backend" class="form-radio">
+                            <span class="text-sm text-gray-700">后端项目</span>
+                        </label>
+                    </div>
+                </div>
                 <div>
                     <label for="projectArchive" class="block text-sm font-medium text-gray-700 mb-1">项目压缩包</label>
                     <input type="file" id="projectArchive" name="projectArchive" accept=".zip"
@@ -394,8 +424,8 @@
         <div class="bg-white rounded-4 p-8 max-w-lg w-full mx-4">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-bold text-black flex items-center">
-                    <i data-lucide="package-plus" class="w-5 h-5 mr-2 text-black"></i>
-                    导出前端卡
+                    <i data-lucide="upload" class="w-5 h-5 mr-2 text-black"></i>
+                    导出项目卡
                 </h3>
                 <button id="closeExportCardModal" class="text-gray-500 hover:text-black">
                     <i data-lucide="x" class="w-5 h-5"></i>
@@ -405,6 +435,9 @@
                 上传一个压缩包（.zip）与一张PNG图片（.png），系统会将压缩包嵌入到图片内并生成可下载的嵌入图片。
             </p>
             <form id="exportCardForm" class="space-y-4">
+                <div>
+                    <p class="text-sm text-gray-600">导出卡片为通用格式，无需区分前后端。请确保压缩包根目录包含 modularflow_config.py。</p>
+                </div>
                 <div>
                     <label for="exportZipFile" class="block text-sm font-medium text-gray-700 mb-1">项目压缩包（.zip）</label>
                     <input type="file" id="exportZipFile" name="archive" accept=".zip"
@@ -445,6 +478,19 @@
                 选择一张嵌入了压缩包的PNG图片（.png）。选择后将自动解析、解压并导入项目。
             </p>
             <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">导入类型</label>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importFromImageType" value="frontend" checked class="form-radio">
+                            <span class="text-sm text-gray-700">前端项目</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importFromImageType" value="backend" class="form-radio">
+                            <span class="text-sm text-gray-700">后端项目</span>
+                        </label>
+                    </div>
+                </div>
                 <div>
                     <label for="importFromImageFile" class="block text-sm font-medium text-gray-700 mb-1">选择PNG图片</label>
                     <input type="file" id="importFromImageFile" name="image" accept=".png"

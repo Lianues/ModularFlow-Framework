@@ -132,18 +132,8 @@ class ProjectManagerBackend:
             print(f"⚠️ 读取 modularflow_config.py 失败，继续使用默认配置: {e}")
 
     def _write_frontend_runtime_config(self):
-        """将运行时前端配置写入到前端项目目录，供前端读取（mf_frontend_config.json）"""
-        try:
-            cfg = self._create_frontend_config()
-            if not cfg:
-                return
-            frontend_path = self.project_config.get("frontend", {}).get("path", "frontend_projects/ProjectManager")
-            out_file = Path(frontend_path) / "mf_frontend_config.json"
-            with open(out_file, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, ensure_ascii=False, indent=2)
-            print(f"✓ 已生成前端运行时配置: {out_file}")
-        except Exception as e:
-            print(f"⚠️ 写入前端运行时配置失败: {e}")
+        """已弃用：不再生成 mf_frontend_config.json；前端使用固定的后端端口与 /api 配置"""
+        pass
 
     def load_modules(self):
         """加载必要的模块"""
@@ -230,8 +220,6 @@ class ProjectManagerBackend:
             auto_open = frontend_config.get("auto_open_browser", True) and open_browser
             
             print("⚛️ 启动前端服务器...")
-            # 生成前端运行时配置，供前端读取以避免硬编码
-            self._write_frontend_runtime_config()
             
             # 通过 SDK 调用模块 API 启动项目前端
             result = core.call_api(
