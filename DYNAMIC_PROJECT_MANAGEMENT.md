@@ -13,10 +13,10 @@ ModularFlow Framework 现在支持动态项目发现和管理，不再需要维�
 - 实时项目状态监控和健康检查
 
 ### 2. 简化配置脚本
-- **关键配置在文件顶部**：端口、项目名称、命令等可直接修改
-- **独立运行**：不依赖框架内部结构，保持通用性
-- **命令行支持**：支持 `--get-config`、`--install`、`--info` 参数
-- **自动回退**：如果没有配置脚本，使用智能默认配置
+- 使用常量式配置：无需定义类/方法，框架通过 SimpleScriptConfig 直接读取常量
+- DEV_COMMAND 支持 `{port}` 占位符，运行时自动替换为 FRONTEND_PORT
+- 未提供 INSTALL_COMMAND/BUILD_COMMAND 时自动跳过安装/构建（安全默认）
+- 自动回退：没有配置脚本时使用默认配置
 
 ### 3. 智能端口管理
 - 自动端口分配和冲突检测
@@ -45,134 +45,130 @@ frontend_projects/
 
 ## 🔧 简化配置脚本格式
 
-### 新的简化格式（推荐）
+### 简化格式（常量式，推荐）
+
+说明：
+- 配置脚本无需定义类/方法，框架会通过 SimpleScriptConfig 直接读取常量。
+- DEV_COMMAND 支持 `{port}` 占位符，框架在运行时自动替换为 FRONTEND_PORT。
+- 若未提供 INSTALL_COMMAND/BUILD_COMMAND，框架将使用安全的默认行为（跳过安装/构建）。
+
+示例（HTML 项目，参考 [python.modularflow_config.py](frontend_projects/ProjectManager/modularflow_config.py:1)）：
+```python
+#!/usr/bin/env python3
+"""
+前端项目简化配置脚本（常量式）
+由框架 SimpleScriptConfig 自动读取，不需定义类/方法
+"""
+
+# 基本端口
+FRONTEND_PORT = 8055
+BACKEND_PORT = 8050
+WEBSOCKET_PORT = 8051
+
+# 项目信息
+PROJECT_NAME = "ProjectManager"
+DISPLAY_NAME = "项目管理器"
+PROJECT_TYPE = "html"
+VERSION = "1.0.0"
+DESCRIPTION = "ModularFlow前端项目（html）"
+
+# 运行命令（DEV_COMMAND 支持 {port} 占位符）
+INSTALL_COMMAND = "echo 'No installation required for HTML project'"
+DEV_COMMAND = "python -m http.server {port}"
+BUILD_COMMAND = "echo 'No build required for HTML project'"
+
+# 如需自定义更多变量，可按需新增；框架将按 SimpleScriptConfig 规则读取
+```
+### 示例（Node.js/Next.js 项目）
 
 ```python
 #!/usr/bin/env python3
 """
-项目配置脚本 - 简化版本
+前端项目简化配置脚本（常量式）—— Node.js/Next.js 示例
+由框架 SimpleScriptConfig 自动读取，不需定义类/方法
 """
 
-# ===========================================
-# 🔧 主要配置 - 可直接修改
-# ===========================================
-
-# 端口配置
+# 基本端口（可按需修改）
 FRONTEND_PORT = 3000
-BACKEND_PORT = 6500
-WEBSOCKET_PORT = 6500
+BACKEND_PORT = 8050
+WEBSOCKET_PORT = 8051
 
 # 项目信息
-PROJECT_NAME = "MyProject"
-DISPLAY_NAME = "我的项目"
-PROJECT_TYPE = "nextjs"  # nextjs, react, vue, html
+PROJECT_NAME = "MyNodeProject"
+DISPLAY_NAME = "我的 Node 项目"
+PROJECT_TYPE = "nextjs"  # 可选：nextjs, react, vue, html
+VERSION = "1.0.0"
+DESCRIPTION = "基于 Next.js 的前端项目"
 
 # 运行命令
+# - 默认使用 npm 脚本；建议在项目内部处理端口（如读取 .env 或 PORT 环境变量）
 INSTALL_COMMAND = "npm install"
 DEV_COMMAND = "npm run dev"
 BUILD_COMMAND = "npm run build"
 
-# ===========================================
-# 📋 详细配置 - 一般不需要修改
-# ===========================================
+# 如需将端口传入开发命令，可参考以下两种方式（按平台选用）：
+# - Windows（cmd）：将端口注入环境变量后再运行脚本
+# DEV_COMMAND = "set PORT={port} && npm run dev"
+# - Unix（bash/zsh）：以环境变量方式注入端口
+# DEV_COMMAND = "PORT={port} npm run dev"
 
-import json
-import subprocess
-import os
-
-class MyProjectConfig:
-    """项目配置类"""
-    
-    def get_project_info(self):
-        return {
-            "name": PROJECT_NAME,
-            "display_name": DISPLAY_NAME,
-            "version": "1.0.0",
-            "description": f"基于{PROJECT_TYPE}的前端项目",
-            "type": PROJECT_TYPE,
-            "author": "Your Name",
-            "license": "MIT"
-        }
-    
-    def get_runtime_config(self):
-        return {
-            "port": FRONTEND_PORT,
-            "install_command": INSTALL_COMMAND,
-            "dev_command": DEV_COMMAND,
-            "build_command": BUILD_COMMAND
-        }
-    
-    def get_dependencies(self):
-        if PROJECT_TYPE in ["react", "nextjs", "vue"]:
-            return {
-                "required_tools": ["node", "npm"],
-                "optional_tools": ["yarn", "pnpm"],
-                "node_version": ">=18.0.0",
-                "npm_version": ">=8.0.0"
-            }
-        else:
-            return {
-                "required_tools": [],
-                "optional_tools": []
-            }
-    
-    def get_api_config(self):
-        return {
-            "api_endpoint": f"http://localhost:{BACKEND_PORT}/api",
-            "websocket_url": f"ws://localhost:{WEBSOCKET_PORT}/ws",
-            "cors_origins": [f"http://localhost:{FRONTEND_PORT}"]
-        }
-    
-    def install(self):
-        """执行项目安装"""
-        if INSTALL_COMMAND:
-            try:
-                subprocess.run(INSTALL_COMMAND.split(), cwd=os.getcwd(), check=True)
-                return True
-            except subprocess.CalledProcessError:
-                return False
-        return True
-
-
-# 主函数
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description=f"{DISPLAY_NAME} 配置脚本")
-    parser.add_argument("--get-config", action="store_true", help="获取配置信息")
-    parser.add_argument("--install", action="store_true", help="安装项目")
-    parser.add_argument("--info", action="store_true", help="显示项目信息")
-    
-    args = parser.parse_args()
-    config = MyProjectConfig()
-    
-    if args.get_config:
-        print(json.dumps({
-            "project": config.get_project_info(),
-            "runtime": config.get_runtime_config(),
-            "dependencies": config.get_dependencies(),
-            "api": config.get_api_config()
-        }, indent=2, ensure_ascii=False))
-    elif args.install:
-        config.install()
-    elif args.info:
-        info = config.get_project_info()
-        print(f"项目: {info['display_name']} ({info['name']})")
-        print(f"类型: {info['type']}")
-        print(f"端口: {FRONTEND_PORT}")
-    else:
-        parser.print_help()
+# 如需自定义更多变量，可按需新增；框架将按 SimpleScriptConfig 规则读取
 ```
 
-### 调试工具
+### 调试与验证
 
 ```bash
-# 测试配置脚本
-python frontend_projects/your_project/modularflow_config.py --info
+# 启动统一管理面板（会自动发现前端项目并读取配置脚本）
+python backend_projects/ProjectManager/start_server.py
 
-# 验证项目发现
-python test_project_manager_final.py
+# 运行示例 HTML 项目本地开发服务器（若需独立启动，请替换端口）
+python -m http.server 8055
 
-# 调试配置加载
-python debug_config_loading.py
+# 在管理面板中查看项目端口与运行状态：
+# 访问: http://localhost:8055
+# API 网关文档: http://localhost:8050/docs
+```
+---
+
+### 使用 npm start（快速配置说明）
+
+- 开发或启动脚本使用 npm start 时，仅需将 DEV_COMMAND 替换为 "npm start" 即可：
+  - 示例：在 [python.modularflow_config.py](frontend_projects/ProjectManager/modularflow_config.py:1) 中设置 DEV_COMMAND="npm start"
+- 如需端口注入（你的项目通过 PORT 环境变量读取端口）：
+  - Windows（cmd）：DEV_COMMAND = "set PORT={port} && npm start"
+  - Unix（bash/zsh）：DEV_COMMAND = "PORT={port} npm start"
+- 若 npm start 为生产启动，且依赖构建产物：
+  - 将 BUILD_COMMAND 设置为 "npm run build"，并在启动前执行构建
+  - 或将 DEV_COMMAND 设置为 "npm run build && npm start"（一条命令内先构建再启动）
+- 其余常量（FRONTEND_PORT/BACKEND_PORT/WEBSOCKET_PORT、PROJECT_NAME/DISPLAY_NAME/PROJECT_TYPE/版本与描述）保持与常量式配置一致，框架会通过 SimpleScriptConfig 自动读取。
+
+最简示例（Next.js 项目，使用 npm start）：
+```python
+#!/usr/bin/env python3
+# 常量式配置脚本（npm start 版本）
+
+# 端口
+FRONTEND_PORT = 3000
+BACKEND_PORT = 8050
+WEBSOCKET_PORT = 8051
+
+# 项目信息
+PROJECT_NAME = "MyNodeProject"
+DISPLAY_NAME = "我的 Node 项目"
+PROJECT_TYPE = "nextjs"
+VERSION = "1.0.0"
+DESCRIPTION = "基于 Next.js 的前端项目（npm start）"
+
+# 运行命令（任选其一）
+INSTALL_COMMAND = "npm install"
+# 方案A：项目内部自处理端口
+DEV_COMMAND = "npm start"
+# 方案B：Windows 端口注入（cmd）
+# DEV_COMMAND = "set PORT={port} && npm start"
+# 方案C：Unix 端口注入（bash/zsh）
+# DEV_COMMAND = "PORT={port} npm start"
+
+# 若使用生产启动且依赖构建产物，设置 BUILD_COMMAND 或合并到 DEV_COMMAND
+BUILD_COMMAND = "npm run build"
+# DEV_COMMAND = "npm run build && npm start"
 ```

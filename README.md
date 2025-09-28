@@ -56,7 +56,7 @@ UI 风格规范：
 - 后端启动脚本： [backend_projects/ProjectManager/start_server.py](backend_projects/ProjectManager/start_server.py)
 - 后端模块：
   - API 网关（核心）：[core/api_gateway.py](core/api_gateway.py)
-  - Web 服务器：[modules/web_server_module/web_server_module.py](modules/web_server_module/web_server_module.py)
+  - Web 服务器：[api/modules/web_server/web_server.py](api/modules/web_server/web_server.py)
   - 项目管理器：[api/modules/project_manager/impl.py](api/modules/project_manager/impl.py)
 - 前端管理面板（静态 HTML）：
   - 页面：[frontend_projects/ProjectManager/index.html](frontend_projects/ProjectManager/index.html)
@@ -64,8 +64,8 @@ UI 风格规范：
   - API 封装：[frontend_projects/ProjectManager/js/api.js](frontend_projects/ProjectManager/js/api.js)
 - 示例 Next.js 项目：[frontend_projects/manosaba_ai/](frontend_projects/manosaba_ai)
 - 图片绑定模块：
-  - 实现：[image_binding_module/image_binding_module.py](image_binding_module/image_binding_module.py)
-  - 变量（包含 PNG 块名与大小限制设置）：[image_binding_module/variables.py](image_binding_module/variables.py)
+  - 实现：[api/modules/Smarttraven/image_binding/impl.py](api/modules/Smarttraven/image_binding/impl.py)
+  - 变量（包含 PNG 块名与大小限制设置）：[api/modules/Smarttraven/image_binding/variables.py](api/modules/Smarttraven/image_binding/variables.py)
 - 导出文件目录（图片提取默认输出）：exports/
 
 ---
@@ -173,7 +173,7 @@ API 文档（Swagger UI）地址：
    - 选择前端项目压缩包（.zip）与一张 PNG 图片（.png）
    - 提交后生成“嵌入后的 PNG”，浏览器自动下载
    - 背后调用：[project_manager.embed_zip_into_image()](api/modules/project_manager/impl.py:1201)
-   - 注意：已取消大小上限（[MAX_FILE_SIZE](image_binding_module/variables.py:18) 为无限），但请注意文件体积
+   - 注意：已取消大小上限（[MAX_FILE_SIZE](api/modules/Smarttraven/image_binding/variables.py:18) 为无限），但请注意文件体积
 
 2) 从图片导入项目（自动反嵌入）
    - 打开管理面板，点击“从图片导入”，选择嵌入了 zip 的 PNG
@@ -322,6 +322,8 @@ npm run dev
 
 ```python
 @register_api(
+    name="嵌入文件到图片",
+    description="将文件嵌入到PNG图片中",
     path="smarttraven/image_binding/embed_files_to_image",
     input_schema={
         "type": "object",
@@ -341,8 +343,7 @@ npm run dev
             "relative_path": {"type": "string"}
         },
         "required": ["success"]
-    },
-    description="将文件嵌入到PNG图片中"
+    }
 )
 def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Optional[str] = None) -> Dict[str, Any]:
     ...
@@ -357,6 +358,8 @@ def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Op
 
 ```python
 @register_api(
+    name="工作流:获取嵌入文件信息",
+    description="获取PNG图片中嵌入的文件信息",
     path="image_binding/get_embedded_files_info",
     input_schema={
         "type": "object",
@@ -371,8 +374,7 @@ def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Op
             "files_info": {"type": "array", "items": {"type": "object", "additionalProperties": True}}
         },
         "required": ["success"]
-    },
-    description="获取PNG图片中嵌入的文件信息"
+    }
 )
 def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
     payload = {"image_path": image_path}
@@ -388,7 +390,7 @@ def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
 
 - 已移除旧装饰器格式
   - 旧：`@register_api(name="a.b.c", inputs=[...], outputs=[...])`
-  - 新：`@register_api(path="domain/action", input_schema={...}, output_schema={...})`
+  - 新：`@register_api(name, description, path, input_schema, output_schema)`
   - 说明：必须提供 JSON Schema；inputs/outputs 列表不再支持。
 
 - 统一使用斜杠路径
