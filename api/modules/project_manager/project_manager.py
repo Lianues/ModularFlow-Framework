@@ -6,7 +6,7 @@ API 封装层：模块能力对外接口 (api/modules)
 
 from typing import Any, Dict, Optional
 from core.api_registry import register_api
-from api.modules.project_manager.impl import (
+from .impl import (
     get_project_manager,
     import_project as _import_project,
     delete_project as _delete_project,

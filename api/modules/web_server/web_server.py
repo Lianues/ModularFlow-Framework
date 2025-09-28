@@ -6,7 +6,7 @@ API 封装层：模块能力对外接口 (api/modules)
 
 from typing import Any, Dict, Optional
 from core.api_registry import register_api
-from api.modules.web_server.impl import get_web_server
+from .impl import get_web_server
 
 
 @register_api(name="web_server.list_projects", outputs=["projects"], description="列出所有前端项目")

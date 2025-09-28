@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
-from api.modules.Smarttraven.image_binding.impl import ImageBindingModule
+from ..Smarttraven.image_binding.impl import ImageBindingModule
 from core.services import get_current_globals
 from core.project_config_interface import load_project_config, ProjectConfigInterface, DefaultProjectConfig
 
@@ -484,11 +484,15 @@ class ProjectManager:
                     except Exception as e:
                         logger.warning(f"停止 {project_name} 前端时出现问题: {e}")
                 
-                # 停止控制台
+                # 停止控制台（通过 SDK 调用）
                 try:
-                    from modules.web_server_module import get_web_server
-                    web_server = get_web_server()
-                    web_server.stop_project(project_name)
+                    from core.api_client import call_api
+                    _ = call_api(
+                        "web_server.stop_project",
+                        {"project_name": project_name},
+                        method="POST",
+                        namespace="modules"
+                    )
                     results["stopped_components"].append("console")
                 except Exception as e:
                     logger.warning(f"停止 {project_name} 控制台时出现问题: {e}")

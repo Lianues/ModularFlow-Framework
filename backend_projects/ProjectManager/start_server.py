@@ -24,10 +24,9 @@ sys.path.insert(0, str(framework_root))
 
 try:
     from core.api_gateway import get_api_gateway
-    from api.modules.web_server.impl import get_web_server
-    from api.modules.project_manager.impl import get_project_manager
     from core.services import get_service_manager
     from core.api_registry import get_registry
+    from core.api_client import call_api
 except ImportError as e:
     print(f"❌ 导入模块失败: {e}")
     print(f"请确保在框架根目录 {framework_root} 下运行此脚本")
@@ -55,10 +54,8 @@ class ProjectManagerBackend:
         
         # 加载所有模块
         self.load_modules()
-        
-        # 初始化项目管理器
-        self.project_manager = get_project_manager()
-        print("✓ 项目管理器初始化完成")
+        # 通过注册表调用，无需直接实例化实现层
+        print("✓ 模块加载完成，API已注册")
     
     def _get_default_config(self):
         """获取默认配置"""
@@ -103,19 +100,14 @@ class ProjectManagerBackend:
             loaded_count = self.service_manager.load_project_modules()
             print(f"✓ 已加载 {loaded_count} 个模块")
             
-            # 使用项目配置初始化API网关和Web服务器
+            # 使用项目配置初始化API网关
             if self.project_config:
                 self.api_gateway = get_api_gateway(project_config=self.project_config)
-                
-                # 为Web服务器创建前端项目配置
-                frontend_config = self._create_frontend_config()
-                self.web_server = get_web_server(project_config=frontend_config)
             else:
                 # 使用默认配置
                 self.api_gateway = get_api_gateway()
-                self.web_server = get_web_server()
             
-            print("✓ API网关和Web服务器初始化完成")
+            print("✓ API网关初始化完成")
             
         except Exception as e:
             print(f"❌ 加载模块失败: {e}")
@@ -185,9 +177,14 @@ class ProjectManagerBackend:
             
             print("⚛️ 启动前端服务器...")
             
-            # 使用新的项目管理器启动前端项目
-            result = self.project_manager.start_project(project_name, "frontend")
-            if result.get("success", False):
+            # 通过 SDK 调用模块 API 启动项目前端
+            result = call_api(
+                "project_manager.start_project",
+                {"project_name": project_name, "component": "frontend"},
+                method="POST",
+                namespace="modules"
+            )
+            if isinstance(result, dict) and result.get("success", False):
                 print("✅ 前端服务器启动成功")
                 print(f"🌐 管理面板: http://localhost:{port}")
                 
@@ -248,12 +245,18 @@ class ProjectManagerBackend:
         except:
             print("❌ 前端: 无法连接")
         
-        # 检查项目管理器
-        if self.project_manager:
-            managed_projects = len(self.project_manager.projects)
+        # 检查项目管理器（通过 SDK 调用）
+        try:
+            projects = call_api(
+                "project_manager.get_managed_projects",
+                None,
+                method="GET",
+                namespace="modules"
+            )
+            managed_projects = len(projects) if isinstance(projects, list) else 0
             print(f"✅ 项目管理器: 管理 {managed_projects} 个项目")
-        else:
-            print("❌ 项目管理器: 未初始化")
+        except Exception as e:
+            print(f"❌ 项目管理器: 无法获取项目列表 ({e})")
         
         # 检查注册的函数
         registry = get_registry()
@@ -307,15 +310,17 @@ class ProjectManagerBackend:
             project_info = self.project_config.get("project", {})
             project_name = project_info.get("name", "ProjectManager")
             
-            # 首先清理项目管理器（这会停止所有被管理的项目）
-            if self.project_manager:
-                print("🧹 清理项目管理器...")
-                self.project_manager.cleanup()
-            
-            # 停止前端服务器
-            if self.project_manager:
+            # 停止前端服务器（通过 SDK 调用）
+            try:
                 print("🛑 停止前端服务器...")
-                self.project_manager.stop_project(project_name, "frontend")
+                _ = call_api(
+                    "project_manager.stop_project",
+                    {"project_name": project_name, "component": "frontend"},
+                    method="POST",
+                    namespace="modules"
+                )
+            except Exception as e:
+                print(f"⚠️ 停止前端服务器时出现问题: {e}")
             
             # 停止API网关
             if self.api_gateway:
