@@ -408,3 +408,21 @@ APIClient.prototype.deleteApiFolder = async function(namespace, relative_path) {
         relative_path
     });
 };
+
+// 导入单个 API 脚本（zip），需附带 namespace
+APIClient.prototype.importApiScript = async function(formData) {
+    const url = `${this.baseURL}${this.apiPrefix}/modules/api_files/import_script`;
+    const response = await fetch(url, { method: 'POST', body: formData });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+    return data;
+};
+
+// 从PNG图片导入单个 API 脚本（嵌入zip），需附带 namespace
+APIClient.prototype.importApiScriptFromImage = async function(formData) {
+    const url = `${this.baseURL}${this.apiPrefix}/modules/api_files/import_script_from_image`;
+    const response = await fetch(url, { method: 'POST', body: formData });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+    return data;
+};

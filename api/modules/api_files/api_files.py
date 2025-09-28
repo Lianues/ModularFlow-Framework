@@ -221,3 +221,173 @@ def delete_api_folder(namespace: str, relative_path: str) -> Dict[str, Any]:
         }
     except Exception as e:
         return {"success": False, "message": f"删除失败: {str(e)}"}
+# 新增：导入模块/工作流脚本（zip 或 PNG 图片内嵌 zip）
+
+import zipfile
+import tempfile
+from typing import Optional
+
+def _read_upload(obj):
+    """读取上传对象统一为 (bytes, filename)"""
+    if hasattr(obj, 'file'):
+        return obj.file.read(), getattr(obj, 'filename', None)
+    elif hasattr(obj, 'read'):
+        return obj.read(), getattr(obj, 'name', None)
+    elif isinstance(obj, (bytes, bytearray)):
+        return obj, None
+    else:
+        raise ValueError("无效的上传对象")
+
+def _validate_member_path(member: str, ns: str) -> bool:
+    """
+    校验 zip 内 .py 文件路径是否符合命名空间规范
+    - workflow: 必须以 'api/workflow/' 开头
+    - modules:  必须以 'api/modules/' 开头
+    且必须以 '.py' 结尾
+    """
+    m = (member or "").replace("\\", "/").lstrip("/")
+    if not m.endswith(".py"):
+        return False
+    if ns == "workflow":
+        return m.startswith("api/workflow/")
+    if ns == "modules":
+        return m.startswith("api/modules/")
+    return False
+
+def _safe_extract_member(zip_ref: zipfile.ZipFile, member: str, dest_root: Path) -> str:
+    """
+    安全提取单个成员到 dest_root（保持相对路径），避免目录穿越。
+    返回最终写入的绝对路径字符串。
+    """
+    rel = (member or "").replace("\\", "/").lstrip("/")
+    target_path = (dest_root / rel).resolve()
+    # 必须在目标根目录之下
+    dest_resolved = dest_root.resolve()
+    target_path.relative_to(dest_resolved)  # 越界会抛异常
+    # 确保上级目录存在
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    # 写入文件内容
+    with zip_ref.open(member, "r") as src, open(str(target_path), "wb") as dst:
+        dst.write(src.read())
+    return str(target_path)
+
+@core.register_api(
+    name="导入API脚本（zip）",
+    description="导入单个模块或工作流脚本（zip包内仅包含一个 .py 文件，且路径以 api/modules 或 api/workflow 开头）",
+    path="api_files/import_script",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "archive": {"type": "string"},
+            "namespace": {"type": "string", "enum": ["modules", "workflow"]}
+        },
+        "required": ["archive", "namespace"]
+    },
+    output_schema={"type": "object", "additionalProperties": True}
+)
+def import_api_script(archive, namespace: str) -> Dict[str, Any]:
+    temp_dir = None
+    try:
+        ns = (namespace or "").strip().lower()
+        if ns not in ("modules", "workflow"):
+            return {"success": False, "message": f"非法命名空间: {namespace}"}
+
+        # 读取上传内容
+        bytes_data, filename = _read_upload(archive)
+        if not bytes_data:
+            return {"success": False, "message": "未提供压缩包数据"}
+
+        temp_dir = tempfile.mkdtemp(prefix="api_script_import_")
+        zip_name = filename or "api_script.zip"
+        zip_path = os.path.join(temp_dir, zip_name)
+        with open(zip_path, "wb") as f:
+            f.write(bytes_data)
+
+        # 打开 zip 并校验内容
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            members = zf.namelist()
+            py_members = [m for m in members if m.lower().endswith(".py")]
+            if len(py_members) != 1:
+                return {"success": False, "message": "压缩包必须且只能包含一个 .py 文件"}
+            member = py_members[0]
+            if not _validate_member_path(member, ns):
+                expect_prefix = f"api/{ns}/"
+                return {"success": False, "message": f"脚本路径不符合所选类型要求，需以 '{expect_prefix}' 开头"}
+
+            # 仅提取该 .py 到框架根目录
+            framework_root = Path(__file__).parent.parent.parent.parent
+            written_path = _safe_extract_member(zf, member, framework_root)
+
+        # 动态导入新脚本以注册API
+        rel_path = os.path.relpath(written_path, start=str(framework_root)).replace("\\", "/")
+        module_name = rel_path[:-3].replace("/", ".")
+        imported = False
+        try:
+            import importlib.util, sys
+            spec = importlib.util.spec_from_file_location(module_name, written_path)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = mod
+            spec.loader.exec_module(mod)
+            imported = True
+        except Exception as ie:
+            imported = False
+
+        return {"success": True, "message": "API脚本导入成功", "written_path": written_path, "namespace": ns, "module": module_name, "imported": imported}
+    except Exception as e:
+        return {"success": False, "message": f"导入失败: {str(e)}"}
+    finally:
+        try:
+            if temp_dir and os.path.isdir(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+@core.register_api(
+    name="从图片导入API脚本",
+    description="从PNG图片中反嵌入zip，并将其中的单个 .py API脚本导入到 api/modules 或 api/workflow 下",
+    path="api_files/import_script_from_image",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "image": {"type": "string"},
+            "namespace": {"type": "string", "enum": ["modules", "workflow"]}
+        },
+        "required": ["image", "namespace"]
+    },
+    output_schema={"type": "object", "additionalProperties": True}
+)
+def import_api_script_from_image(image, namespace: str) -> Dict[str, Any]:
+    temp_dir = None
+    try:
+        ns = (namespace or "").strip().lower()
+        if ns not in ("modules", "workflow"):
+            return {"success": False, "message": f"非法命名空间: {namespace}"}
+
+        # 直接复用项目管理实现层的图片反嵌入逻辑
+        from api.modules.project_manager.impl import extract_zip_from_image as _extract_zip_from_image
+
+        result = _extract_zip_from_image(image)
+        if not isinstance(result, dict) or not result.get("success"):
+            return {"success": False, "message": f"图片解析失败: {result if not isinstance(result, dict) else result.get('error')}"}
+
+        zip_path = result.get("zip_path")
+        if not zip_path or not os.path.exists(zip_path):
+            return {"success": False, "message": "未找到有效的zip文件路径"}
+
+        # 打开 zip 并校验内容
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            members = zf.namelist()
+            py_members = [m for m in members if m.lower().endswith(".py")]
+            if len(py_members) != 1:
+                return {"success": False, "message": "压缩包必须且只能包含一个 .py 文件"}
+            member = py_members[0]
+            if not _validate_member_path(member, ns):
+                expect_prefix = f"api/{ns}/"
+                return {"success": False, "message": f"脚本路径不符合所选类型要求，需以 '{expect_prefix}' 开头"}
+
+            framework_root = Path(__file__).parent.parent.parent.parent
+            written_path = _safe_extract_member(zf, member, framework_root)
+
+        return {"success": True, "message": "已从图片导入API脚本", "written_path": written_path, "namespace": ns}
+    except Exception as e:
+        return {"success": False, "message": f"导入失败: {str(e)}"}

@@ -382,27 +382,39 @@
                 </button>
             </div>
             <p class="text-gray-600 text-sm mb-4">
-                选择一个项目压缩包进行导入。项目压缩包应该包含前端、后端和共享资源目录。
+                选择导入类型并上传文件：支持导入完整项目前后端压缩包，也支持导入单个 API 脚本（模块/工作流）。
+                当选择“API脚本”类型时，压缩包内必须仅包含一个 .py 文件，且路径以 api/modules 或 api/workflow 开头；也可直接上传嵌入了 zip 的 PNG 图片进行导入。
             </p>
             <form id="importProjectForm" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">导入类型</label>
-                    <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-6 flex-nowrap overflow-x-auto">
                         <label class="flex items-center space-x-2">
                             <input type="radio" name="importType" value="frontend" checked class="form-radio">
-                            <span class="text-sm text-gray-700">前端项目</span>
+                            <span class="text-sm text-gray-700 whitespace-nowrap">前端项目</span>
                         </label>
                         <label class="flex items-center space-x-2">
                             <input type="radio" name="importType" value="backend" class="form-radio">
-                            <span class="text-sm text-gray-700">后端项目</span>
+                            <span class="text-sm text-gray-700 whitespace-nowrap">后端项目</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importType" value="api_module_script" class="form-radio">
+                            <span class="text-sm text-gray-700 whitespace-nowrap">API脚本（模块）</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importType" value="api_workflow_script" class="form-radio">
+                            <span class="text-sm text-gray-700 whitespace-nowrap">API脚本（工作流）</span>
                         </label>
                     </div>
                 </div>
                 <div>
-                    <label for="projectArchive" class="block text-sm font-medium text-gray-700 mb-1">项目压缩包</label>
-                    <input type="file" id="projectArchive" name="projectArchive" accept=".zip"
+                    <label for="projectArchive" class="block text-sm font-medium text-gray-700 mb-1">项目压缩包或PNG图片</label>
+                    <input type="file" id="projectArchive" name="projectArchive" accept=".zip,.png"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-gray-800">
-                    <p class="text-xs text-gray-500 mt-1">支持的格式: .zip</p>
+                    <p class="text-xs text-gray-500 mt-1">
+                        支持 .zip 与 .png。选择“API脚本”时，zip内必须仅包含一个 .py 文件，且路径前缀符合所选类型（模块: api/modules/...；工作流: api/workflow/...）。
+                        也可直接上传嵌入了 zip 的 PNG 图片进行导入。
+                    </p>
                 </div>
                 <div class="flex justify-end space-x-3">
                     <button type="button" id="cancelImportBtn" class="btn-secondary px-4 py-2 rounded-md">
@@ -543,14 +555,22 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">导入类型</label>
-                    <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-6 flex-nowrap overflow-x-auto">
                         <label class="flex items-center space-x-2">
                             <input type="radio" name="importFromImageType" value="frontend" checked class="form-radio">
-                            <span class="text-sm text-gray-700">前端项目</span>
+                            <span class="text-sm text-gray-700 whitespace-nowrap">前端项目</span>
                         </label>
                         <label class="flex items-center space-x-2">
                             <input type="radio" name="importFromImageType" value="backend" class="form-radio">
-                            <span class="text-sm text-gray-700">后端项目</span>
+                            <span class="text-sm text-gray-700 whitespace-nowrap">后端项目</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importFromImageType" value="api_module_script" class="form-radio">
+                            <span class="text-sm text-gray-700 whitespace-nowrap">API脚本（模块）</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="radio" name="importFromImageType" value="api_workflow_script" class="form-radio">
+                            <span class="text-sm text-gray-700 whitespace-nowrap">API脚本（工作流）</span>
                         </label>
                     </div>
                 </div>

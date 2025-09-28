@@ -1245,8 +1245,16 @@ class ProjectManagerApp {
      * 显示导入项目模态框
      */
     showImportProjectModal() {
-        this.elements.importProjectModal.classList.remove('hidden');
-        this.elements.importProjectModal.classList.add('flex');
+        const m = this.elements.importProjectModal;
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+        // 扩宽面板，避免选项换行
+        try {
+            const panel = m.querySelector('.bg-white.rounded-4');
+            if (panel) {
+                panel.style.maxWidth = '64rem'; // 1024px
+            }
+        } catch {}
     }
 
     /**
@@ -1289,6 +1297,13 @@ class ProjectManagerApp {
         m.classList.remove('hidden');
         m.classList.add('flex');
         m.style.display = 'flex';
+        // 扩宽面板，避免选项换行
+        try {
+            const panel = m.querySelector('.bg-white.rounded-4');
+            if (panel) {
+                panel.style.maxWidth = '64rem'; // 1024px
+            }
+        } catch {}
     }
     hideImportFromImageModal() {
         const m = this.elements.importFromImageModal;
@@ -1375,21 +1390,43 @@ class ProjectManagerApp {
             return;
         }
 
-        // 读取导入类型（前端/后端）
+        // 读取导入类型（前端/后端/模块脚本/工作流脚本）
         const typeEl = document.querySelector('input[name="importFromImageType"]:checked');
         const importType = typeEl ? typeEl.value : 'frontend';
 
         this.hideImportFromImageModal();
-        this.showLoading('正在从图片解析并导入项目...');
+        this.showLoading('正在从图片解析并导入...');
         try {
-            const formData = new FormData();
-            formData.append('image', file);
-
             let result;
+
+            if (importType === 'api_module_script' || importType === 'api_workflow_script') {
+                // 从图片导入单个 API 脚本
+                const fd = new FormData();
+                fd.append('image', file);
+                fd.append('namespace', importType === 'api_module_script' ? 'modules' : 'workflow');
+
+                result = await window.apiClient.importApiScriptFromImage(fd);
+
+                const ok = result.success || (result.result && result.result.success);
+                if (!ok) {
+                    const error = result.error || result.message || (result.result && result.result.error) || '未知错误';
+                    this.showToast('error', '导入失败', error);
+                    return;
+                }
+
+                const writtenPath = result.written_path || (result.result && result.result.written_path) || '';
+                this.showToast('success', '导入成功', `API脚本已导入: ${writtenPath}`);
+                await this.loadApiFiles();
+                return;
+            }
+
+            // 项目导入（前端/后端）
+            const fd = new FormData();
+            fd.append('image', file);
             if (importType === 'backend') {
-                result = await window.apiClient.importBackendProjectFromImage(formData);
+                result = await window.apiClient.importBackendProjectFromImage(fd);
             } else {
-                result = await window.apiClient.importProjectFromImage(formData);
+                result = await window.apiClient.importProjectFromImage(fd);
             }
 
             const ok = result.success || (result.result && result.result.success);
@@ -1471,22 +1508,71 @@ this.elements.websocketPort.value = (ports.websocket && ports.websocket !== '未
         const file = formData.get('projectArchive');
         
         if (!file || file.size === 0) {
-            this.showToast('error', '导入失败', '请选择有效的项目压缩包');
+            this.showToast('error', '导入失败', '请选择有效的文件（.zip 或 .png）');
             return;
         }
 
-        // 读取导入类型（前端/后端）
+        const filename = (file.name || '').toLowerCase();
+        const isZip = filename.endsWith('.zip');
+        const isPng = filename.endsWith('.png');
+
+        // 读取导入类型（前端/后端/API脚本）
         const typeEl = document.querySelector('input[name="importType"]:checked');
         const importType = typeEl ? typeEl.value : 'frontend';
         
         this.hideImportProjectModal();
-        this.showLoading('正在导入项目...');
+        this.showLoading('正在导入...');
         
         try {
             let result;
+
+            // API脚本导入（模块/工作流）
+            if (importType === 'api_module_script' || importType === 'api_workflow_script') {
+                const namespace = importType === 'api_module_script' ? 'modules' : 'workflow';
+
+                if (!isZip && !isPng) {
+                    this.showToast('error', '导入失败', 'API脚本导入仅支持 .zip 或 .png');
+                    return;
+                }
+
+                if (isZip) {
+                    const fd = new FormData();
+                    fd.append('archive', file);
+                    fd.append('namespace', namespace);
+                    result = await window.apiClient.importApiScript(fd);
+                } else {
+                    const fd = new FormData();
+                    fd.append('image', file);
+                    fd.append('namespace', namespace);
+                    result = await window.apiClient.importApiScriptFromImage(fd);
+                }
+
+                const ok = result.success || (result.result && result.result.success);
+                if (!ok) {
+                    const error = result.error || result.message || (result.result && result.result.error) || '未知错误';
+                    this.showToast('error', '导入失败', error);
+                    return;
+                }
+
+                const writtenPath = result.written_path || (result.result && result.result.written_path) || '';
+                this.showToast('success', '导入成功', `API脚本已导入: ${writtenPath}`);
+                // 刷新 API 文件管理面板
+                await this.loadApiFiles();
+                return;
+            }
+
+            // 项目导入（前端/后端）
             if (importType === 'backend') {
+                if (!isZip) {
+                    this.showToast('error', '导入失败', '后端项目导入仅支持 .zip');
+                    return;
+                }
                 result = await window.apiClient.importBackendProject(formData);
             } else {
+                if (!isZip) {
+                    this.showToast('error', '导入失败', '前端项目导入仅支持 .zip');
+                    return;
+                }
                 result = await window.apiClient.importProject(formData);
             }
             
