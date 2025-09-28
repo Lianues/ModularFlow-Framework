@@ -1,6 +1,6 @@
 """
 API 封装层：模块能力对外接口 (api/modules)
-为 Smarttraven.image_binding 提供统一的 @register_api 注册入口（新规范：斜杠 path + JSON Schema）。
+为 SmartTraven.image_binding 提供统一的 @register_api 注册入口（新规范：斜杠 path + JSON Schema）。
 注意：此层仅作为对外 API 适配，实际实现位于本包 impl.py
 """
 
