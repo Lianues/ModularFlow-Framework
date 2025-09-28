@@ -171,4 +171,22 @@ DEV_COMMAND = "npm start"
 # 若使用生产启动且依赖构建产物，设置 BUILD_COMMAND 或合并到 DEV_COMMAND
 BUILD_COMMAND = "npm run build"
 # DEV_COMMAND = "npm run build && npm start"
+
+---
+
+## 开发注意事项（端口与模块调用）
+
+- 私有端口必须在 modularflow_config.py 中注册
+  - 每个前端项目的根目录必须提供 `FRONTEND_PORT`、`BACKEND_PORT`、`WEBSOCKET_PORT` 常量，详见 [python.modularflow_config.py 示例](frontend_projects/ProjectManager/modularflow_config.py:1)。
+  - 运行命令常量 `INSTALL_COMMAND`、`DEV_COMMAND`、`BUILD_COMMAND` 必须以项目为单位声明，其中 `DEV_COMMAND` 支持 `{port}` 占位符。
+- 统一通过核心门面调用
+  - 后端调用统一使用 `import core`：
+    `core.call_api("project_manager/get_status", {"project_name": "ProjectManager"}, method="GET", namespace="modules")` 见 [python.call_api()](core/api_client.py:227)
+  - 禁止跨模块直接 import 实现层（impl）；模块间调用必须走 API 封装层与工作流层。
+- 端口管理与查询
+  - API 网关统一接口前缀与基地址由 [python.get_api_config()](core/config/api_config.py:29) 提供。
+  - 项目管理器提供端口使用查询与分配，详见 [python.ProjectManager.get_port_usage()](api/modules/project_manager/impl.py:565)、[python.ProjectManager._allocate_port()](api/modules/project_manager/impl.py:155)。
+- 对外 API 注册位置
+  - 仅在 api/modules/* 与 api/workflow/* 注册对外 API，统一使用 [python.decorator(core.register_api)](core/__init__.py:22)。
+    内部实现（impl.py）不直接对外暴露，统一由封装层暴露。
 ```

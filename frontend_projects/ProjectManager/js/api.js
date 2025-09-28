@@ -318,15 +318,63 @@ class APIClient {
     }
 }
 
-// 创建全局API客户端实例
-window.apiClient = new APIClient();
+/**
+ * 加载前端配置并初始化全局API客户端
+ * - 配置来源：frontend_projects/ProjectManager/mf_frontend_config.json
+ * - 若未找到配置，则回退到默认值（http://localhost:8050 + /api）
+ */
+async function loadFrontendConfig() {
+    try {
+        const resp = await fetch('./mf_frontend_config.json', { cache: 'no-store' });
+        if (resp.ok) {
+            return await resp.json();
+        }
+    } catch (e) {
+        console.warn('加载前端配置失败，使用默认配置:', e);
+    }
+    return null;
+}
+
+function deriveApiSettings(cfg) {
+    const fallbackBase = 'http://localhost:8050';
+    const fallbackPrefix = '/api';
+    const getOrigin = (ep) => {
+        try { return new URL(ep).origin; } catch { return null; }
+    };
+
+    const apiBase = (cfg?.global_config?.api_base_url)
+        || getOrigin(cfg?.projects?.[0]?.api_endpoint)
+        || fallbackBase;
+
+    let apiPrefix = fallbackPrefix;
+    const ep = cfg?.projects?.[0]?.api_endpoint;
+    if (ep) {
+        const origin = getOrigin(ep);
+        if (origin && ep.startsWith(origin)) {
+            apiPrefix = ep.slice(origin.length) || fallbackPrefix;
+        }
+    }
+    if (!apiPrefix.startsWith('/')) apiPrefix = `/${apiPrefix}`;
+    apiPrefix = apiPrefix.replace(/\/+$/, ''); // 移除尾部斜杠
+
+    return { baseURL: apiBase, apiPrefix };
+}
+
+async function initApiClient() {
+    const cfg = await loadFrontendConfig();
+    const { baseURL, apiPrefix } = deriveApiSettings(cfg);
+    window.apiClient = new APIClient(baseURL, apiPrefix);
+}
 
 // 页面加载完成后连接WebSocket
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initApiClient();
     window.apiClient.connectWebSocket();
 });
 
 // 页面卸载时断开WebSocket连接
 window.addEventListener('beforeunload', () => {
-    window.apiClient.disconnectWebSocket();
+    if (window.apiClient) {
+        window.apiClient.disconnectWebSocket();
+    }
 });

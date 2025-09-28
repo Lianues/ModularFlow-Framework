@@ -25,6 +25,9 @@ class ProjectManagerApp {
         this.relocateModals();
         this.startClock();
         this.startAutoRefresh();
+
+        // 确保 API 客户端已就绪（避免 window.apiClient 未初始化导致报错）
+        await this.ensureApiClientReady();
         
         // 初始加载数据
         await this.loadData();
@@ -282,11 +285,39 @@ class ProjectManagerApp {
         };
         setTimeout(tryPoll, 2000);
     }
+    /**
+     * 确保 API 客户端已初始化并可用
+     * 解决页面加载时 window.apiClient 尚未就绪导致的调用错误
+     */
+    async ensureApiClientReady() {
+        try {
+            // 已就绪则直接返回
+            if (window.apiClient && typeof window.apiClient.getProjectStatus === 'function') return;
+
+            // 若全局提供了初始化函数，则尝试调用
+            if (typeof window.initApiClient === 'function') {
+                await window.initApiClient();
+            }
+
+            // 轮询等待就绪（最多3秒）
+            const timeoutMs = 3000;
+            const step = 100;
+            let waited = 0;
+            while (!(window.apiClient && typeof window.apiClient.getProjectStatus === 'function') && waited < timeoutMs) {
+                await new Promise(r => setTimeout(r, step));
+                waited += step;
+            }
+        } catch (e) {
+            // 安静失败，后续调用仍会捕获并提示
+        }
+    }
 
     /**
      * 加载数据
      */
     async loadData(showLoading = true) {
+        // 确保 API 客户端可用
+        await this.ensureApiClientReady();
         if (showLoading) {
             this.showLoading('正在加载项目数据...');
         }
@@ -405,6 +436,10 @@ class ProjectManagerApp {
      */
     updateProjectsGrid() {
         const projectList = Object.entries(this.projects);
+        const host = (() => {
+            try { return new URL(window.apiClient?.baseURL || 'http://localhost').hostname; }
+            catch { return 'localhost'; }
+        })();
         
         if (projectList.length === 0) {
             this.elements.projectsGrid.innerHTML = `
@@ -516,7 +551,7 @@ class ProjectManagerApp {
                         </button>
 
                         ${project.frontend_port ? `
-                            <a href="http://localhost:${project.frontend_port}" target="_blank"
+                            <a href="http://${host}:${project.frontend_port}" target="_blank"
                                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
                                 <i data-lucide="external-link" class="w-4 h-4"></i>
                             </a>

@@ -7,11 +7,10 @@ import os
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from core.api_registry import register_api
-from core.api_client import call_api
+import core
 
 # embed_files_to_image
-@register_api(
+@core.register_api(
     name="工作流:嵌入文件到图片",
     description="将文件嵌入到PNG图片中",
     path="image_binding/embed_files_to_image",
@@ -38,13 +37,13 @@ from core.api_client import call_api
 def api_embed_files_to_image(image_path: str, file_paths: List[str], output_path: Optional[str] = None) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path, "file_paths": file_paths, "output_path": output_path}
-        result = call_api("smarttraven/image_binding/embed_files_to_image", payload, method="POST", namespace="modules")
+        result = core.call_api("smarttraven/image_binding/embed_files_to_image", payload, method="POST", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"嵌入文件失败: {str(e)}"}
 
 # extract_files_from_image
-@register_api(
+@core.register_api(
     name="工作流:从图片提取文件",
     description="从PNG图片中提取文件",
     path="image_binding/extract_files_from_image",
@@ -70,13 +69,13 @@ def api_embed_files_to_image(image_path: str, file_paths: List[str], output_path
 def api_extract_files_from_image(image_path: str, output_dir: Optional[str] = None, filter_types: Optional[List[str]] = None) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path, "output_dir": output_dir, "filter_types": filter_types}
-        result = call_api("smarttraven/image_binding/extract_files_from_image", payload, method="POST", namespace="modules")
+        result = core.call_api("smarttraven/image_binding/extract_files_from_image", payload, method="POST", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"提取文件失败: {str(e)}", "files": []}
 
 # get_embedded_files_info
-@register_api(
+@core.register_api(
     name="工作流:获取嵌入文件信息",
     description="获取PNG图片中嵌入的文件信息",
     path="image_binding/get_embedded_files_info",
@@ -98,13 +97,13 @@ def api_extract_files_from_image(image_path: str, output_dir: Optional[str] = No
 def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path}
-        result = call_api("smarttraven/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
+        result = core.call_api("smarttraven/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"获取文件信息失败: {str(e)}", "files_info": []}
 
 # is_image_with_embedded_files
-@register_api(
+@core.register_api(
     name="工作流:检测图片是否包含嵌入文件",
     description="检查PNG图片是否包含嵌入文件",
     path="image_binding/is_image_with_embedded_files",
@@ -126,13 +125,13 @@ def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
 def api_is_image_with_embedded_files(image_path: str) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path}
-        result = call_api("smarttraven/image_binding/is_image_with_embedded_files", payload, method="GET", namespace="modules")
+        result = core.call_api("smarttraven/image_binding/is_image_with_embedded_files", payload, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "has_embedded_files": False, "message": f"检查图片失败: {str(e)}"}
 
 # get_file_type_tags
-@register_api(
+@core.register_api(
     name="工作流:获取文件类型标签",
     description="获取所有支持的文件类型标签",
     path="image_binding/get_file_type_tags",
@@ -149,13 +148,13 @@ def api_is_image_with_embedded_files(image_path: str) -> Dict[str, Any]:
 )
 def api_get_file_type_tags() -> Dict[str, Any]:
     try:
-        result = call_api("smarttraven/image_binding/get_file_type_tags", None, method="GET", namespace="modules")
+        result = core.call_api("smarttraven/image_binding/get_file_type_tags", None, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"获取文件类型标签失败: {str(e)}"}
 
 # test
-@register_api(
+@core.register_api(
     name="工作流:图像绑定测试",
     description="测试图像绑定模块的功能",
     path="image_binding/test",

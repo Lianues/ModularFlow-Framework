@@ -25,21 +25,24 @@
 from typing import Any, Dict, Optional, Union, Tuple, List
 import requests
 from urllib.parse import urljoin
+from core.config.api_config import get_api_config
 
 
 class ApiClient:
     def __init__(
         self,
-        base_url: str = "http://localhost:8050",
-        api_prefix: str = "/api",
+        base_url: Optional[str] = None,
+        api_prefix: Optional[str] = None,
         timeout: Union[int, float] = 15,
         default_headers: Optional[Dict[str, str]] = None,
     ):
         """
         初始化 API 客户端
         """
-        self.base_url = base_url.rstrip("/")
-        self.api_prefix = api_prefix if api_prefix.startswith("/") else f"/{api_prefix}"
+        cfg = get_api_config()
+        self.base_url = (base_url or cfg.base_url).rstrip("/")
+        _prefix = (api_prefix or cfg.api_prefix)
+        self.api_prefix = _prefix if _prefix.startswith("/") else f"/{_prefix}"
         self.timeout = timeout
         self.session = requests.Session()
         self.default_headers = default_headers or {
@@ -220,9 +223,10 @@ def get_client(
     """
     global _default_client
     if _default_client is None:
+        cfg = get_api_config()
         _default_client = ApiClient(
-            base_url=base_url or "http://localhost:8050",
-            api_prefix=api_prefix or "/api",
+            base_url=base_url or cfg.base_url,
+            api_prefix=api_prefix or cfg.api_prefix,
             timeout=timeout or 15,
         )
     return _default_client

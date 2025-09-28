@@ -17,16 +17,14 @@ import webbrowser
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+import importlib.util
 
 # 添加框架根目录到Python路径
 framework_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(framework_root))
 
 try:
-    from core.api_gateway import get_api_gateway
-    from core.services import get_service_manager
-    from core.api_registry import get_registry
-    from core.api_client import call_api
+    import core
 except ImportError as e:
     print(f"❌ 导入模块失败: {e}")
     print(f"请确保在框架根目录 {framework_root} 下运行此脚本")
@@ -42,6 +40,8 @@ class ProjectManagerBackend:
         self.project_manager = None
         self.framework_root = framework_root
         self.project_config = self._get_default_config()
+        # 从前端项目的 modularflow_config.py 读取自身后端端口等配置，覆盖默认值
+        self._load_modularflow_config()
         
         print("🚀 初始化统一项目管理面板...")
         
@@ -49,7 +49,7 @@ class ProjectManagerBackend:
         os.chdir(self.framework_root)
         
         # 初始化服务管理器
-        self.service_manager = get_service_manager()
+        self.service_manager = core.get_service_manager()
         print("✓ 服务管理器初始化完成")
         
         # 加载所有模块
@@ -93,6 +93,58 @@ class ProjectManagerBackend:
             }
         }
     
+    def _load_modularflow_config(self):
+        """读取前端项目 modularflow_config.py，填充自身后端/前端端口配置，避免硬编码"""
+        try:
+            cfg_path = self.framework_root / "frontend_projects/ProjectManager/modularflow_config.py"
+            if not cfg_path.exists():
+                return
+            spec = importlib.util.spec_from_file_location("pm_mod_cfg", str(cfg_path))
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+            else:
+                return
+
+            backend_port = getattr(mod, "BACKEND_PORT", None)
+            frontend_port = getattr(mod, "FRONTEND_PORT", None)
+            websocket_port = getattr(mod, "WEBSOCKET_PORT", None)
+
+            # 更新 project_config 中的端口配置
+            backend_conf = self.project_config.setdefault("backend", {})
+            api_gateway_conf = backend_conf.setdefault("api_gateway", {})
+            websocket_conf = backend_conf.setdefault("websocket", {})
+            frontend_conf = self.project_config.setdefault("frontend", {})
+
+            if isinstance(backend_port, int):
+                api_gateway_conf["port"] = backend_port
+                api_gateway_conf["host"] = api_gateway_conf.get("host", "localhost")
+                api_gateway_conf["endpoint"] = f"http://localhost:{backend_port}/api"
+
+            if isinstance(websocket_port, int):
+                websocket_conf["port"] = websocket_port
+            websocket_conf["path"] = websocket_conf.get("path", "/ws")
+
+            if isinstance(frontend_port, int):
+                frontend_conf["port"] = frontend_port
+
+        except Exception as e:
+            print(f"⚠️ 读取 modularflow_config.py 失败，继续使用默认配置: {e}")
+
+    def _write_frontend_runtime_config(self):
+        """将运行时前端配置写入到前端项目目录，供前端读取（mf_frontend_config.json）"""
+        try:
+            cfg = self._create_frontend_config()
+            if not cfg:
+                return
+            frontend_path = self.project_config.get("frontend", {}).get("path", "frontend_projects/ProjectManager")
+            out_file = Path(frontend_path) / "mf_frontend_config.json"
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            print(f"✓ 已生成前端运行时配置: {out_file}")
+        except Exception as e:
+            print(f"⚠️ 写入前端运行时配置失败: {e}")
+
     def load_modules(self):
         """加载必要的模块"""
         try:
@@ -102,10 +154,10 @@ class ProjectManagerBackend:
             
             # 使用项目配置初始化API网关
             if self.project_config:
-                self.api_gateway = get_api_gateway(project_config=self.project_config)
+                self.api_gateway = core.get_api_gateway(project_config=self.project_config)
             else:
                 # 使用默认配置
-                self.api_gateway = get_api_gateway()
+                self.api_gateway = core.get_api_gateway()
             
             print("✓ API网关初始化完成")
             
@@ -114,15 +166,17 @@ class ProjectManagerBackend:
             raise
     
     def _create_frontend_config(self):
-        """从项目配置创建前端配置"""
+        """从项目配置创建前端配置（统一从 core/config/api_config.py 读取整体API接口）"""
         if not self.project_config:
             return None
-        
+
         project_info = self.project_config.get("project", {})
         frontend_config = self.project_config.get("frontend", {})
         backend_config = self.project_config.get("backend", {})
         api_gateway_config = backend_config.get("api_gateway", {})
-        
+        websocket_config = backend_config.get("websocket", {})
+        api_cfg = core.get_api_config()
+
         # 构建前端项目配置
         return {
             "projects": [
@@ -132,7 +186,7 @@ class ProjectManagerBackend:
                     "type": "html",
                     "path": frontend_config.get("path", "frontend_projects/ProjectManager"),
                     "port": frontend_config.get("port", 8080),
-                    "api_endpoint": f"http://localhost:{api_gateway_config.get('port', 8050)}/api",
+                    "api_endpoint": f"{api_cfg.base_url}{api_cfg.api_prefix}",
                     "dev_command": frontend_config.get("dev_command", ""),
                     "description": project_info.get("description", "统一项目管理控制台"),
                     "enabled": True
@@ -140,8 +194,8 @@ class ProjectManagerBackend:
             ],
             "global_config": {
                 "cors_origins": api_gateway_config.get("cors_origins", ["*"]),
-                "api_base_url": f"http://localhost:{api_gateway_config.get('port', 8050)}",
-                "websocket_url": f"ws://localhost:{api_gateway_config.get('port', 8050)}/ws"
+                "api_base_url": api_cfg.base_url,
+                "websocket_url": f"{api_cfg.base_url}{websocket_config.get('path', '/ws')}"
             }
         }
     
@@ -176,9 +230,11 @@ class ProjectManagerBackend:
             auto_open = frontend_config.get("auto_open_browser", True) and open_browser
             
             print("⚛️ 启动前端服务器...")
+            # 生成前端运行时配置，供前端读取以避免硬编码
+            self._write_frontend_runtime_config()
             
             # 通过 SDK 调用模块 API 启动项目前端
-            result = call_api(
+            result = core.call_api(
                 "project_manager/start_project",
                 {"project_name": project_name, "component": "frontend"},
                 method="POST",
@@ -247,7 +303,7 @@ class ProjectManagerBackend:
         
         # 检查项目管理器（通过 SDK 调用）
         try:
-            projects = call_api(
+            projects = core.call_api(
                 "project_manager/get_managed_projects",
                 None,
                 method="GET",
@@ -259,7 +315,7 @@ class ProjectManagerBackend:
             print(f"❌ 项目管理器: 无法获取项目列表 ({e})")
         
         # 检查注册的函数
-        registry = get_registry()
+        registry = core.get_registry()
         functions = registry.list_functions()
         project_manager_functions = [f for f in functions if f.startswith('project_manager/')]
         print(f"📝 项目管理函数: {len(project_manager_functions)} 个")
@@ -313,7 +369,7 @@ class ProjectManagerBackend:
             # 停止前端服务器（通过 SDK 调用）
             try:
                 print("🛑 停止前端服务器...")
-                _ = call_api(
+                _ = core.call_api(
                     "project_manager/stop_project",
                     {"project_name": project_name, "component": "frontend"},
                     method="POST",

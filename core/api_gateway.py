@@ -29,8 +29,7 @@ except ImportError:
     WebSocketState = None
     print("⚠️ FastAPI未安装，请运行: pip install fastapi uvicorn")
 
-from core.api_registry import get_registered_api, get_registry
-from core.services import get_service_manager
+import core
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -342,6 +341,7 @@ class APIGateway:
         api_gateway_config = backend_config.get("api_gateway", {})
         websocket_config = backend_config.get("websocket", {})
         
+        prefix = core.get_api_config().api_prefix
         return {
             "title": f"{project_info.get('display_name', 'ModularFlow')} API Gateway",
             "description": project_info.get("description", "API网关服务"),
@@ -353,7 +353,7 @@ class APIGateway:
                 "cors_origins": api_gateway_config.get("cors_origins", ["*"])
             },
             "api": {
-                "prefix": "/api",
+                "prefix": prefix,
                 "auto_discovery": True,
                 "documentation": {
                     "enabled": True,
@@ -434,7 +434,7 @@ class APIGateway:
     
     async def _api_info_handler(self):
         """API信息处理器"""
-        service_manager = get_service_manager()
+        service_manager = core.get_service_manager()
         services = service_manager.list_services()
         
         return {
@@ -465,7 +465,7 @@ class APIGateway:
 
         # 基于注册表构建 OpenAPI（仅展示 api/* 层能力，按新规范）
         try:
-            registry = get_registry()
+            registry = core.get_registry()
             paths = {}
             for path in registry.list_functions():
                 spec = registry.get_spec(path)
@@ -513,10 +513,10 @@ class APIGateway:
         if not self.config or not self.config.auto_discovery:
             return
 
-        registry = get_registry()
+        registry = core.get_registry()
         for path in registry.list_functions():
             try:
-                func = get_registered_api(path)
+                func = core.get_registered_api(path)
                 spec = registry.get_spec(path)
                 if not func or not spec:
                     continue
@@ -695,7 +695,7 @@ class APIGateway:
                     }
                 
                 try:
-                    func = get_registered_api(func_path)
+                    func = core.get_registered_api(func_path)
                 except Exception:
                     func = None
                 

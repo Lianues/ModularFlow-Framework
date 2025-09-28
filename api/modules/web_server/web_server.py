@@ -4,10 +4,10 @@ API 封装层：模块能力对外接口 (api/modules)
 """
 
 from typing import Any, Dict, Optional
-from core.api_registry import register_api
+import core
 from .impl import get_web_server
 
-@register_api(
+@core.register_api(
     name="列出前端项目",
     description="列出所有前端项目",
     path="web_server/list_projects",
@@ -28,7 +28,7 @@ def list_frontend_projects(config_path: Optional[str] = None):
     server = get_web_server(config_path=config_path)
     return server.list_projects()
 
-@register_api(
+@core.register_api(
     name="启动前端项目",
     description="启动前端项目",
     path="web_server/start_project",
@@ -60,7 +60,7 @@ def start_frontend_project(project_name: str, open_browser: bool = True, config_
         "message": f"项目 {project_name} {'启动成功' if success else '启动失败'}"
     }
 
-@register_api(
+@core.register_api(
     name="停止前端项目",
     description="停止前端项目",
     path="web_server/stop_project",
@@ -91,7 +91,7 @@ def stop_frontend_project(project_name: str, config_path: Optional[str] = None):
         "message": f"项目 {project_name} {'停止成功' if success else '停止失败'}"
     }
 
-@register_api(
+@core.register_api(
     name="重启前端项目",
     description="重启前端项目",
     path="web_server/restart_project",
@@ -122,7 +122,7 @@ def restart_frontend_project(project_name: str, config_path: Optional[str] = Non
         "message": f"项目 {project_name} {'重启成功' if success else '重启失败'}"
     }
 
-@register_api(
+@core.register_api(
     name="启动所有前端项目",
     description="启动所有启用的前端项目",
     path="web_server/start_all",
@@ -151,7 +151,7 @@ def start_all_projects(config_path: Optional[str] = None):
         "successful": sum(1 for success in results.values() if success)
     }
 
-@register_api(
+@core.register_api(
     name="停止所有前端项目",
     description="停止所有前端项目",
     path="web_server/stop_all",
@@ -180,7 +180,7 @@ def stop_all_projects(config_path: Optional[str] = None):
         "successful": sum(1 for success in results.values() if success)
     }
 
-@register_api(
+@core.register_api(
     name="获取项目信息",
     description="获取项目详细信息",
     path="web_server/project_info",
@@ -205,7 +205,7 @@ def get_project_information(project_name: str, config_path: Optional[str] = None
     info = server.get_project_info(project_name)
     return info if info else {"error": f"项目不存在: {project_name}"}
 
-@register_api(
+@core.register_api(
     name="获取运行中服务器",
     description="获取所有运行中的服务器",
     path="web_server/running_servers",
@@ -227,7 +227,7 @@ def get_running_servers(config_path: Optional[str] = None):
     server = get_web_server(config_path=config_path)
     return server.dev_server.list_running_servers()
 
-@register_api(
+@core.register_api(
     name="创建项目结构",
     description="创建项目基础结构",
     path="web_server/create_structure",
@@ -258,7 +258,7 @@ def create_project_structure(project_name: str, config_path: Optional[str] = Non
         "message": f"项目结构 {'创建成功' if success else '创建失败'}"
     }
 
-@register_api(
+@core.register_api(
     name="加载项目配置",
     description="加载项目特定配置",
     path="web_server/load_project_config",

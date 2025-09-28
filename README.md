@@ -466,3 +466,57 @@ for i, api in enumerate(result.get("apis", [])[:5], start=1):
   - path 使用斜杠风格（不含 /api），命名空间由文件所在路径自动解析（api/modules → modules，api/workflow → workflow）。
   - input_schema / output_schema 均为 JSON Schema（draft-07/2020-12），是接口契约的唯一来源。
   - name 必填（用于工作流编辑器显示等）；如未填写，注册中心会使用函数名作为内部标识，但建议显式提供。
+
+---
+
+## 开发注意事项（重要）
+
+1) 统一门面导入（import core）
+- 所有后端调用统一通过核心门面使用，不再直接按文件路径导入模块函数。
+- 示例：
+  - Python（SDK 调用）：
+    `result = core.call_api("project_manager/get_status", {"project_name": "ProjectManager"}, method="GET", namespace="modules")` 见 [python.call_api()](core/api_client.py:227)
+  - 获取注册器与服务管理器：
+    `reg = core.get_registry()`、`svc = core.get_service_manager()` 见 [python.get_registry()](core/api_registry.py:133)、[python.get_service_manager()](core/services.py:204)
+  - 获取 API 网关实例：
+    `gateway = core.get_api_gateway()`（延迟导入包装，避免循环依赖）见 [python.get_api_gateway()](core/api_gateway.py:831)
+  - 读取统一 API 配置：
+    `cfg = core.get_api_config()` 见 [python.get_api_config()](core/config/api_config.py:29)
+
+2) 模块之间互相调用必须走 API 接口
+- 严禁直接 `import` 其他模块的实现（impl）；必须通过统一 API 封装层或工作流层发起调用。
+- 调用示例（工作流转发模块 API）：
+  `core.call_api("smarttraven/image_binding/get_embedded_files_info", {"image_path": img}, method="GET", namespace="modules")` 见 [python.api_get_embedded_files_info()](api/workflow/image_binding/image_binding.py:98)
+
+3) 本地客户端（SDK）说明
+- SDK 提供统一 HTTP 调用，适配 modules/workflow 两个命名空间：
+  - `core.call_api(name, payload, method="POST", namespace=None)` 自动尝试 `/api/modules` → `/api/workflow`。
+  - 指定命名空间：`namespace="modules"` 或 `namespace="workflow"`。
+- 低层方法：
+  - [python.ApiClient.request()](core/api_client.py:92) 可直接发起 GET/POST。
+  - [python.ApiClient.call_get()](core/api_client.py:167)、[python.ApiClient.call_post()](core/api_client.py:186) 是分法的便捷封装。
+
+4) 端口与开发环境约定
+- 所有“私有端口”（前端/后端/WebSocket）必须在项目根的 [python.file(frontend_projects/<project>/modularflow_config.py)](frontend_projects/ProjectManager/modularflow_config.py:1) 中声明：
+  - 必填常量：`FRONTEND_PORT`、`BACKEND_PORT`、`WEBSOCKET_PORT`。
+  - 运行命令常量：`INSTALL_COMMAND`、`DEV_COMMAND`、`BUILD_COMMAND`（DEV_COMMAND 支持 `{port}` 占位符）。
+- 统一端口读取与生成：
+  - 网关统一前缀与基地址由 [python.get_api_config()](core/config/api_config.py:29) 提供（默认 `base_url=http://localhost:8050`，`api_prefix=/api`）。
+  - 项目管理模块提供端口使用查询：
+    `core.call_api("project_manager/get_ports", None, method="POST", namespace="modules")` 见 [python.get_ports()](api/modules/project_manager/project_manager.py:101)
+- 端口冲突与分配：
+  - 项目管理器内部维护端口注册表并在冲突时偏移，详见 [python.ProjectManager._allocate_port()](api/modules/project_manager/impl.py:155)。
+
+5) API 封装层与内部实现职责
+- api/modules/* 与 api/workflow/* 是唯一对外暴露层，统一使用 [python.decorator(core.register_api)](core/__init__.py:22)。
+- 内部实现文件（impl.py）仅用于具体逻辑，不再直接对外注册函数；统一由封装层暴露 API。
+- 示例：
+  - 模块封装层： [python.image_binding.image_binding.py](api/modules/Smarttraven/image_binding/image_binding.py:1)
+  - 工作流封装层： [python.workflow.image_binding.py](api/workflow/image_binding/image_binding.py:1)
+  - 项目管理封装层： [python.project_manager.project_manager.py](api/modules/project_manager/project_manager.py:1)
+  - 内部实现（供封装层调用）： [python.project_manager.impl.py](api/modules/project_manager/impl.py:1)
+
+6) WebSocket function_call 统一约束
+- function 名必须为“斜杠路径”；点式与反斜杠将被网关拒绝，详见 [python.APIGateway._handle_websocket_message()](core/api_gateway.py:676)。
+
+如遇到文档与行为不一致，请以上述“API 优先、import core 门面、私有端口在 modularflow_config.py 注册”的原则为准，并参照核心代码链接进行校验。

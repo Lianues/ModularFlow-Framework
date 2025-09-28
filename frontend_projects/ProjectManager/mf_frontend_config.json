@@ -1,0 +1,23 @@
+{
+  "projects": [
+    {
+      "name": "ProjectManager",
+      "display_name": "统一项目管理面板",
+      "type": "html",
+      "path": "frontend_projects/ProjectManager",
+      "port": 8055,
+      "api_endpoint": "http://localhost:8050/api",
+      "dev_command": "python -m http.server 8055",
+      "description": "用于统一管理前后端项目、端口与生命周期的更高一级控制台",
+      "enabled": true
+    }
+  ],
+  "global_config": {
+    "cors_origins": [
+      "http://localhost:8055",
+      "*"
+    ],
+    "api_base_url": "http://localhost:8050",
+    "websocket_url": "http://localhost:8050/ws"
+  }
+}

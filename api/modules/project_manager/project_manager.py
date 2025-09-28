@@ -5,7 +5,7 @@ API 封装层：模块能力对外接口 (api/modules)
 """
 
 from typing import Any, Dict, Optional
-from core.api_registry import register_api
+import core
 from .impl import (
     get_project_manager,
     import_project as _import_project,
@@ -22,7 +22,7 @@ from .impl import (
 )
 
 # 基础项目生命周期
-@register_api(
+@core.register_api(
     name="启动被管理的项目",
     description="启动被管理的项目",
     path="project_manager/start_project",
@@ -40,7 +40,7 @@ def start_project(project_name: str, component: str = "all") -> Dict[str, Any]:
     manager = get_project_manager()
     return manager.start_project(project_name, component)
 
-@register_api(
+@core.register_api(
     name="停止被管理的项目",
     description="停止被管理的项目",
     path="project_manager/stop_project",
@@ -58,7 +58,7 @@ def stop_project(project_name: str, component: str = "all") -> Dict[str, Any]:
     manager = get_project_manager()
     return manager.stop_project(project_name, component)
 
-@register_api(
+@core.register_api(
     name="重启被管理的项目",
     description="重启被管理的项目",
     path="project_manager/restart_project",
@@ -77,7 +77,7 @@ def restart_project(project_name: str, component: str = "all") -> Dict[str, Any]
     return manager.restart_project(project_name, component)
 
 # 项目状态与端口
-@register_api(
+@core.register_api(
     name="获取项目状态",
     description="获取项目状态",
     path="project_manager/get_status",
@@ -91,7 +91,7 @@ def get_status(project_name: Optional[str] = None) -> Dict[str, Any]:
     manager = get_project_manager()
     return manager.get_project_status(project_name)
 
-@register_api(
+@core.register_api(
     name="获取端口使用情况",
     description="获取端口使用情况",
     path="project_manager/get_ports",
@@ -102,7 +102,7 @@ def get_ports() -> Dict[str, Any]:
     manager = get_project_manager()
     return manager.get_port_usage()
 
-@register_api(
+@core.register_api(
     name="执行健康检查",
     description="执行健康检查",
     path="project_manager/health_check",
@@ -117,7 +117,7 @@ def health_check() -> Dict[str, Any]:
         results[name] = manager.get_project_status(name)
     return results
 
-@register_api(
+@core.register_api(
     name="获取可管理项目列表",
     description="获取可管理项目列表",
     path="project_manager/get_managed_projects",
@@ -128,7 +128,7 @@ def get_managed_projects() -> Any:
     return _get_managed_projects()
 
 # 项目导入/删除/配置
-@register_api(
+@core.register_api(
     name="导入项目",
     description="导入项目（要求根含 modularflow_config.py）",
     path="project_manager/import_project",
@@ -141,7 +141,7 @@ def get_managed_projects() -> Any:
 def import_project(project_archive) -> Dict[str, Any]:
     return _import_project(project_archive)
 
-@register_api(
+@core.register_api(
     name="删除项目",
     description="删除项目",
     path="project_manager/delete_project",
@@ -155,7 +155,7 @@ def import_project(project_archive) -> Dict[str, Any]:
 def delete_project(project_name: str) -> Dict[str, Any]:
     return _delete_project(project_name)
 
-@register_api(
+@core.register_api(
     name="更新项目端口配置",
     description="更新项目端口配置",
     path="project_manager/update_ports",
@@ -172,7 +172,7 @@ def delete_project(project_name: str) -> Dict[str, Any]:
 def update_ports(project_name: str, ports: dict) -> Dict[str, Any]:
     return _update_project_ports(project_name, ports)
 
-@register_api(
+@core.register_api(
     name="刷新项目列表",
     description="重新扫描和加载所有项目",
     path="project_manager/refresh_projects",
@@ -182,7 +182,7 @@ def update_ports(project_name: str, ports: dict) -> Dict[str, Any]:
 def refresh_projects() -> Dict[str, Any]:
     return _refresh_projects()
 
-@register_api(
+@core.register_api(
     name="安装项目依赖",
     description="安装项目依赖",
     path="project_manager/install_project",
@@ -196,7 +196,7 @@ def refresh_projects() -> Dict[str, Any]:
 def install_project(project_name: str) -> Dict[str, Any]:
     return _install_project_dependencies(project_name)
 
-@register_api(
+@core.register_api(
     name="获取项目配置信息",
     description="获取项目配置信息",
     path="project_manager/get_project_config",
@@ -210,7 +210,7 @@ def install_project(project_name: str) -> Dict[str, Any]:
 def get_project_config(project_name: str) -> Dict[str, Any]:
     return _get_project_config_info(project_name)
 
-@register_api(
+@core.register_api(
     name="验证项目配置脚本",
     description="验证项目配置脚本",
     path="project_manager/validate_config_script",
@@ -225,7 +225,7 @@ def validate_config_script(project_name: str) -> Dict[str, Any]:
     return _validate_project_config_script(project_name)
 
 # ZIP 嵌入/提取/导入能力（复用实现层）
-@register_api(
+@core.register_api(
     name="将zip嵌入PNG",
     description="将zip嵌入PNG并返回base64",
     path="project_manager/embed_zip_into_image",
@@ -242,7 +242,7 @@ def validate_config_script(project_name: str) -> Dict[str, Any]:
 def embed_zip_into_image(image, archive) -> Dict[str, Any]:
     return _embed_zip_into_image(image, archive)
 
-@register_api(
+@core.register_api(
     name="从PNG提取zip",
     description="从PNG提取zip并返回清单",
     path="project_manager/extract_zip_from_image",
@@ -256,7 +256,7 @@ def embed_zip_into_image(image, archive) -> Dict[str, Any]:
 def extract_zip_from_image(image) -> Dict[str, Any]:
     return _extract_zip_from_image(image)
 
-@register_api(
+@core.register_api(
     name="从图片导入项目",
     description="从PNG反嵌入zip并导入项目",
     path="project_manager/import_project_from_image",

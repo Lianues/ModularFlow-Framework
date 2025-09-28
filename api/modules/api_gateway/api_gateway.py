@@ -4,10 +4,9 @@ API 封装层：API 网关对外接口 (api/modules)
 """
 
 from typing import Any, Dict, Optional
-from core.api_registry import register_api
-from core.api_gateway import get_api_gateway
+import core
 
-@register_api(
+@core.register_api(
     name="API网关启动",
     description="启动API网关服务器",
     path="api_gateway/start",
@@ -28,11 +27,11 @@ from core.api_gateway import get_api_gateway
     }
 )
 def api_gateway_start(background: bool = True, config_file: Optional[str] = None) -> Dict[str, Any]:
-    gateway = get_api_gateway(config_file=config_file)
+    gateway = core.get_api_gateway(config_file=config_file)
     gateway.start_server(background=background)
     return {"status": "started", "background": background}
 
-@register_api(
+@core.register_api(
     name="API网关停止",
     description="停止API网关服务器",
     path="api_gateway/stop",
@@ -44,11 +43,11 @@ def api_gateway_start(background: bool = True, config_file: Optional[str] = None
     }
 )
 def api_gateway_stop() -> Dict[str, Any]:
-    gateway = get_api_gateway()
+    gateway = core.get_api_gateway()
     gateway.stop_server()
     return {"status": "stopped"}
 
-@register_api(
+@core.register_api(
     name="API网关信息",
     description="获取API网关信息",
     path="api_gateway/info",
@@ -70,7 +69,7 @@ def api_gateway_stop() -> Dict[str, Any]:
     }
 )
 def api_gateway_info(config_file: Optional[str] = None) -> Dict[str, Any]:
-    gateway = get_api_gateway(config_file=config_file)
+    gateway = core.get_api_gateway(config_file=config_file)
     return {
         "endpoints": len(gateway.router.get_endpoints()),
         "middlewares": len(gateway.router.get_middlewares()),
@@ -78,7 +77,7 @@ def api_gateway_info(config_file: Optional[str] = None) -> Dict[str, Any]:
         "config": gateway.config.__dict__ if gateway.config else None
     }
 
-@register_api(
+@core.register_api(
     name="API网关广播消息",
     description="向所有WebSocket连接广播消息",
     path="api_gateway/broadcast",
@@ -97,11 +96,11 @@ def api_gateway_info(config_file: Optional[str] = None) -> Dict[str, Any]:
     }
 )
 async def api_gateway_broadcast(message: Dict[str, Any]) -> Dict[str, Any]:
-    gateway = get_api_gateway()
+    gateway = core.get_api_gateway()
     await gateway.broadcast_message(message)
     return {"broadcasted": True, "connections": len(gateway.websocket_connections)}
 
-@register_api(
+@core.register_api(
     name="列出已注册API",
     description="获取所有已注册 API 的定义（名称、描述、路径、命名空间、输入/输出Schema）",
     path="api_gateway/list_apis",
@@ -130,8 +129,8 @@ async def api_gateway_broadcast(message: Dict[str, Any]) -> Dict[str, Any]:
     }
 )
 def api_gateway_list_apis() -> Dict[str, Any]:
-    from core.api_registry import get_registry
-    reg = get_registry()
+    # migrated to core facade
+    reg = core.get_registry()
     items = []
     for p in reg.list_functions():
         spec = reg.get_spec(p)

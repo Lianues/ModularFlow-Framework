@@ -8,12 +8,12 @@ import os
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from core.api_registry import register_api
+import core
 from .impl import ImageBindingModule
 from .variables import FILE_TYPE_TAGS
 
 # embed_files_to_image
-@register_api(
+@core.register_api(
     name="嵌入文件到图片",
     description="将文件嵌入到PNG图片中",
     path="smarttraven/image_binding/embed_files_to_image",
@@ -52,7 +52,7 @@ def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Op
         return {"success": False, "message": f"嵌入文件失败: {str(e)}"}
 
 # extract_files_from_image
-@register_api(
+@core.register_api(
     name="从图片提取文件",
     description="从PNG图片中提取文件",
     path="smarttraven/image_binding/extract_files_from_image",
@@ -89,7 +89,7 @@ def extract_files_from_image(image_path: str, output_dir: Optional[str] = None, 
         return {"success": False, "message": f"提取文件失败: {str(e)}", "files": []}
 
 # get_embedded_files_info
-@register_api(
+@core.register_api(
     name="获取嵌入文件信息",
     description="获取PNG图片中嵌入的文件信息",
     path="smarttraven/image_binding/get_embedded_files_info",
@@ -119,7 +119,7 @@ def get_embedded_files_info(image_path: str) -> Dict[str, Any]:
         return {"success": False, "message": f"获取文件信息失败: {str(e)}", "files_info": []}
 
 # is_image_with_embedded_files
-@register_api(
+@core.register_api(
     name="检测图片是否包含嵌入文件",
     description="检查PNG图片是否包含嵌入文件",
     path="smarttraven/image_binding/is_image_with_embedded_files",
@@ -149,7 +149,7 @@ def is_image_with_embedded_files(image_path: str) -> Dict[str, Any]:
         return {"success": False, "has_embedded_files": False, "message": f"检查图片失败: {str(e)}"}
 
 # get_file_type_tags
-@register_api(
+@core.register_api(
     name="获取文件类型标签",
     description="获取所有支持的文件类型标签",
     path="smarttraven/image_binding/get_file_type_tags",

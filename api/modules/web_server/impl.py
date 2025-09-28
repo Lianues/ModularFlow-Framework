@@ -25,7 +25,7 @@ try:
 except ImportError as e:
     print(f"⚠️ 导入Web服务器模块失败: {e}")
 
-from core.services import get_service_manager
+import core
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -650,92 +650,7 @@ def create_web_server_for_project(project_config_path: str) -> WebServer:
     return WebServer(config_path=project_config_path)
 
 
-# 注册函数到ModularFlow Framework
-def list_frontend_projects(config_path: Optional[str] = None):
-    """列出所有前端项目"""
-    server = get_web_server(config_path=config_path)
-    return server.list_projects()
-
-def start_frontend_project(project_name: str, open_browser: bool = True, config_path: Optional[str] = None):
-    """启动前端项目"""
-    server = get_web_server(config_path=config_path)
-    success = server.start_project(project_name, open_browser)
-    return {
-        "success": success,
-        "project": project_name,
-        "message": f"项目 {project_name} {'启动成功' if success else '启动失败'}"
-    }
-
-def stop_frontend_project(project_name: str, config_path: Optional[str] = None):
-    """停止前端项目"""
-    server = get_web_server(config_path=config_path)
-    success = server.stop_project(project_name)
-    return {
-        "success": success,
-        "project": project_name,
-        "message": f"项目 {project_name} {'停止成功' if success else '停止失败'}"
-    }
-
-def restart_frontend_project(project_name: str, config_path: Optional[str] = None):
-    """重启前端项目"""
-    server = get_web_server(config_path=config_path)
-    success = server.restart_project(project_name)
-    return {
-        "success": success,
-        "project": project_name,
-        "message": f"项目 {project_name} {'重启成功' if success else '重启失败'}"
-    }
-
-def start_all_projects(config_path: Optional[str] = None):
-    """启动所有启用的项目"""
-    server = get_web_server(config_path=config_path)
-    results = server.start_all_enabled_projects()
-    return {
-        "results": results,
-        "total": len(results),
-        "successful": sum(1 for success in results.values() if success)
-    }
-
-def stop_all_projects(config_path: Optional[str] = None):
-    """停止所有项目"""
-    server = get_web_server(config_path=config_path)
-    results = server.stop_all_projects()
-    return {
-        "results": results,
-        "total": len(results),
-        "successful": sum(1 for success in results.values() if success)
-    }
-
-def get_project_information(project_name: str, config_path: Optional[str] = None):
-    """获取项目详细信息"""
-    server = get_web_server(config_path=config_path)
-    info = server.get_project_info(project_name)
-    return info if info else {"error": f"项目不存在: {project_name}"}
-
-def get_running_servers(config_path: Optional[str] = None):
-    """获取所有运行中的服务器"""
-    server = get_web_server(config_path=config_path)
-    return server.dev_server.list_running_servers()
-
-def create_project_structure(project_name: str, config_path: Optional[str] = None):
-    """创建项目基础结构"""
-    server = get_web_server(config_path=config_path)
-    success = server.create_project_structure(project_name)
-    return {
-        "success": success,
-        "project": project_name,
-        "message": f"项目结构 {'创建成功' if success else '创建失败'}"
-    }
-
-def load_project_config(project_name: str, project_config_path: str):
-    """加载项目特定配置"""
-    server = get_web_server()
-    success = server.load_project_specific_config(project_name, project_config_path)
-    return {
-        "success": success,
-        "project": project_name,
-        "message": f"项目配置 {'加载成功' if success else '加载失败'}"
-    }
+# 内部实现供 API 层调用（对外 API 暴露统一在 api/modules/web_server/web_server.py）
 
 
 if __name__ == "__main__":

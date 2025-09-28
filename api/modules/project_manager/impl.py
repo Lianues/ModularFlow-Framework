@@ -22,9 +22,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
-from ..Smarttraven.image_binding.impl import ImageBindingModule
-from core.services import get_current_globals
-from core.project_config_interface import load_project_config, ProjectConfigInterface, DefaultProjectConfig
+import core
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -48,7 +46,7 @@ class ProjectStatus:
     last_health_check: Optional[datetime] = None
     health_status: str = "unknown"  # healthy, unhealthy, unknown
     errors: List[str] = field(default_factory=list)
-    config: Optional[ProjectConfigInterface] = None
+    config: Optional[core.ProjectConfigInterface] = None
 
 
 class ProjectManager:
@@ -103,7 +101,7 @@ class ProjectManager:
         
         # 加载项目配置
         try:
-            config = load_project_config(project_dir)
+            config = core.load_project_config(project_dir)
             project_info = config.get_project_info()
             runtime_config = config.get_runtime_config()
             api_config = config.get_api_config()
@@ -486,8 +484,8 @@ class ProjectManager:
                 
                 # 停止控制台（通过 SDK 调用）
                 try:
-                    from core.api_client import call_api
-                    _ = call_api(
+                    import core
+                    _ = core.call_api(
                         "web_server/stop_project",
                         {"project_name": project_name},
                         method="POST",
@@ -587,7 +585,7 @@ class ProjectManager:
         
         return port_usage
     
-    def _should_install_dependencies(self, project_path: Path, config: ProjectConfigInterface) -> bool:
+    def _should_install_dependencies(self, project_path: Path, config: core.ProjectConfigInterface) -> bool:
         """检查是否需要安装依赖"""
         try:
             # 检查是否存在 package.json 但没有 node_modules
@@ -738,41 +736,7 @@ def get_project_manager() -> ProjectManager:
     return _project_manager_instance
 
 
-# 注册函数到ModularFlow Framework
-def start_managed_project(project_name: str, component: str = "all"):
-    """启动被管理的项目"""
-    manager = get_project_manager()
-    return manager.start_project(project_name, component)
-
-def stop_managed_project(project_name: str, component: str = "all"):
-    """停止被管理的项目"""
-    manager = get_project_manager()
-    return manager.stop_project(project_name, component)
-
-def restart_managed_project(project_name: str, component: str = "all"):
-    """重启被管理的项目"""
-    manager = get_project_manager()
-    return manager.restart_project(project_name, component)
-
-def get_managed_project_status(project_name: str = None):
-    """获取项目状态"""
-    manager = get_project_manager()
-    return manager.get_project_status(project_name)
-
-def get_port_usage():
-    """获取端口使用情况"""
-    manager = get_project_manager()
-    return manager.get_port_usage()
-
-def perform_health_check():
-    """执行健康检查"""
-    manager = get_project_manager()
-    results = {}
-    for project_name in manager.projects.keys():
-        manager._check_project_health(project_name)
-        results[project_name] = manager.get_project_status(project_name)
-    
-    return results
+# 内部实现供 API 层调用（对外 API 暴露统一在 api/modules/project_manager/project_manager.py）
 
 def get_managed_projects():
     """获取可管理项目列表（实时同步文件系统与配置脚本）"""
@@ -838,7 +802,7 @@ def get_managed_projects():
     # 逐项实时读取配置并构造返回；读取失败时跳过该项目，避免返回过期数据
     for project_name, status in manager.projects.items():
         try:
-            current_config = load_project_config(Path(status.project_path))
+            current_config = core.load_project_config(Path(status.project_path))
             status.config = current_config
 
             project_info = current_config.get_project_info()
@@ -1161,7 +1125,7 @@ def get_project_config_info(project_name: str):
         status = manager.projects[project_name]
         # 实时加载配置脚本
         try:
-            cfg = load_project_config(Path(status.project_path))
+            cfg = core.load_project_config(Path(status.project_path))
             status.config = cfg
             return cfg.get_full_config()
         except Exception:
@@ -1187,9 +1151,8 @@ def validate_project_config_script(project_name: str):
         if not status.config_script_path:
             return {"success": False, "error": f"项目 {project_name} 没有配置脚本"}
         
-        from core.project_config_interface import validate_config_script
         config_file = Path(status.config_script_path)
-        validation_result = validate_config_script(config_file)
+        validation_result = core.validate_config_script(config_file)
         
         return {
             "success": validation_result["valid"],
@@ -1244,10 +1207,16 @@ def embed_zip_into_image(image, archive):
         with open(archive_path, "wb") as f:
             f.write(archive_bytes)
 
-        # 使用图像绑定模块嵌入
-        ibm = ImageBindingModule()
+        # 通过本地客户端调用模块API进行嵌入
         output_path = os.path.join(temp_dir, f"{os.path.splitext(img_name)[0]}_embedded.png")
-        ibm.embed_files_to_image(image_path=image_path, file_paths=[archive_path], output_path=output_path)
+        result = core.call_api(
+            "smarttraven/image_binding/embed_files_to_image",
+            {"image_path": image_path, "file_paths": [archive_path], "output_path": output_path},
+            method="POST",
+            namespace="modules"
+        )
+        if not isinstance(result, dict) or not result.get("success"):
+            return {"success": False, "error": f"嵌入失败: {result if not isinstance(result, dict) else result.get('message')}"}
 
         # 读取输出并返回base64
         with open(output_path, "rb") as f:
@@ -1295,9 +1264,16 @@ def extract_zip_from_image(image):
         with open(image_path, "wb") as f:
             f.write(image_bytes)
 
-        # 提取文件到临时目录
-        ibm = ImageBindingModule()
-        extracted = ibm.extract_files_from_image(image_path=image_path, output_dir=temp_dir)
+        # 通过本地客户端调用模块API进行提取
+        result = core.call_api(
+            "smarttraven/image_binding/extract_files_from_image",
+            {"image_path": image_path, "output_dir": temp_dir},
+            method="POST",
+            namespace="modules"
+        )
+        if not isinstance(result, dict) or not result.get("success"):
+            return {"success": False, "error": f"提取失败: {result if not isinstance(result, dict) else result.get('message')}"}
+        extracted = result.get("files", [])
 
         # 查找zip文件
         zip_file_info = None
@@ -1350,9 +1326,17 @@ def import_project_from_image(image):
         with open(image_path, "wb") as f:
             f.write(image_bytes)
 
-        # 反嵌入
-        ibm = ImageBindingModule()
-        extracted = ibm.extract_files_from_image(image_path=image_path, output_dir=temp_dir)
+        # 通过本地客户端调用模块API进行反嵌入提取
+        result = core.call_api(
+            "smarttraven/image_binding/extract_files_from_image",
+            {"image_path": image_path, "output_dir": temp_dir},
+            method="POST",
+            namespace="modules"
+        )
+        if not isinstance(result, dict) or not result.get("success"):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return {"success": False, "error": f"提取失败: {result if not isinstance(result, dict) else result.get('message')}"}
+        extracted = result.get("files", [])
 
         # 找zip
         zip_file_info = None
