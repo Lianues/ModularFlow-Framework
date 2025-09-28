@@ -31,6 +31,8 @@ class ProjectManagerApp {
         
         // 初始加载数据
         await this.loadData();
+        // 同步加载 API 文件管理面板数据
+        await this.loadApiFiles();
         // 延迟二次刷新，确保后台状态就绪（避免启动后需手动刷新）
         setTimeout(() => { this.loadData(false); }, 1500);
         // 若仍为空，做短期轮询，避免必须手动点击刷新
@@ -1825,4 +1827,308 @@ window.addEventListener('beforeunload', () => {
     if (app && app.refreshInterval) {
         clearInterval(app.refreshInterval);
     }
+});
+// ===== 通用 API 文件管理：面板逻辑扩展（每页10条，模块/工作流双面板） =====
+
+// 扩展 ProjectManagerApp 原型：状态、加载、渲染、删除与分页
+ProjectManagerApp.prototype._initApiFilesState = function() {
+    if (!this.apiFiles) {
+        this.apiFiles = { modules: [], workflow: [] };
+    }
+    if (!this.apiModulesPage) this.apiModulesPage = 1;
+    if (!this.apiWorkflowPage) this.apiWorkflowPage = 1;
+    if (!this.apiFilesPageSize) this.apiFilesPageSize = 10;
+};
+
+ProjectManagerApp.prototype.loadApiFiles = async function() {
+    try {
+        this._initApiFilesState();
+        // 确保 API 客户端就绪
+        await this.ensureApiClientReady();
+
+        // 在面板局部显示加载效果（复用全局 loading 以简化）
+        this.showLoading('正在加载 API 文件夹与注册的 API...');
+        const res = await window.apiClient.listApiFolders();
+        const modules = Array.isArray(res?.modules) ? res.modules : [];
+        const workflow = Array.isArray(res?.workflow) ? res.workflow : [];
+        this.apiFiles.modules = modules;
+        this.apiFiles.workflow = workflow;
+
+        // 额外拉取已注册 API 列表并按命名空间/相对目录归并
+        const apiRes = await window.apiClient.listApis();
+        const allApis = Array.isArray(apiRes?.apis) ? apiRes.apis : (Array.isArray(apiRes) ? apiRes : []);
+
+        const normalize = (s) => String(s || '').replace(/\\/g, '/').toLowerCase();
+
+        // 归并到模块文件夹
+        this.apiFiles.modules = (this.apiFiles.modules || []).map(folder => {
+            const rel = normalize(folder.relative_path || folder.name || '');
+            const matched = allApis.filter(a =>
+                normalize(a.namespace) === 'modules' &&
+                normalize(a.path).startsWith(rel)
+            );
+            return {
+                ...folder,
+                apis: matched,
+                api_count: matched.length
+            };
+        });
+
+        // 归并到工作流文件夹
+        this.apiFiles.workflow = (this.apiFiles.workflow || []).map(folder => {
+            const rel = normalize(folder.relative_path || folder.name || '');
+            const matched = allApis.filter(a =>
+                normalize(a.namespace) === 'workflow' &&
+                normalize(a.path).startsWith(rel)
+            );
+            return {
+                ...folder,
+                apis: matched,
+                api_count: matched.length
+            };
+        });
+
+        // 更新总数（按文件夹计数）
+        const mTotalEl = document.getElementById('apiModulesTotal');
+        const wTotalEl = document.getElementById('apiWorkflowTotal');
+        if (mTotalEl) mTotalEl.textContent = `${this.apiFiles.modules.length} 项`;
+        if (wTotalEl) wTotalEl.textContent = `${this.apiFiles.workflow.length} 项`;
+
+        // 初始渲染
+        this.apiModulesPage = 1;
+        this.apiWorkflowPage = 1;
+        this.renderApiFiles();
+
+        // 绑定分页与交互
+        this._bindApiFilesPagination();
+
+        this.showToast('success', '加载完成', 'API 文件夹与注册 API 已更新');
+    } catch (e) {
+        this.showToast('error', '加载失败', e.message || '未知错误');
+    } finally {
+        this.hideLoading();
+    }
+};
+
+ProjectManagerApp.prototype._bindApiFilesPagination = function() {
+    const mPrev = document.getElementById('apiModulesPrev');
+    const mNext = document.getElementById('apiModulesNext');
+    const wPrev = document.getElementById('apiWorkflowPrev');
+    const wNext = document.getElementById('apiWorkflowNext');
+
+    const add = (el, evt, fn) => { if (el) el.addEventListener(evt, fn); };
+
+    add(mPrev, 'click', () => {
+        const totalPages = Math.max(1, Math.ceil((this.apiFiles.modules || []).length / this.apiFilesPageSize));
+        this.apiModulesPage = Math.max(1, this.apiModulesPage - 1);
+        this.renderApiFiles();
+    });
+    add(mNext, 'click', () => {
+        const totalPages = Math.max(1, Math.ceil((this.apiFiles.modules || []).length / this.apiFilesPageSize));
+        this.apiModulesPage = Math.min(totalPages, this.apiModulesPage + 1);
+        this.renderApiFiles();
+    });
+    add(wPrev, 'click', () => {
+        const totalPages = Math.max(1, Math.ceil((this.apiFiles.workflow || []).length / this.apiFilesPageSize));
+        this.apiWorkflowPage = Math.max(1, this.apiWorkflowPage - 1);
+        this.renderApiFiles();
+    });
+    add(wNext, 'click', () => {
+        const totalPages = Math.max(1, Math.ceil((this.apiFiles.workflow || []).length / this.apiFilesPageSize));
+        this.apiWorkflowPage = Math.min(totalPages, this.apiWorkflowPage + 1);
+        this.renderApiFiles();
+    });
+
+    // 事件委托：删除与展开/收起
+    document.addEventListener('click', (evt) => {
+        // 删除按钮
+        const delBtn = evt.target && typeof evt.target.closest === 'function'
+            ? evt.target.closest('[data-action="delete-api-folder"]')
+            : null;
+        if (delBtn) {
+            const ns = delBtn.getAttribute('data-namespace');
+            const rel = delBtn.getAttribute('data-relative-path');
+            if (ns && rel) {
+                this.deleteApiFolder(ns, rel);
+            }
+            return;
+        }
+
+        // 展开/收起按钮
+        const toggleBtn = evt.target && typeof evt.target.closest === 'function'
+            ? evt.target.closest('[data-action="toggle-api-folder"]')
+            : null;
+        if (toggleBtn) {
+            const folderId = toggleBtn.getAttribute('data-folder-id');
+            const listEl = folderId ? document.querySelector(`[data-api-folder-list="${folderId}"]`) : null;
+            if (listEl) {
+                const isHidden = listEl.classList.contains('hidden');
+                if (isHidden) {
+                    listEl.classList.remove('hidden');
+                    toggleBtn.querySelector('span') && (toggleBtn.querySelector('span').textContent = '收起');
+                    const iconEl = toggleBtn.querySelector('[data-lucide]');
+                    if (iconEl) iconEl.setAttribute('data-lucide', 'chevron-up');
+                } else {
+                    listEl.classList.add('hidden');
+                    toggleBtn.querySelector('span') && (toggleBtn.querySelector('span').textContent = '展开');
+                    const iconEl = toggleBtn.querySelector('[data-lucide]');
+                    if (iconEl) iconEl.setAttribute('data-lucide', 'chevron-down');
+                }
+                if (window.lucide) window.lucide.createIcons();
+            }
+        }
+    });
+};
+
+ProjectManagerApp.prototype._renderApiListSection = function(items, page, namespace) {
+    const start = (page - 1) * this.apiFilesPageSize;
+    const end = start + this.apiFilesPageSize;
+    const current = items.slice(start, end);
+
+    if (!current.length) {
+        return `
+            <div class="text-gray-500 text-sm py-4 text-center">暂无数据</div>
+        `;
+    }
+
+    const icon = namespace === 'modules' ? 'package' : 'workflow';
+    const makeId = (ns, rel) => `${ns}:${rel}`.replace(/[^a-zA-Z0-9:_-]/g, '_');
+
+    return current.map((it) => {
+        const name = it.name || it.relative_path || '';
+        const rel = it.relative_path || '';
+        const count = Number(it.api_count || 0);
+        const apis = Array.isArray(it.apis) ? it.apis : [];
+        const folderId = makeId(namespace, rel);
+
+        const apisHtml = apis.length
+            ? apis.map(a => `
+                <div class="border border-gray-200 rounded-4 p-2">
+                    <div class="flex items-center justify-between">
+                        <div class="min-w-0">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs px-2 py-0.5 rounded-4 border border-gray-500 text-gray-700">${a.namespace || namespace}</span>
+                                <span class="font-mono text-xs">${a.path || ''}</span>
+                            </div>
+                            <div class="text-sm font-bold text-black mt-1">${a.name || a.path || ''}</div>
+                            ${a.description ? `<div class="text-xs text-gray-600 mt-1">${a.description}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('')
+            : `<div class="text-xs text-gray-500 py-2">该文件夹下暂无注册 API</div>`;
+
+        return `
+            <div class="border border-gray-200 rounded-4 p-3">
+                <div class="flex items-center justify-between">
+                    <div class="min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="${icon}" class="w-4 h-4 text-black"></i>
+                            <span class="font-medium text-black truncate">${name}</span>
+                            <span class="text-xs px-2 py-1 rounded-4 border border-gray-500 text-gray-700">API: ${count}</span>
+                        </div>
+                        <div class="mt-1 text-xs text-gray-600 flex items-center space-x-2">
+                            <span class="port-badge">${rel}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button
+                            class="btn-secondary px-3 py-1 rounded text-sm flex items-center justify-center space-x-1"
+                            data-action="toggle-api-folder"
+                            data-namespace="${namespace}"
+                            data-relative-path="${rel}"
+                            data-folder-id="${folderId}"
+                            title="展开/收起注册的 API 列表">
+                            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                            <span>展开</span>
+                        </button>
+                        <button
+                            class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm flex items-center justify-center space-x-1"
+                            data-action="delete-api-folder"
+                            data-namespace="${namespace}"
+                            data-relative-path="${rel}"
+                            title="删除该文件夹">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>删除</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-3 hidden" data-api-folder-list="${folderId}">
+                    ${apisHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+ProjectManagerApp.prototype.renderApiFiles = function() {
+    this._initApiFilesState();
+
+    // 模块
+    const mContainer = document.getElementById('apiModulesList');
+    const mPageInfo = document.getElementById('apiModulesPageInfo');
+    const mTotalPages = Math.max(1, Math.ceil((this.apiFiles.modules || []).length / this.apiFilesPageSize));
+    this.apiModulesPage = Math.min(Math.max(1, this.apiModulesPage), mTotalPages);
+    if (mContainer) {
+        mContainer.innerHTML = this._renderApiListSection(this.apiFiles.modules || [], this.apiModulesPage, 'modules');
+    }
+    if (mPageInfo) {
+        mPageInfo.textContent = `第 ${this.apiModulesPage} / ${mTotalPages} 页`;
+    }
+
+    // 工作流
+    const wContainer = document.getElementById('apiWorkflowList');
+    const wPageInfo = document.getElementById('apiWorkflowPageInfo');
+    const wTotalPages = Math.max(1, Math.ceil((this.apiFiles.workflow || []).length / this.apiFilesPageSize));
+    this.apiWorkflowPage = Math.min(Math.max(1, this.apiWorkflowPage), wTotalPages);
+    if (wContainer) {
+        wContainer.innerHTML = this._renderApiListSection(this.apiFiles.workflow || [], this.apiWorkflowPage, 'workflow');
+    }
+    if (wPageInfo) {
+        wPageInfo.textContent = `第 ${this.apiWorkflowPage} / ${wTotalPages} 页`;
+    }
+
+    // 刷新图标
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+};
+
+ProjectManagerApp.prototype.deleteApiFolder = async function(namespace, relative_path) {
+    try {
+        // 二次确认
+        if (!confirm(`确定删除 ${namespace} / ${relative_path} 目录吗？此操作不可撤销！`)) {
+            return;
+        }
+        this.showLoading('正在删除目录...');
+        const res = await window.apiClient.deleteApiFolder(namespace, relative_path);
+        const ok = !!(res && (res.success || (res.result && res.result.success)));
+        if (!ok) {
+            const msg = res?.message || (res?.result && res.result.message) || '删除失败';
+            this.showToast('error', '删除失败', msg);
+            return;
+        }
+        this.showToast('success', '删除成功', `${namespace}/${relative_path} 已删除`);
+        // 重新加载并渲染
+        await this.loadApiFiles();
+    } catch (e) {
+        this.showToast('error', '删除失败', e.message || '未知错误');
+    } finally {
+        this.hideLoading();
+    }
+};
+
+// 页面就绪后自动加载 API 文件管理面板数据（避免改动现有 init 流程）
+document.addEventListener('DOMContentLoaded', () => {
+    // app 已在下方初始化，这里延迟触发加载
+    setTimeout(() => {
+        try {
+            if (window.app && typeof window.app.loadApiFiles === 'function') {
+                window.app.loadApiFiles();
+            }
+        } catch (e) {
+            // 安静失败
+            console.warn('加载 API 文件面板失败:', e);
+        }
+    }, 600);
 });

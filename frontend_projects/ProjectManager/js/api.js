@@ -375,9 +375,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.apiClient.connectWebSocket();
 });
 
-// 页面卸载时断开WebSocket连接
+ // 页面卸载时断开WebSocket连接
 window.addEventListener('beforeunload', () => {
     if (window.apiClient) {
         window.apiClient.disconnectWebSocket();
     }
 });
+
+// 通用 API 文件管理 - 客户端扩展（放置在类定义之后，避免引用错误）
+// 列出模块/工作流 API 文件夹
+APIClient.prototype.listApiFolders = async function() {
+    return this.get('/modules/api_files/list_folders');
+};
+
+// 删除指定命名空间下的 API 文件夹
+APIClient.prototype.deleteApiFolder = async function(namespace, relative_path) {
+    return this.post('/modules/api_files/delete_folder', {
+        namespace,
+        relative_path
+    });
+};
+// 通用 API 文件管理 - 客户端扩展
+// 列出模块/工作流 API 文件夹
+APIClient.prototype.listApiFolders = async function() {
+    return this.get('/modules/api_files/list_folders');
+};
+
+// 删除指定命名空间下的 API 文件夹
+APIClient.prototype.deleteApiFolder = async function(namespace, relative_path) {
+    return this.post('/modules/api_files/delete_folder', {
+        namespace,
+        relative_path
+    });
+};

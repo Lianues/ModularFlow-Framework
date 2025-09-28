@@ -281,6 +281,69 @@
                 <!-- Port usage will be loaded here -->
             </div>
         </div>
+        <!-- 通用 API 文件管理 -->
+        <div id="apiFilesPanel" class="bg-white rounded-4 card-shadow p-6 border border-gray-200 mt-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-black flex items-center">
+                    <i data-lucide="folder-cog" class="w-5 h-5 mr-2 text-black"></i>
+                    通用 API 文件管理
+                </h3>
+                <div class="text-xs text-gray-500">
+                    每页显示 10 条 | 删除将永久移除对应文件夹
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 模块 API 面板 -->
+                <div class="border border-gray-200 rounded-4 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <i data-lucide="package" class="w-4 h-4 mr-2 text-black"></i>
+                            <span class="font-medium text-black">模块 API 文件夹</span>
+                        </div>
+                        <span id="apiModulesTotal" class="text-xs text-gray-500">0 项</span>
+                    </div>
+                    <div id="apiModulesList" class="space-y-2 min-h-[120px]">
+                        <div class="text-gray-500 text-sm py-4 text-center">暂无数据</div>
+                    </div>
+                    <div class="flex items-center justify-between mt-4" id="apiModulesPagination">
+                        <button id="apiModulesPrev" class="btn-secondary px-3 py-1 rounded text-sm">
+                            上一页
+                        </button>
+                        <span id="apiModulesPageInfo" class="text-sm text-gray-600">第 1 / 1 页</span>
+                        <button id="apiModulesNext" class="btn-secondary px-3 py-1 rounded text-sm">
+                            下一页
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 工作流 API 面板 -->
+                <div class="border border-gray-200 rounded-4 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center">
+                            <i data-lucide="workflow" class="w-4 h-4 mr-2 text-black"></i>
+                            <span class="font-medium text-black">工作流 API 文件夹</span>
+                        </div>
+                        <span id="apiWorkflowTotal" class="text-xs text-gray-500">0 项</span>
+                    </div>
+                    <div id="apiWorkflowList" class="space-y-2 min-h-[120px]">
+                        <div class="text-gray-500 text-sm py-4 text-center">暂无数据</div>
+                    </div>
+                    <div class="flex items-center justify-between mt-4" id="apiWorkflowPagination">
+                        <button id="apiWorkflowPrev" class="btn-secondary px-3 py-1 rounded text-sm">
+                            上一页
+                        </button>
+                        <span id="apiWorkflowPageInfo" class="text-sm text-gray-600">第 1 / 1 页</span>
+                        <button id="apiWorkflowNext" class="btn-secondary px-3 py-1 rounded text-sm">
+                            下一页
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 text-xs text-gray-500">
+                • 规则：以注册 API 脚本所在文件夹为单位，例如 api/modules/project_manager/ 即为一个模块；api/workflow/xxx/ 为一个工作流项。<br/>
+                • 删除：点击删除将递归删除该文件夹及其子文件，请谨慎操作。
+            </div>
+        </div>
     </main>
 
     <!-- Loading Modal -->
