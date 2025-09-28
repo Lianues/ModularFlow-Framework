@@ -109,7 +109,15 @@ class ProjectManagerApp {
             importFromImageModal: document.getElementById('importFromImageModal'),
             closeImportFromImageModal: document.getElementById('closeImportFromImageModal'),
             importFromImageFile: document.getElementById('importFromImageFile'),
-            cancelImportFromImageBtn: document.getElementById('cancelImportFromImageBtn')
+            cancelImportFromImageBtn: document.getElementById('cancelImportFromImageBtn'),
+
+            // 新增：API 目录面板
+            openApiPanelBtn: document.getElementById('openApiPanelBtn'),
+            apiRegistryModal: document.getElementById('apiRegistryModal'),
+            closeApiRegistryModal: document.getElementById('closeApiRegistryModal'),
+            apiSearchInput: document.getElementById('apiSearchInput'),
+            apiListContainer: document.getElementById('apiListContainer'),
+            apiTotalCount: document.getElementById('apiTotalCount')
         };
     }
 
@@ -155,6 +163,11 @@ class ProjectManagerApp {
         add(this.elements.closeImportFromImageModal, 'click', () => this.hideImportFromImageModal());
         add(this.elements.cancelImportFromImageBtn, 'click', () => this.hideImportFromImageModal());
         add(this.elements.importFromImageFile, 'change', (e) => this.handleImportFromImageChange(e));
+
+        // 新增：API 目录面板事件绑定
+        add(this.elements.openApiPanelBtn, 'click', () => this.showApiRegistryModal());
+        add(this.elements.closeApiRegistryModal, 'click', () => this.hideApiRegistryModal());
+        add(this.elements.apiSearchInput, 'input', (e) => this.filterApiList(e.target.value));
         
         // WebSocket消息监听
         window.addEventListener('websocket-message', (event) => {
@@ -171,6 +184,10 @@ class ProjectManagerApp {
             // 从图片导入按钮
             if (t && typeof t.closest === 'function' && t.closest('#importFromImageBtn')) {
                 this.showImportFromImageModal();
+            }
+            // API 目录面板按钮
+            if (t && typeof t.closest === 'function' && t.closest('#openApiPanelBtn')) {
+                this.showApiRegistryModal();
             }
         });
     }
@@ -190,6 +207,7 @@ class ProjectManagerApp {
         moveToBody(this.elements.editPortModal);
         moveToBody(this.elements.loadingModal);
         moveToBody(this.elements.toast);
+        moveToBody(this.elements.apiRegistryModal);
 
         // 解决重复ID的弹窗选择问题：选择包含有效内容的元素
         const pickBestById = (id) => {
@@ -216,6 +234,7 @@ class ProjectManagerApp {
         this.elements.editPortModal = pickBestById('editPortModal') || this.elements.editPortModal;
         this.elements.loadingModal = pickBestById('loadingModal') || this.elements.loadingModal;
         this.elements.toast = pickBestById('toast') || this.elements.toast;
+        this.elements.apiRegistryModal = pickBestById('apiRegistryModal') || this.elements.apiRegistryModal;
     }
     
     /**
@@ -1401,14 +1420,198 @@ this.elements.websocketPort.value = (ports.websocket && ports.websocket !== '未
             this.hideLoading();
         }
     }
-}
+    /**
+     * 显示 API 目录面板
+     */
+    async showApiRegistryModal() {
+        const m = this.elements.apiRegistryModal;
+        if (!m) return;
+        if (m.parentElement !== document.body) document.body.appendChild(m);
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+        await this.loadAndRenderApiList();
+    }
 
+    /**
+     * 隐藏 API 目录面板
+     */
+    hideApiRegistryModal() {
+        const m = this.elements.apiRegistryModal;
+        if (!m) return;
+        m.classList.remove('flex');
+        m.classList.add('hidden');
+        if (this.elements.apiSearchInput) this.elements.apiSearchInput.value = '';
+    }
+
+    /**
+     * 加载并渲染 API 列表
+     * 在请求期间在面板内显示等待动画
+     */
+    async loadAndRenderApiList() {
+        try {
+            const container = this.elements.apiListContainer;
+            if (container) {
+                container.innerHTML = `
+                    <div class="flex items-center justify-center py-12">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 spinner border-black mr-3"></div>
+                        <span class="text-gray-700 text-sm">正在加载API定义...</span>
+                    </div>
+                `;
+            }
+            this.showLoading('正在加载API定义...');
+            const res = await window.apiClient.listApis();
+            const apis = Array.isArray(res?.apis) ? res.apis : (Array.isArray(res) ? res : []);
+            if (this.elements.apiTotalCount) {
+                this.elements.apiTotalCount.textContent = String(res?.total ?? apis.length);
+            }
+            this.apiList = apis;
+            this.renderApiList(apis);
+        } catch (e) {
+            this.showToast('error', '加载失败', e.message || '未知错误');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    /**
+     * 根据搜索关键字过滤 API 列表
+     */
+    filterApiList(query = '') {
+        const q = (query || '').trim().toLowerCase();
+        const list = !q ? (this.apiList || []) : (this.apiList || []).filter(a => {
+            const name = (a.name || '').toLowerCase();
+            const path = (a.path || '').toLowerCase();
+            const ns = (a.namespace || '').toLowerCase();
+            const desc = (a.description || '').toLowerCase();
+            return name.includes(q) || path.includes(q) || ns.includes(q) || desc.includes(q);
+        });
+        this.renderApiList(list);
+    }
+
+    /**
+     * 构建 Schema 概览（字段名下显示“必填/可选”，不同字段之间使用浅水平分隔线）
+     */
+    buildSchemaSummary(schema) {
+        try {
+            const propsObj = (schema && schema.properties) || {};
+            const keys = Object.keys(propsObj);
+            const required = Array.isArray(schema && schema.required) ? schema.required : [];
+            if (!keys.length) {
+                return '<div class="text-xs text-gray-400">无 Schema</div>';
+            }
+
+            // 类型中文注释映射
+            const typeNoteMap = {
+                string: '字符串文本',
+                number: '数值（浮点）',
+                integer: '整数（不含小数）',
+                boolean: '布尔型（true/false）',
+                object: '对象（键值集合）',
+                array: '数组（有序集合）',
+                null: '空值（null）',
+                any: '任意类型'
+            };
+            const asArray = (v) => Array.isArray(v) ? v : (v ? [v] : ['any']);
+            const cnNoteFor = (tp) => typeNoteMap[tp] || '任意类型';
+            const buildNote = (schemaProp) => {
+                const tps = asArray(schemaProp.type);
+                // 针对数组类型，尽量包含 items 的类型注释
+                if (tps.includes('array')) {
+                    const itemType = schemaProp.items && (Array.isArray(schemaProp.items.type) ? schemaProp.items.type[0] : schemaProp.items && schemaProp.items.type);
+                    if (itemType) {
+                        return `数组元素类型：${cnNoteFor(itemType)}`;
+                    }
+                    return '数组';
+                }
+                return tps.map(cnNoteFor).join(' | ');
+            };
+
+            const rows = keys.map((k, i) => {
+                const s = propsObj[k] || {};
+                const t = Array.isArray(s.type) ? s.type.join(' | ') : (s.type || 'any');
+                const fmt = s.format ? ` (${s.format})` : '';
+                const isReq = required.includes(k);
+                const note = buildNote(s);
+                const separator = i < (keys.length - 1) ? '<div class="border-t border-gray-200 my-2"></div>' : '';
+
+                return `
+                    <div class="py-2">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                            <div class="flex flex-col items-start gap-1">
+                                <span class="port-badge">${k}</span>
+                                <span class="text-[10px] ${isReq ? 'text-black' : 'text-gray-500'}">${isReq ? '必填' : '可选'}</span>
+                            </div>
+                            <div class="md:col-span-2 text-right">
+                                <div class="font-mono text-xs text-black">${t}${fmt}</div>
+                                <div class="text-gray-600 text-xs">${note}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ${separator}
+                `;
+            }).join('');
+
+            return `
+                <div class="space-y-2 border border-gray-200 rounded-4 p-3">
+                    ${rows}
+                </div>
+            `;
+        } catch {
+            return '<div class="text-xs text-gray-400">无 Schema</div>';
+        }
+    }
+
+    /**
+     * 渲染 API 列表
+     */
+    renderApiList(list = []) {
+        const container = this.elements.apiListContainer;
+        if (!container) return;
+        if (!list || list.length === 0) {
+            container.innerHTML = `
+                <div class="col-span-full text-center py-8">
+                    <i data-lucide="list-x" class="w-10 h-10 text-gray-400 mx-auto mb-3"></i>
+                    <p class="text-gray-500">暂无API定义</p>
+                </div>
+            `;
+            lucide.createIcons();
+            return;
+        }
+        container.innerHTML = list.map(a => `
+            <div class="bg-white project-card p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h4 class="text-base font-semibold text-gray-900">${a.name || a.path}</h4>
+                        <p class="text-sm text-gray-600">${a.description || ''}</p>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded-4 border border-gray-500 text-gray-700">${a.namespace || 'modules'}</span>
+                </div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm text-gray-600">路径</div>
+                    <div class="font-mono text-sm">${a.path}</div>
+                </div>
+                <div class="space-y-2">
+                    <div>
+                        <div class="text-sm font-medium text-black mb-1">输入Schema</div>
+                        ${this.buildSchemaSummary(a.input_schema || {})}
+                    </div>
+                    <div>
+                        <div class="text-sm font-medium text-black mb-1">输出Schema</div>
+                        ${this.buildSchemaSummary(a.output_schema || {})}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        lucide.createIcons();
+    }
+}
+ 
 // 初始化应用
 let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new ProjectManagerApp();
 });
-
+ 
 // 页面卸载时清理
 window.addEventListener('beforeunload', () => {
     if (app && app.refreshInterval) {

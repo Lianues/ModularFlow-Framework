@@ -142,6 +142,10 @@
                             <i data-lucide="image" class="w-4 h-4"></i>
                             <span>从图片导入</span>
                         </button>
+                        <button id="openApiPanelBtn" class="btn-secondary px-4 py-2 flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:ring-offset-2">
+                            <i data-lucide="book-open" class="w-4 h-4"></i>
+                            <span>API目录</span>
+                        </button>
                     <div class="text-right">
                         <div class="text-sm text-gray-500">当前时间</div>
                         <div id="currentTime" class="text-lg font-mono text-black"></div>
@@ -452,6 +456,34 @@
                         关闭
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API 目录面板 -->
+    <div id="apiRegistryModal" class="fixed inset-0 bg-black bg-opacity-50 items-center justify-center hidden z-50">
+        <div class="bg-white rounded-4 p-8 max-w-4xl w-full mx-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-black flex items-center">
+                    <i data-lucide="library-big" class="w-5 h-5 mr-2 text-black"></i>
+                    API目录
+                </h3>
+                <button id="closeApiRegistryModal" class="text-gray-500 hover:text-black">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="md:col-span-2">
+                    <input id="apiSearchInput" type="text" placeholder="搜索 API 名称、路径、命名空间..."
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-gray-800">
+                </div>
+                <div class="flex items-center justify-end">
+                    <span class="text-sm text-gray-600">总数</span>
+                    <span id="apiTotalCount" class="ml-2 font-mono text-sm">0</span>
+                </div>
+            </div>
+            <div id="apiListContainer" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                <!-- API 列表渲染位置 -->
             </div>
         </div>
     </div>

@@ -81,6 +81,13 @@ class APIClient {
     }
 
     /**
+     * 获取已注册的 API 定义
+     */
+    async listApis() {
+        return this.get('/modules/api_gateway/list_apis');
+    }
+
+    /**
      * 项目管理API
      */
     async getProjectStatus(projectName = null) {
