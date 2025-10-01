@@ -75,7 +75,7 @@ def _collect_api_folders() -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[st
 
         # 结构示例：
         #   api.modules.project_manager.project_manager
-        #   api.modules.Smarttraven.image_binding.image_binding
+        #   api.modules.SmartTraven.image_binding.image_binding
         #   api.workflow.image_binding.image_binding
         try:
             if len(parts) >= 4 and parts[1] == "modules":
