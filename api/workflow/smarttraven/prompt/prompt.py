@@ -9,7 +9,6 @@ SmartTraven Prompt Workflow Registration (prompt.py)
 - presets: 预设文档对象，包含 prompts 数组（参考 data/presets/Default.json 的结构）
 - world_books: 世界书条目数组/嵌套数组/对象（参考 data/world_books 的结构）
 - history: OpenAI Chat messages 数组（[{role, content}]），可不含 source 字段
-- triggered_worldbook_ids: 可选，用于筛选 mode=="conditional" 的 world_books id；省略或为空列表时不触发任何 conditional 条目
 - character: 可选，角色文档对象（若含 world_book.entries 将并入世界书）
 - persona: 可选，用户画像文档对象
 
@@ -56,7 +55,6 @@ from .impl import assemble_full as _assemble_full
                     "additionalProperties": True
                 }
             },
-            "triggered_worldbook_ids": {"type": "array", "items": {"type": "integer"}},
             "character": {"type": "object", "additionalProperties": True},
             "persona": {"type": "object", "additionalProperties": True}
         },
@@ -85,7 +83,6 @@ async def assemble_full(
     presets: Dict[str, Any],
     world_books: Any,
     history: List[Dict[str, Any]],
-    triggered_worldbook_ids: Optional[List[int]] = None,
     character: Optional[Dict[str, Any]] = None,
     persona: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -96,7 +93,6 @@ async def assemble_full(
         presets=presets,
         world_books=world_books,
         history=history,
-        triggered_worldbook_ids=(triggered_worldbook_ids or []),
         character=character,
         persona=persona,
     )

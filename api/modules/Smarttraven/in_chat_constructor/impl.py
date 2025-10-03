@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """SmartTraven.in_chat_constructor 实现层
- - 接收 JSON 入参（history/presets_in_chat/world_books/triggered_worldbook_ids）
+ - 接收 JSON 入参（history/presets_in_chat/world_books）
  - 输出 OpenAI Chat messages 扩展数组：为每条消息添加 source 来源字段（字段顺序尽量与来源条目一致）
  - 不合并相邻同角色；不再返回 trace（include_trace 参数被忽略）
 """
@@ -64,6 +64,42 @@ def _sort_sources(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ),
     )
 
+def _collect_history_text(history: List[Dict[str, Any]]) -> str:
+    """将原始 history 的 content 拼接为文本（区分大小写）用于关键词匹配。"""
+    texts: List[str] = []
+    for msg in (history or []):
+        try:
+            c = (msg or {}).get("content")
+        except Exception:
+            c = None
+        if isinstance(c, str):
+            texts.append(c)
+    return "\n".join(texts)
+
+def _is_triggered_by_keys(history_text: str, keys: Any) -> bool:
+    """
+    基于 keys 触发逻辑（区分大小写）：
+    - True：存在 keys 且至少一个关键词命中 history 文本
+    - False：keys 缺失/为 0/为空数组/未命中
+    """
+    if keys == 0:
+        return False
+    key_list: List[str] = []
+    if isinstance(keys, str):
+        key_list = [keys]
+    elif isinstance(keys, list):
+        key_list = [str(k) for k in keys if k is not None]
+    else:
+        return False
+    key_list = [k.strip() for k in key_list if isinstance(k, str) and k.strip()]
+    if not key_list:
+        return False
+    text = history_text or ""
+    for k in key_list:
+        if k in text:
+            return True
+    return False
+
 
 def _build_source_for_history(index: int) -> Dict[str, Any]:
     # 保持简单的来源字段顺序：type → id → index
@@ -117,7 +153,6 @@ def construct(
     history: List[Dict[str, Any]],
     presets_in_chat: List[Dict[str, Any]],
     world_books: Union[List[Any], Dict[str, Any]],
-    triggered_worldbook_ids: List[int],
     include_trace: bool = False,  # 入参保留以兼容封装层，但在实现中忽略
 ) -> Dict[str, Any]:
     """
@@ -128,7 +163,7 @@ def construct(
     history = history or []
     presets_in_chat = presets_in_chat or []
     flat_wb = _flatten_world_books(world_books)
-    trig_set = set(int(x) for x in (triggered_worldbook_ids or []))
+    history_text = _collect_history_text(history)
 
     # 1) 基于 history 初始化消息列表（为每条消息打来源；字段顺序为 role, content, source）
     constructed: List[Dict[str, Any]] = []
@@ -186,8 +221,7 @@ def construct(
                 continue
             mode = str(wb.get("mode", "always"))
             if mode == "conditional":
-                wid = wb.get("id")
-                if wid is None or int(wid) not in trig_set:
+                if not _is_triggered_by_keys(history_text, wb.get("keys")):
                     continue
             depth = int(wb.get("depth", DEFAULT_DEPTH) or DEFAULT_DEPTH)
             order = int(wb.get("order", DEFAULT_ORDER) or DEFAULT_ORDER)
@@ -234,5 +268,7 @@ def construct(
                 "source": src,
             })
 
-    # 不再返回 trace，直接返回 messages
-    return {"messages": constructed}
+    # 不再返回 trace，仅返回一套“带来源”的消息序列
+    return {
+        "messages": constructed
+    }

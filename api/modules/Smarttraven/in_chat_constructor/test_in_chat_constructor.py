@@ -36,14 +36,10 @@ def main():
     with open("backend_projects/SmartTraven/data/world_books/参考用main_world.json", "r", encoding="utf-8") as f:
         world_books_doc = json.load(f)
 
-    # 命中 conditional 世界书 id
-    triggered_worldbook_ids = [2]
-
     payload = {
         "history": history,
         "presets_in_chat": presets,
-        "world_books": world_books_doc,
-        "triggered_worldbook_ids": triggered_worldbook_ids
+        "world_books": world_books_doc
     }
 
     print("调用 API: modules/smarttraven/in_chat_constructor/construct")

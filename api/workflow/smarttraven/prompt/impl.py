@@ -36,7 +36,6 @@ async def assemble_full(
     presets: Dict[str, Any],
     world_books: Any,
     history: List[Dict[str, Any]],
-    triggered_worldbook_ids: List[int],
     character: Optional[Dict[str, Any]] = None,
     persona: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -53,7 +52,6 @@ async def assemble_full(
     # 2) framing（前缀 + 规范化历史）
     framing_payload = {
         "history": history or [],
-        "triggered_worldbook_ids": triggered_worldbook_ids or [],
         "world_books": combined_wb,
         "presets_doc": presets or {},
         "character": character or {},
@@ -66,18 +64,22 @@ async def assemble_full(
         "POST",
         "modules",
     )
-    prefix_messages = framing_res.get("messages", []) or []
-    normalized_history = framing_res.get("normalized_history", []) or []
-
+    prefix_with_source = framing_res.get("messages", []) or []
+    # 从 framing 的大消息块中提取“历史消息”作为 in-chat 的输入
+    history_for_inchat = [
+        {"role": m.get("role"), "content": m.get("content")}
+        for m in prefix_with_source
+        if isinstance(m.get("source"), dict) and m["source"].get("type") == "history"
+    ]
+ 
     # 3) in-chat（在历史中按 depth/order 注入 in-chat 预设与世界书）
     presets_split = _split_presets(presets or {})
     presets_in_chat = presets_split["in_chat"]
-
+ 
     in_chat_payload = {
-        "history": normalized_history,
+        "history": history_for_inchat,
         "presets_in_chat": presets_in_chat,
         "world_books": combined_wb,
-        "triggered_worldbook_ids": triggered_worldbook_ids or [],
     }
     inchat_res = await asyncio.to_thread(
         core.call_api,
@@ -86,8 +88,8 @@ async def assemble_full(
         "POST",
         "modules",
     )
-    in_chat_messages = inchat_res.get("messages", []) or []
-
-    # 4) 拼接
-    final_messages = list(prefix_messages) + list(in_chat_messages)
+    in_chat_with_source = inchat_res.get("messages", []) or []
+ 
+    # 4) 拼接（只输出“带来源”的完整消息）
+    final_messages = list(prefix_with_source) + list(in_chat_with_source)
     return {"messages": final_messages}

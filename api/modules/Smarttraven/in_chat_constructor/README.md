@@ -24,7 +24,6 @@
   - [{"role":"system|user|assistant","content":"..."}]
 - presets_in_chat: in-chat 预设数组（参考 Default.json 的 prompts 条目结构），仅处理 position=="in-chat" 且 enabled 的条目
 - world_books: 世界书条目数组（参考 参考用main_world.json；支持嵌套数组 [[{...}], {...}]）
-- triggered_worldbook_ids: int 数组，用于筛选 mode=="conditional" 的世界书 id
 
 响应（JSON）：
 - messages: OpenAI messages 扩展数组，元素结构：
@@ -76,8 +75,7 @@ payload = {
         {"role": "user", "content": "你好"}
     ],
     "presets_in_chat": presets,
-    "world_books": world_books_doc,
-    "triggered_worldbook_ids": [2]
+    "world_books": world_books_doc
 }
 
 result = core.call_api("smarttraven/in_chat_constructor/construct", payload, method="POST", namespace="modules")
@@ -88,7 +86,7 @@ curl（假设网关端口 8050）
 ```bash
 curl -s -X POST "http://127.0.0.1:8050/api/modules/smarttraven/in_chat_constructor/construct" \
   -H "Content-Type: application/json" \
-  -d "{\"history\":[{\"role\":\"system\",\"content\":\"系统开场\"},{\"role\":\"user\",\"content\":\"你好\"}],\"presets_in_chat\":[{\"position\":\"in-chat\",\"enabled\":true,\"role\":\"system\",\"depth\":0,\"order\":98,\"name\":\"示例\",\"content\":\"注入示例\"}],\"world_books\":[[{\"id\":2,\"name\":\"艾拉的背景\",\"mode\":\"conditional\",\"position\":\"user\",\"depth\":0,\"order\":101,\"enabled\":true,\"content\":\"艾拉是机械工程师\"}]],\"triggered_worldbook_ids\":[2]}"
+  -d "{\"history\":[{\"role\":\"system\",\"content\":\"系统开场\"},{\"role\":\"user\",\"content\":\"你好\"}],\"presets_in_chat\":[{\"position\":\"in-chat\",\"enabled\":true,\"role\":\"system\",\"depth\":0,\"order\":98,\"name\":\"示例\",\"content\":\"注入示例\"}],\"world_books\":[[{\"id\":2,\"name\":\"艾拉的背景\",\"mode\":\"conditional\",\"position\":\"user\",\"depth\":0,\"order\":101,\"enabled\":true,\"content\":\"艾拉是机械工程师\"}]]}"
 ```
 
 

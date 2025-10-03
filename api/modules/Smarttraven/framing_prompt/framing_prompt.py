@@ -16,21 +16,8 @@ from .impl import assemble as _assemble
         "type": "object",
         "properties": {
             "history": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "role": {"type": "string", "enum": ["system", "user", "assistant"]},
-                        "content": {"type": "string"},
-                        "source": {"type": "object", "additionalProperties": True}
-                    },
-                    "required": ["role", "content"],
-                    "additionalProperties": True
-                }
-            },
-            "triggered_worldbook_ids": {
-                "type": "array",
-                "items": {"type": "integer"}
+                "type": ["array", "object"],
+                "additionalProperties": True
             },
             "world_books": {
                 "type": ["array", "object"]
@@ -52,7 +39,7 @@ from .impl import assemble as _assemble
                 "additionalProperties": True
             }
         },
-        "required": ["history", "triggered_worldbook_ids"]
+        "required": ["history"]
     },
     output_schema={
         "type": "object",
@@ -68,26 +55,13 @@ from .impl import assemble as _assemble
                     },
                     "required": ["role", "content", "source"]
                 }
-            },
-            "normalized_history": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "role": {"type": "string", "enum": ["system", "user", "assistant"]},
-                        "content": {"type": "string"},
-                        "source": {"type": "object", "additionalProperties": True}
-                    },
-                    "required": ["role", "content", "source"]
-                }
             }
         },
-        "required": ["messages", "normalized_history"]
+        "required": ["messages"]
     },
 )
 def assemble(
     history: List[Dict[str, Any]],
-    triggered_worldbook_ids: List[int],
     world_books: Any = None,
     presets_relative: Optional[List[Dict[str, Any]]] = None,
     presets_doc: Optional[Dict[str, Any]] = None,
@@ -103,7 +77,6 @@ def assemble(
     """
     return _assemble(
         history=history,
-        triggered_worldbook_ids=triggered_worldbook_ids,
         world_books=world_books,
         presets_relative=presets_relative,
         presets_doc=presets_doc,

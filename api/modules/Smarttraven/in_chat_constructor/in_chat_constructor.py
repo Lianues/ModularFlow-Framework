@@ -32,13 +32,9 @@ from .impl import construct as _construct
             },
             "world_books": {
                 "type": ["array", "object"]
-            },
-            "triggered_worldbook_ids": {
-                "type": "array",
-                "items": {"type": "integer"}
             }
         },
-        "required": ["history", "presets_in_chat", "world_books", "triggered_worldbook_ids"]
+        "required": ["history", "presets_in_chat", "world_books"]
     },
     output_schema={
         "type": "object",
@@ -63,11 +59,9 @@ def construct(
     history: List[Dict[str, Any]],
     presets_in_chat: List[Dict[str, Any]],
     world_books: Any,
-    triggered_worldbook_ids: List[int],
 ) -> Dict[str, Any]:
     return _construct(
         history=history,
         presets_in_chat=presets_in_chat,
         world_books=world_books,
-        triggered_worldbook_ids=triggered_worldbook_ids,
     )

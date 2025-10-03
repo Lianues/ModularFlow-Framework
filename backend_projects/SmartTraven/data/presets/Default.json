@@ -92,7 +92,7 @@
         {
             "identifier": "enhanceDefinitions",
             "name": "Enhance Definitions",
-            "enabled": false,
+            "enabled": true,
             "role": "system",
             "position": "relative",
             "content": "If you have more knowledge of {{char}}, add to the character's lore and personality to enhance them but keep the Character Sheet's definitions absolute."
@@ -137,7 +137,7 @@
         {
             "identifier": "57cf3151-9cf6-4499-a50a-f03135a3deb6",
             "name": "庄园领主",
-            "enabled": null,
+            "enabled": true,
             "role": "system",
             "position": "in-chat",
             "depth": 0,

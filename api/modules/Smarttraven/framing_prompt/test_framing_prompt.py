@@ -38,7 +38,6 @@ def main():
     # 用例 1：history 为原始 OpenAI messages（无 source）→ 期望 normalized_history 自动补齐 source
     payload_raw = {
         "history": conversation_doc,
-        "triggered_worldbook_ids": [2],  # 示例：cond id，可留空
         "world_books": world_books_doc,
         "presets_doc": presets_doc,
         # charDescription 需要 description，这里示例数据 description 为空也可
@@ -49,34 +48,43 @@ def main():
     assert isinstance(res_raw, dict), "assemble 返回结果应为字典"
 
     prefix_msgs = res_raw.get("messages", [])
-    norm_hist = res_raw.get("normalized_history", [])
-    assert isinstance(prefix_msgs, list) and isinstance(norm_hist, list), "messages/normalized_history 应为数组"
-    assert len(norm_hist) >= 1, "normalized_history 不应为空"
-    assert isinstance(norm_hist[0].get("source"), dict), "历史第一条应包含 source 对象"
-    assert norm_hist[0]["source"].get("type") == "history" and norm_hist[0]["source"].get("id") == "history_0", \
-        "history[0] 的 source 应为 history_0"
+    assert isinstance(prefix_msgs, list) and len(prefix_msgs) >= 1, "messages 不应为空"
+    # 断言：应在“最终 messages”中检测到 history_0
+    history0 = next((m for m in prefix_msgs
+                     if isinstance(m.get("source"), dict)
+                     and m["source"].get("type") == "history"
+                     and m["source"].get("id") == "history_0"), None)
+    assert history0 is not None, "应包含带来源的 history_0"
+ 
+    # 断言：应在“最终 messages”中以顺序形式包含各项（如存在 world_book/relative 条目）
+    combined = list(prefix_msgs)
+    first_history_index = next((idx for idx, m in enumerate(combined)
+                                if isinstance(m.get("source"), dict) and m["source"].get("type") == "history"), None)
+    assert first_history_index is not None, "应当存在至少一条历史消息"
 
     # 用例 2：history 已含 source → 期望透传 source 而不覆盖
     processed_history = [
-        {"role": "user", "content": "你好", "source": {"type": "history", "id": "history_0", "index": 0}}
+        {"role": "user", "content": "你好艾拉", "source": {"type": "history", "id": "history_0", "index": 0}}
     ]
     payload_processed = {
         "history": processed_history,
-        "triggered_worldbook_ids": [],
         "world_books": world_books_doc,
         "presets_doc": presets_doc,
     }
     res_proc = core.call_api("smarttraven/framing_prompt/assemble", payload_processed, method="POST", namespace="modules")
-    norm_hist2 = res_proc.get("normalized_history", [])
-    assert isinstance(norm_hist2, list) and len(norm_hist2) == 1
-    assert norm_hist2[0]["source"].get("id") == "history_0" and norm_hist2[0]["source"].get("type") == "history"
+    proc_msgs = res_proc.get("messages", [])
+    assert isinstance(proc_msgs, list) and len(proc_msgs) >= 1
+    h0 = next((m for m in proc_msgs
+               if isinstance(m.get("source"), dict)
+               and m["source"].get("id") == "history_0"
+               and m["source"].get("type") == "history"), None)
+    assert h0 is not None, "已含 source 的 history_0 应被透传"
 
-    # 展示少量结果（保持键顺序显示）
-    print(json.dumps({
-        "prefix_count": len(prefix_msgs),
-        "first_prefix": prefix_msgs[0] if prefix_msgs else None,
-        "first_history": norm_hist[0] if norm_hist else None
-    }, ensure_ascii=False, indent=2, sort_keys=False))
+    # 直接打印完整 API 响应
+    print(json.dumps({"res_raw": res_raw}, ensure_ascii=False, indent=2, sort_keys=False))
+
+    # 用例 2 的完整响应
+    print(json.dumps({"res_proc": res_proc}, ensure_ascii=False, indent=2, sort_keys=False))
 
     print("OK: framing_prompt tests passed")
 

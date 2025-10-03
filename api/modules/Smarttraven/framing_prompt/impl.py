@@ -79,6 +79,42 @@ def _sort_sources(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ),
     )
 
+def _collect_history_text(history: List[Dict[str, Any]]) -> str:
+    """将原始 history 的 content 拼接为文本（区分大小写）用于关键词匹配。"""
+    texts: List[str] = []
+    for msg in (history or []):
+        try:
+            c = (msg or {}).get("content")
+        except Exception:
+            c = None
+        if isinstance(c, str):
+            texts.append(c)
+    return "\n".join(texts)
+
+def _is_triggered_by_keys(history_text: str, keys: Any) -> bool:
+    """
+    基于 keys 触发逻辑（区分大小写）：
+    - True：存在 keys 且至少一个关键词命中
+    - False：keys 缺失/为 0/为空数组/未命中
+    """
+    if keys == 0:
+        return False
+    key_list: List[str] = []
+    if isinstance(keys, str):
+        key_list = [keys]
+    elif isinstance(keys, list):
+        key_list = [str(k) for k in keys if k is not None]
+    else:
+        return False
+    key_list = [k.strip() for k in key_list if isinstance(k, str) and k.strip()]
+    if not key_list:
+        return False
+    text = history_text or ""
+    for k in key_list:
+        if k in text:
+            return True
+    return False
+
 
 def _build_source_for_history(index: int) -> Dict[str, Any]:
     """历史消息的来源字段，字段顺序：type → id → index。"""
@@ -156,11 +192,8 @@ def _collect_relative_presets(
     presets_doc: Optional[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    收集 relative 预设条目。
-    - 优先使用 presets_relative；否则尝试从 presets_doc.prompts 过滤 position=="relative"
-    - 返回带排序辅助字段的条目列表
+    收集 relative 预设条目（仅 enabled==True，保持文档出现顺序；不排序）。
     """
-    candidates: List[Dict[str, Any]] = []
     rel: List[Dict[str, Any]] = []
 
     if isinstance(presets_relative, list):
@@ -170,51 +203,53 @@ def _collect_relative_presets(
         if isinstance(prompts, list):
             rel = [p for p in prompts if isinstance(p, dict) and str(p.get("position")) == "relative"]
 
+    entries: List[Dict[str, Any]] = []
     for i, p in enumerate(rel):
-        if not _is_enabled(p.get("enabled", True)):
-            # 对占位符类（如 worldInfoBefore/After）通常未显式 enabled，此处 None 视为 True；显式 False 则跳过
+        # 仅显式 True 视为启用
+        if p.get("enabled") is not True:
             continue
         role = str(p.get("role", "system")).lower()
         role = role if role in ALLOWED_ROLES else "system"
-        candidates.append({
+        entries.append({
             "data": p,
             "type": "preset",
             "order": int(p.get("order", DEFAULT_ORDER) or DEFAULT_ORDER),
             "role": role,
             "internal_order": i,
         })
-    return _sort_sources(candidates)
+    return entries
 
 
 def _world_info_messages(
     position: str,
     world_books: Any,
-    triggered_ids: set[int],
+    history_text: str,
 ) -> List[Dict[str, Any]]:
     """
     构建 before_char / after_char 的世界书消息列表。
-    - 过滤：position 精确匹配、enabled、content 非空、mode 允许（always 或 conditional & 命中）
+    - 过滤：position 精确匹配、enabled==True、content 非空、mode 允许（always 或 conditional & 触发）
+    - conditional 仅依据 keys 命中 history；若 keys 缺失/为 0/为空数组则不触发
     - 排序：order 升序 → 角色优先级 → internal_order
     - 每条消息不合并，逐条输出
     """
     flat = _flatten_world_books(world_books)
     wb_sources: List[Dict[str, Any]] = []
-
+ 
     for i, wb in enumerate(flat):
         if not isinstance(wb, dict):
             continue
         pos = str(wb.get("position", ""))
         if pos != position:
             continue
-        if not _is_enabled(wb.get("enabled", True)):
+        # 仅显式 True 视为启用
+        if wb.get("enabled") is not True:
             continue
         content = wb.get("content")
         if not isinstance(content, str) or content.strip() == "":
             continue
         mode = str(wb.get("mode", "always"))
         if mode == "conditional":
-            wid = wb.get("id")
-            if wid is None or int(wid) not in triggered_ids:
+            if not _is_triggered_by_keys(history_text, wb.get("keys")):
                 continue
         role = _map_wb_pos_to_role(pos)
         wb_sources.append({
@@ -224,7 +259,7 @@ def _world_info_messages(
             "role": role,
             "internal_order": i,
         })
-
+ 
     sorted_wb = _sort_sources(wb_sources)
     out: List[Dict[str, Any]] = []
     for e in sorted_wb:
@@ -244,8 +279,7 @@ def _world_info_messages(
 
 
 def assemble(
-    history: List[Dict[str, Any]],
-    triggered_worldbook_ids: List[int],
+    history: Any,
     world_books: Union[List[Any], Dict[str, Any], None] = None,
     presets_relative: Optional[List[Dict[str, Any]]] = None,
     presets_doc: Optional[Dict[str, Any]] = None,
@@ -253,67 +287,63 @@ def assemble(
     persona: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    构建前缀提示词，并返回规范化后的历史消息。
-
-    入参
-    - history: OpenAI messages 数组（若条目无 source，将补齐）
-    - triggered_worldbook_ids: 命中的 conditional 世界书 id 列表
-    - world_books: 世界书条目数组（支持嵌套）
-    - presets_relative: 已过滤好的 relative 预设（可选）
-    - presets_doc: Default.json 文档（可选；当未提供 presets_relative 时从其中过滤）
-    - character: 角色卡（可选；用于 charDescription）
-    - persona: 用户画像（可选；用于 personaDescription）
-
-    返回
-    - {
-        "messages": prefix_messages,           # 前缀提示词（每条：role → content → source）
-        "normalized_history": normalized_list  # 补齐 source 的历史消息（每条：role → content → source）
-      }
+    构建“框架提示词”大消息块（仅输出带来源的 messages）：
+    - 输入 history 可为数组或 {"messages":[...]}；无 source 时按 {"type":"history","id":"history_i","index":i} 补齐
+    - 仅处理 position=="relative" 且 enabled==True 的预设，保持文档出现顺序（跳过 "in-chat"）
+    - chatHistory：在当前位置插入归一化后的历史消息
+    - worldInfoBefore/After：注入对应 position 的世界书（enabled==True + keys 命中，大小写敏感）
+    - charDescription/personaDescription：使用传入的 description
     """
     # 0) 归一化入参
-    trig_set = set(int(x) for x in (triggered_worldbook_ids or []))
-    history = history or []
     world_books = world_books or []
-    sorted_rel = _collect_relative_presets(presets_relative, presets_doc)
 
-    # 1) 规范化 history（每条补齐 source，字段顺序 role → content → source）
+    # 提取原始 history 列表（支持 {"messages":[...]} 或直接数组）
+    raw_hist: List[Dict[str, Any]] = []
+    if isinstance(history, dict) and isinstance(history.get("messages"), list):
+        raw_hist = history.get("messages", []) or []
+    elif isinstance(history, list):
+        raw_hist = history or []
+
+    # 规范化历史（补齐 source）
     normalized_history: List[Dict[str, Any]] = []
-    for i, msg in enumerate(history):
+    for i, msg in enumerate(raw_hist):
         if not isinstance(msg, dict):
             continue
         role = str(msg.get("role", "")).lower()
         content = msg.get("content", "")
         if role not in ALLOWED_ROLES:
-            # 容错：非法角色回退为 user，以避免中断流程
             role = "user"
         if not isinstance(content, str):
             content = "" if content is None else str(content)
         src = msg.get("source")
         if not isinstance(src, dict):
             src = _build_source_for_history(i)
-        normalized_history.append({
-            "role": role,
-            "content": content,
-            "source": src,
-        })
+        normalized_history.append({"role": role, "content": content, "source": src})
 
-    # 2) 基于 relative 预设构建 prefix
-    prefix: List[Dict[str, Any]] = []
-    for e in sorted_rel:
+    # 用于 keys 匹配（大小写敏感）
+    history_text = _collect_history_text(normalized_history)
+
+    # 1) 收集 relative 预设（仅 enabled==True，保持文档顺序；跳过 in-chat）
+    rel_entries = _collect_relative_presets(presets_relative, presets_doc)
+
+    # 2) 按顺序遍历 relative 构建（在 chatHistory 位置插入历史）
+    combined: List[Dict[str, Any]] = []
+    for e in rel_entries:
         p = e["data"]
         identifier = str(p.get("identifier", "") or "")
         role = e["role"]
 
-        # chatHistory：忽略（由 in_chat_constructor 处理真正的历史）
+        # chatHistory：在当前位置注入归一化历史
         if identifier == "chatHistory":
+            combined.extend(normalized_history)
             continue
 
         # world info before/after
         if identifier == "worldInfoBefore":
-            prefix.extend(_world_info_messages("before_char", world_books, trig_set))
+            combined.extend(_world_info_messages("before_char", world_books, history_text))
             continue
         if identifier == "worldInfoAfter":
-            prefix.extend(_world_info_messages("after_char", world_books, trig_set))
+            combined.extend(_world_info_messages("after_char", world_books, history_text))
             continue
 
         # char / persona
@@ -322,7 +352,7 @@ def assemble(
             if isinstance(character, dict):
                 desc = character.get("description") or ""
             if isinstance(desc, str) and desc.strip():
-                prefix.append({
+                combined.append({
                     "role": role,
                     "content": desc,
                     "source": _build_source_for_character(character or {}),
@@ -334,25 +364,22 @@ def assemble(
             if isinstance(persona, dict):
                 pdesc = persona.get("description") or ""
             if isinstance(pdesc, str) and pdesc.strip():
-                prefix.append({
+                combined.append({
                     "role": role,
                     "content": pdesc,
                     "source": _build_source_for_persona(persona or {}),
                 })
             continue
 
-        # 其他 relative 预设（普通文本）
+        # 普通 relative 文本
         content = p.get("content", "")
         if isinstance(content, str) and content.strip():
-            pid = p.get("identifier") or p.get("name") or str(e.get("internal_order", 0))
+            pid = p.get("identifier") or p.get("name") or ""
             src = _build_source_for_preset(p, source_id=f"preset_{pid}")
-            prefix.append({
+            combined.append({
                 "role": role,
                 "content": content,
                 "source": src,
             })
 
-    return {
-        "messages": prefix,
-        "normalized_history": normalized_history,
-    }
+    return {"messages": combined}
