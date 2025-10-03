@@ -592,7 +592,8 @@ class APIGateway:
                             if _ins.iscoroutinefunction(fn):
                                 result = await fn(**(data or {}))
                             else:
-                                result = fn(**(data or {})) if data else fn()
+                                loop = asyncio.get_running_loop()
+                                result = await loop.run_in_executor(None, (lambda: fn(**(data or {})) if data else fn()))
                             return result
                         except Exception as e:
                             return {"error": str(e)}
