@@ -49,32 +49,15 @@ async def assemble_full(
     # 1) 世界书透传（不做扁平与合并；上游负责准备完整 world_books）
     combined_wb: Any = world_books if world_books is not None else []
 
-    # 2) framing（前缀 + 规范化历史）
-    framing_payload = {
-        "history": history or [],
-        "world_books": combined_wb,
-        "presets_doc": presets or {},
-        "character": character or {},
-        "persona": persona or {},
-    }
-    framing_res = await asyncio.to_thread(
-        core.call_api,
-        "smarttraven/framing_prompt/assemble",
-        framing_payload,
-        "POST",
-        "modules",
-    )
-    prefix_with_source = framing_res.get("messages", []) or []
-    # 从 framing 的大消息块中提取“历史消息”作为 in-chat 的输入
-    history_for_inchat = [
-        {"role": m.get("role"), "content": m.get("content")}
-        for m in prefix_with_source
-        if isinstance(m.get("source"), dict) and m["source"].get("type") == "history"
-    ]
- 
-    # 3) in-chat（在历史中按 depth/order 注入 in-chat 预设与世界书）
+    # 2) in-chat（先按 depth/order 注入 in-chat 预设与世界书，产出“带来源”的对话块）
     presets_split = _split_presets(presets or {})
     presets_in_chat = presets_split["in_chat"]
+ 
+    # history 可为数组或 {"messages":[...]}，in_chat_constructor 支持数组形态
+    if isinstance(history, dict) and isinstance(history.get("messages"), list):
+        history_for_inchat = history.get("messages") or []
+    else:
+        history_for_inchat = history or []
  
     in_chat_payload = {
         "history": history_for_inchat,
@@ -90,6 +73,20 @@ async def assemble_full(
     )
     in_chat_with_source = inchat_res.get("messages", []) or []
  
-    # 4) 拼接（只输出“带来源”的完整消息）
-    final_messages = list(prefix_with_source) + list(in_chat_with_source)
+    # 3) framing（将 in-chat 结果替代 chatHistory，占位于 relative 的顺序位置）
+    framing_payload = {
+        "history": {"messages": in_chat_with_source},
+        "world_books": combined_wb,
+        "presets_doc": presets or {},
+        "character": character or {},
+        "persona": persona or {},
+    }
+    framing_res = await asyncio.to_thread(
+        core.call_api,
+        "smarttraven/framing_prompt/assemble",
+        framing_payload,
+        "POST",
+        "modules",
+    )
+    final_messages = framing_res.get("messages", []) or []
     return {"messages": final_messages}

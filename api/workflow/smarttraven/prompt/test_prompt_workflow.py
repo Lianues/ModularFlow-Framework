@@ -57,16 +57,19 @@ def main():
             "world_books": world_books_doc,
             "presets_doc": presets_doc
         }
-        fr = core.call_api("smarttraven/framing_prompt/assemble", framing_payload, method="POST", namespace="modules")
-        prefix_with_source = fr.get("messages", []) if isinstance(fr, dict) else []
-        normalized_history = fr.get("normalized_history", []) if isinstance(fr, dict) else []
+        # 回退路径：先 in-chat，再把 in-chat 结果替换到 framing 的 chatHistory 中
         inchat_payload = {
-            "history": normalized_history,
+            "history": conversation_doc,  # 使用原始 history，保证关键词可命中
             "presets_in_chat": _split_inchat(presets_doc),
             "world_books": world_books_doc
         }
         ic = core.call_api("smarttraven/in_chat_constructor/construct", inchat_payload, method="POST", namespace="modules")
-        messages = list(prefix_with_source or []) + list(ic.get("messages", []) if isinstance(ic, dict) else [])
+        fr = core.call_api("smarttraven/framing_prompt/assemble", {
+            "history": {"messages": (ic.get("messages", []) if isinstance(ic, dict) else [])},
+            "world_books": world_books_doc,
+            "presets_doc": presets_doc
+        }, method="POST", namespace="modules")
+        messages = fr.get("messages", []) if isinstance(fr, dict) else []
     else:
         messages = res.get("messages", [])
     assert isinstance(messages, list) and len(messages) > 0, "messages 应为非空数组"
@@ -101,8 +104,8 @@ def main():
     # 直接打印完整的 API 响应
     if used_fallback:
         print(json.dumps({"assemble_full_original_response": res}, ensure_ascii=False, indent=2, sort_keys=False))
-        print(json.dumps({"framing_assemble_response": fr}, ensure_ascii=False, indent=2, sort_keys=False))
         print(json.dumps({"in_chat_construct_response": ic}, ensure_ascii=False, indent=2, sort_keys=False))
+        print(json.dumps({"framing_assemble_response": fr}, ensure_ascii=False, indent=2, sort_keys=False))
     else:
         print(json.dumps({"assemble_full_response": res}, ensure_ascii=False, indent=2, sort_keys=False))
 
