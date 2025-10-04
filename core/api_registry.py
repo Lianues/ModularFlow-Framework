@@ -163,12 +163,8 @@ def register_api(
             ...
     """
     def decorator(func):
+        # 仅在底层 register 中打印一次，避免重复打印“已注册API”
         _registry.register(path, func, input_schema, output_schema, name=name, description=description)
-        spec = _registry.get_spec(path)
-        try:
-            print(f"✓ 已注册API: {spec}")
-        except UnicodeEncodeError:
-            print(f"[OK] 已注册API: {spec}")
         return func
     return decorator
 
