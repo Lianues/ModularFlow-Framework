@@ -17,18 +17,7 @@ SmartTraven Prompt RAW Workflow Registration (prompt_raw.py)
 """
 from typing import Any, Dict, List, Optional
 
-# 兼容直接运行脚本时的路径问题（仅在 __main__ 下兜底，不硬编码数据文件）
-try:
-    import core  # type: ignore
-except ModuleNotFoundError:
-    import os, sys
-    if __name__ == "__main__":
-        ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-        if ROOT not in sys.path:
-            sys.path.insert(0, ROOT)
-        import core  # type: ignore
-    else:
-        raise
+import core  # type: ignore
 
 from .impl import assemble_full as _assemble_full
 
