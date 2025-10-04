@@ -4,67 +4,123 @@
 API 封装层：SmartTraven.regex_replace
 - 根据正则规则（参考 backend_projects/SmartTraven/data/regex_rules/*.json）对 messages 或 text 执行替换
 - 支持 placement: before_macro / after_macro
-- 输出三套视图：original / user_view / assistant_view
+- 单视图 API：apply_messages 与 apply_text，需显式指定 view（user_view|assistant_view）；返回单一结果字段（message 或 text）
 """
 from typing import Any, Dict, List, Optional
 import core
-from .impl import apply_regex as _apply_regex
+from .impl import (
+    apply_regex_messages_view as _apply_messages_view,
+    apply_regex_text_view as _apply_text_view,
+)
+import json
+
+def _dbg(label, data=None):
+    # 调试关闭：不输出任何日志
+    return None
 
 
 @core.register_api(
-    path="smarttraven/regex_replace/apply",
-    name="正则替换（支持 messages 与 text）",
-    description="根据规则文件对提示词进行正则替换，支持 placement before/after，按 views 产出 user_view/assistant_view，并透传 original。",
+    path="smarttraven/regex_replace/apply_messages",
+    name="正则替换（messages，单视图）",
+    description="对消息数组，根据 view 仅应用对应规则视图，返回单一 message 结果。",
     input_schema={
         "type": "object",
         "properties": {
-            "rules": {
-                "type": ["array", "object"],
-                "description": "正则规则数组或 {rules:[...]} 结构，参考 backend_projects/SmartTraven/data/regex_rules/*.json"
-            },
-            "placement": {
-                "type": "string",
-                "enum": ["before_macro", "after_macro"]
-            },
+            "rules": {"type": ["array", "object"]},
+            "placement": {"type": "string", "enum": ["before_macro", "after_macro"]},
+            "view": {"type": "string", "enum": ["user_view", "assistant_view"]},
             "messages": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+                        "role": {"type": "string", "enum": ["system", "user", "assistant", "thinking"]},
                         "content": {"type": "string"},
                         "source": {"type": "object", "additionalProperties": True}
                     },
                     "required": ["role", "content"],
                     "additionalProperties": True
                 }
-            },
-            "text": {"type": "string"}
+            }
         },
-        "required": ["rules", "placement"],
+        "required": ["rules", "placement", "view", "messages"],
         "additionalProperties": False
     },
     output_schema={
         "type": "object",
         "properties": {
-            "original": {"type": "object", "additionalProperties": True},
-            "user_view": {"type": "object", "additionalProperties": True},
-            "assistant_view": {"type": "object", "additionalProperties": True},
-            "placement": {"type": "string"}
+            "message": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "role": {"type": "string", "enum": ["system", "user", "assistant", "thinking"]},
+                        "content": {"type": "string"},
+                        "source": {"type": "object", "additionalProperties": True}
+                    },
+                    "required": ["role", "content"],
+                    "additionalProperties": True
+                }
+            }
         },
-        "required": ["original", "user_view", "assistant_view", "placement"],
+        "required": ["message"],
         "additionalProperties": False
     },
 )
-def apply(
+def apply_messages(
     rules: Any,
     placement: str,
-    messages: Optional[List[Dict[str, Any]]] = None,
-    text: Optional[str] = None,
+    view: str,
+    messages: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    return _apply_regex(
-        rules=rules,
-        placement=placement,
-        messages=messages,
-        text=text,
-    )
+    try:
+        _dbg("apply_messages.enter", {
+            "placement": placement,
+            "view": view,
+            "rules_type": type(rules).__name__,
+            "rules_len": (len(rules) if isinstance(rules, list) else (len((rules or {}).get("rules", [])) if isinstance(rules, dict) else None)),
+            "messages_count": len(messages or []),
+            "first_content": (messages[0].get("content") if isinstance(messages, list) and messages else ""),
+        })
+    except Exception:
+        pass
+    res = _apply_messages_view(rules=rules, placement=placement, view=view, messages=messages)
+    try:
+        out = res.get("message") if isinstance(res, dict) else None
+        _dbg("apply_messages.exit_first", (out[0].get("content") if isinstance(out, list) and out else ""))
+    except Exception:
+        pass
+    return res
+
+
+@core.register_api(
+    path="smarttraven/regex_replace/apply_text",
+    name="正则替换（text，单视图）",
+    description="对纯文本，根据 view 仅应用对应规则视图，返回单一 text 结果。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "rules": {"type": ["array", "object"]},
+            "placement": {"type": "string", "enum": ["before_macro", "after_macro"]},
+            "view": {"type": "string", "enum": ["user_view", "assistant_view"]},
+            "text": {"type": "string"}
+        },
+        "required": ["rules", "placement", "view", "text"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"}
+        },
+        "required": ["text"],
+        "additionalProperties": False
+    },
+)
+def apply_text(
+    rules: Any,
+    placement: str,
+    view: str,
+    text: str,
+) -> Dict[str, Any]:
+    return _apply_text_view(rules=rules, placement=placement, view=view, text=text)

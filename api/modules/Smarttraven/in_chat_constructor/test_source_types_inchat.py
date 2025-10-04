@@ -25,7 +25,14 @@ def _ensure_gateway():
     gateway = core.get_api_gateway()
     sm = core.get_service_manager()
     sm.load_project_modules()
-    gateway.start_server(background=True)
+    try:
+        gateway.start_server(background=True)
+    except Exception as e:
+        txt = str(e)
+        if ("10048" in txt) or ("address" in txt.lower()) or ("bind" in txt.lower()):
+            pass
+        else:
+            raise
     time.sleep(0.25)
     return gateway
 

@@ -20,7 +20,7 @@ from .impl import construct as _construct
                 "items": {
                     "type": "object",
                     "properties": {
-                        "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+                        "role": {"type": "string", "enum": ["system", "user", "assistant", "thinking"]},
                         "content": {"type": "string"}
                     },
                     "required": ["role", "content"]
@@ -44,7 +44,7 @@ from .impl import construct as _construct
                 "items": {
                     "type": "object",
                     "properties": {
-                        "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+                        "role": {"type": "string", "enum": ["system", "user", "assistant", "thinking"]},
                         "content": {"type": "string"},
                         "source": {"type": "object", "additionalProperties": True}
                     },

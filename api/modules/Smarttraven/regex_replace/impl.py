@@ -33,6 +33,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import re
 import copy
 import bisect
+import json
+
+def _dbg(label: str, data: Any = None) -> None:
+    # 调试关闭：不输出任何日志
+    return None
 
 
 ALLOWED_VIEWS = {"user_view", "assistant_view"}
@@ -180,28 +185,42 @@ def _filter_rules_by_placement(rules: List[Dict[str, Any]], placement: str) -> L
     return out
 
 
-def _apply_rules_to_messages(
+def _filter_rules_by_view_and_placement(rules: List[Dict[str, Any]], placement: str, view: Optional[str]) -> List[Dict[str, Any]]:
+    """
+    过滤到指定 placement 且包含指定 view 的规则；若 view 无效/为空，返回空列表（视为不执行）
+    """
+    if view not in ALLOWED_VIEWS:
+        return []
+    selected = _filter_rules_by_placement(rules, placement)
+    out: List[Dict[str, Any]] = []
+    for r in selected:
+        views = r.get("views") or []
+        if isinstance(views, list) and view in views:
+            out.append(r)
+    return out
+
+
+def _apply_rules_to_messages_for_view(
     messages: List[Dict[str, Any]],
     rules: List[Dict[str, Any]],
     placement: str,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    view: Optional[str],
+) -> List[Dict[str, Any]]:
     """
-    返回 (user_view_messages, assistant_view_messages)
-    - 均为对原 messages 的浅拷贝，仅修改 content
+    对 messages 仅应用某个视图（user_view 或 assistant_view）可见的规则，返回单视图处理后的 messages。
+    - 若 view 非法/未提供，则直接返回原始 messages（不执行）
     """
-    # 基础副本（两套视图）
-    user_view_msgs = [dict(m) for m in (messages or [])]
-    assistant_view_msgs = [dict(m) for m in (messages or [])]
+    if view not in ALLOWED_VIEWS:
+        return [dict(m) for m in (messages or [])]
 
-    # 预计算 depth
+    out_msgs = [dict(m) for m in (messages or [])]
     depths = _compute_depths(messages)
-
-    # 过滤规则（placement & enabled & views）
-    selected_rules = _filter_rules_by_placement(rules, placement)
+    selected_rules = _filter_rules_by_view_and_placement(rules, placement, view)
 
     for rule in selected_rules:
         find_regex = str(rule.get("find_regex", ""))
         replace_regex = str(rule.get("replace_regex", ""))
+        # depth 窗口
         min_d = rule.get("min_depth", 0)
         try:
             min_d = int(min_d) if min_d is not None else 0
@@ -214,119 +233,152 @@ def _apply_rules_to_messages(
             max_d = None
 
         targets = rule.get("targets", [])
-        views = [v for v in (rule.get("views") or []) if v in ALLOWED_VIEWS]
 
         # 预编译正则一次
         try:
             pattern = re.compile(find_regex)
             repl = _transform_replacement(replace_regex)
         except Exception:
-            # 正则非法则忽略此规则
             continue
 
-        for view_name in views:
-            view_msgs = user_view_msgs if view_name == "user_view" else assistant_view_msgs
-            for idx, m in enumerate(view_msgs):
-                try:
-                    d = depths[idx] if idx < len(depths) else 0
-                    if not _depth_in_range(d, min_d, max_d):
-                        continue
-                    # 使用原消息（未被修改过的结构）来判定 targets
-                    orig_m = messages[idx]
-                    if not _matches_targets(orig_m, targets):
-                        continue
-                    old = m.get("content", "")
-                    if not isinstance(old, str):
-                        old = "" if old is None else str(old)
-                    new_text = pattern.sub(repl, old)
-                    if new_text != old:
-                        m["content"] = new_text
-                except Exception:
-                    # 单条出错不影响整体
+        for idx, m in enumerate(out_msgs):
+            try:
+                d = depths[idx] if idx < len(depths) else 0
+                if not _depth_in_range(d, min_d, max_d):
+                    if idx == 0:
+                        _dbg("skip.depth", {"idx": idx, "d": d, "min": min_d, "max": max_d})
                     continue
 
-    return user_view_msgs, assistant_view_msgs
+                # 目标匹配调试（仅 idx==0 打印一次以便定位）
+                msg0 = messages[idx] if idx < len(messages) else {}
+                src0 = (msg0 or {}).get("source") or {}
+                stype0 = str(src0.get("type", "")).lower()
+                if not _matches_targets(msg0, targets):
+                    if idx == 0:
+                        _dbg("skip.targets", {"stype": stype0, "targets": targets})
+                    continue
+
+                old = m.get("content", "")
+                if not isinstance(old, str):
+                    old = "" if old is None else str(old)
+
+                new_text = pattern.sub(repl, old)
+                if new_text != old:
+                    if idx == 0:
+                        _dbg("replaced", {
+                            "idx": idx,
+                            "stype": stype0,
+                            "find": find_regex,
+                            "preview_before": old[:80],
+                            "preview_after": new_text[:80],
+                        })
+                    m["content"] = new_text
+                else:
+                    if idx == 0:
+                        _dbg("no_change_after_sub", {
+                            "idx": idx,
+                            "stype": stype0,
+                            "find": find_regex,
+                            "preview": old[:80],
+                        })
+            except Exception as e:
+                if idx == 0:
+                    _dbg("exception.at_idx0", repr(e))
+                continue
+
+    return out_msgs
 
 
-def _apply_rules_to_text(
+def _apply_rules_to_text_for_view(
     text: str,
     rules: List[Dict[str, Any]],
     placement: str,
-) -> Tuple[str, str]:
+    view: Optional[str],
+) -> str:
     """
-    对纯文本按 views 应用规则，返回 (user_view_text, assistant_view_text)
+    对纯文本仅应用某个视图可见的规则；若 view 非法/未提供，直接返回原文本
     - 对 text 不考虑 depth/targets
     """
-    txt_user = "" if text is None else str(text)
-    txt_assist = "" if text is None else str(text)
+    if view not in ALLOWED_VIEWS:
+        return "" if text is None else str(text)
 
-    selected_rules = _filter_rules_by_placement(rules, placement)
+    txt = "" if text is None else str(text)
+    selected_rules = _filter_rules_by_view_and_placement(rules, placement, view)
 
     for rule in selected_rules:
         find_regex = str(rule.get("find_regex", ""))
         replace_regex = str(rule.get("replace_regex", ""))
-        views = [v for v in (rule.get("views") or []) if v in ALLOWED_VIEWS]
         try:
             pattern = re.compile(find_regex)
             repl = _transform_replacement(replace_regex)
         except Exception:
             continue
-        if "user_view" in views:
-            try:
-                txt_user = pattern.sub(repl, txt_user)
-            except Exception:
-                pass
-        if "assistant_view" in views:
-            try:
-                txt_assist = pattern.sub(repl, txt_assist)
-            except Exception:
-                pass
+        try:
+            txt = pattern.sub(repl, txt)
+        except Exception:
+            pass
 
-    return txt_user, txt_assist
+    return txt
 
 
-def apply_regex(
+def apply_regex_messages_view(
     rules: Any,
     placement: str,
+    view: Optional[str],
     messages: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    单视图消息替换：
+    - 若 view 非法/未提供：不执行，直接返回 {"message": messages}
+    - 否则仅应用指定 view 的规则，返回 {"message": processed_messages}
+    """
+    try:
+        _dbg("apply_messages.enter", {
+            "placement": placement,
+            "view": view,
+            "messages_is_list": isinstance(messages, list),
+            "rules_type": type(rules).__name__,
+            "rules_len": (len(rules) if isinstance(rules, list) else (len((rules or {}).get("rules", [])) if isinstance(rules, dict) else None)),
+        })
+    except Exception:
+        pass
+
+    if not isinstance(messages, list):
+        return {"message": []}
+    placement_norm = str(placement or "").lower()
+    if placement_norm not in ("before_macro", "after_macro"):
+        return {"message": [dict(m) for m in (messages or [])]}
+
+    try:
+        rule_list = _normalize_rules(rules)
+        _dbg("apply_messages.rules_norm_len", len(rule_list))
+    except Exception as e:
+        _dbg("apply_messages.normalize.exception", repr(e))
+        rule_list = []
+
+    try:
+        out_msgs = _apply_rules_to_messages_for_view(messages, rule_list, placement_norm, view)
+        _dbg("apply_messages.out_first", (out_msgs[0].get("content") if out_msgs else ""))
+    except Exception as e:
+        _dbg("apply_messages.inner.exception", repr(e))
+        out_msgs = [dict(m) for m in (messages or [])]
+    return {"message": out_msgs}
+
+
+def apply_regex_text_view(
+    rules: Any,
+    placement: str,
+    view: Optional[str],
     text: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    顶层入口
-    - placement 必填：'before_macro' | 'after_macro'
-    - messages 与 text 二选一；同时提供时优先处理 messages
-    - 返回 original + user_view + assistant_view 三套视图
-      - messages 输入：各视图包含 {messages:[...]}（原结构保留，仅 content 可能变更）
-      - text 输入：各视图包含 {text:"..."}
+    单视图纯文本替换：
+    - 若 view 非法/未提供：不执行，直接返回 {"text": 原文}
+    - 否则仅应用指定 view 的规则，返回 {"text": processed_text}
     """
     placement_norm = str(placement or "").lower()
     if placement_norm not in ("before_macro", "after_macro"):
-        raise ValueError("placement 必须为 'before_macro' 或 'after_macro'")
-
+        return {"text": "" if text is None else str(text)}
     rule_list = _normalize_rules(rules)
-
-    # 优先处理 messages
-    if isinstance(messages, list):
-        # 透传原始
-        original = [dict(m) for m in messages]
-        user_view_msgs, assistant_view_msgs = _apply_rules_to_messages(original, rule_list, placement_norm)
-        return {
-            "original": {"messages": original},
-            "user_view": {"messages": user_view_msgs},
-            "assistant_view": {"messages": assistant_view_msgs},
-            "placement": placement_norm,
-        }
-
-    # 处理 text
-    if isinstance(text, str):
-        original_text = text
-        u, a = _apply_rules_to_text(original_text, rule_list, placement_norm)
-        return {
-            "original": {"text": original_text},
-            "user_view": {"text": u},
-            "assistant_view": {"text": a},
-            "placement": placement_norm,
-        }
-
-    # 二者皆未提供
-    raise ValueError("必须提供 messages（数组）或 text（字符串）中的一个")
+    out_text = _apply_rules_to_text_for_view(text or "", rule_list, placement_norm, view)
+    return {"text": out_text}

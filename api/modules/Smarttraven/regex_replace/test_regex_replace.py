@@ -77,52 +77,45 @@ def test_messages_before_after(rules):
         "placement": "before_macro",
         "messages": messages,
     }
-    res_before = core.call_api("smarttraven/regex_replace/apply", payload_before, method="POST", namespace="modules")
+    # 单视图：user_view
+    payload_before = {
+        "rules": rules,
+        "placement": "before_macro",
+        "view": "user_view",
+        "messages": messages,
+    }
+    res_before = core.call_api("smarttraven/regex_replace/apply_messages", payload_before, method="POST", namespace="modules")
     assert isinstance(res_before, dict), "before_macro 返回应为字典"
-    for key in ("original", "user_view", "assistant_view"):
-        assert key in res_before, f"结果缺少 {key}"
-        assert "messages" in res_before[key], f"{key} 缺少 messages"
-        assert isinstance(res_before[key]["messages"], list)
-        assert len(res_before[key]["messages"]) == len(messages)
+    assert "message" in res_before and isinstance(res_before["message"], list)
+    assert len(res_before["message"]) == len(messages)
 
-    # 校验 before_macro 的替换效果：XML -> '移除xml'
-    uv_msgs = res_before["user_view"]["messages"]
-    av_msgs = res_before["assistant_view"]["messages"]
+    # 校验 before_macro 的替换效果：XML -> '移除xml'（仅单视图）
+    uv_msgs = res_before["message"]
 
     # index 1 的 user 消息应被替换
     assert uv_msgs[1]["content"] == "你好 移除xml world"
-    assert av_msgs[1]["content"] == "你好 移除xml world"
 
     # index 0 的 relative preset 如果 targets 包含 preset 也会被替换
-    # remove_xml_tags.json 的第一个规则 targets 包含 "preset" → 期望被替换为 '移除xml'
     assert uv_msgs[0]["content"] == "移除xml"
-    assert av_msgs[0]["content"] == "移除xml"
 
-    # 新增断言：targets 包含 'world_book' 时应命中 world_book.* 前缀（这里是 world_book.in-chat）
+    # world_book.* 前缀（这里是 world_book.in-chat）
     last = len(messages) - 1
     assert uv_msgs[last]["content"] == "移除xml", "world_book.* 应被 before_macro 规则替换（user_view）"
-    assert av_msgs[last]["content"] == "移除xml", "world_book.* 应被 before_macro 规则替换（assistant_view）"
 
     # 2) after_macro：应命中“状态栏”规则（仅 user_view）
     payload_after = {
         "rules": rules,
         "placement": "after_macro",
+        "view": "user_view",
         "messages": messages,
     }
-    res_after = core.call_api("smarttraven/regex_replace/apply", payload_after, method="POST", namespace="modules")
+    res_after = core.call_api("smarttraven/regex_replace/apply_messages", payload_after, method="POST", namespace="modules")
     assert isinstance(res_after, dict), "after_macro 返回应为字典"
-    for key in ("original", "user_view", "assistant_view"):
-        assert key in res_after, f"结果缺少 {key}"
-        assert "messages" in res_after[key], f"{key} 缺少 messages"
-        assert isinstance(res_after[key]["messages"], list)
-        assert len(res_after[key]["messages"]) == len(messages)
-
-    uv_msgs2 = res_after["user_view"]["messages"]
-    av_msgs2 = res_after["assistant_view"]["messages"]
+    assert "message" in res_after and isinstance(res_after["message"], list)
+    uv_msgs2 = res_after["message"]
 
     # index 2 的 assistant 消息应仅在 user_view 被替换（views 仅 user_view）
     assert uv_msgs2[2]["content"].startswith("这里是状态栏"), "user_view 应替换占位符"
-    assert "<StatusPlaceHolderImpl/>" in av_msgs2[2]["content"], "assistant_view 不应被替换"
 
     print("✓ messages before/after 替换测试通过")
 
@@ -132,16 +125,13 @@ def test_text_before(rules):
     payload = {
         "rules": rules,
         "placement": "before_macro",
+        "view": "assistant_view",
         "text": "<x>abc</x> 123",
     }
-    res = core.call_api("smarttraven/regex_replace/apply", payload, method="POST", namespace="modules")
-    assert isinstance(res, dict)
-    assert "original" in res and "user_view" in res and "assistant_view" in res
-    assert "text" in res["original"] and "text" in res["user_view"] and "text" in res["assistant_view"]
-
+    res = core.call_api("smarttraven/regex_replace/apply_text", payload, method="POST", namespace="modules")
+    assert isinstance(res, dict) and "text" in res
     # 根据 remove_xml_tags_rule，应把 <x>abc</x> 替换为 "移除xml"
-    assert res["user_view"]["text"].startswith("移除xml"), "user_view 文本应替换 XML"
-    assert res["assistant_view"]["text"].startswith("移除xml"), "assistant_view 文本应替换 XML"
+    assert res["text"].startswith("移除xml"), "assistant_view 文本应替换 XML"
 
     print("✓ text before 替换测试通过")
 
@@ -185,6 +175,7 @@ def main():
     demo_payload = {
         "rules": rules,
         "placement": "before_macro",
+        "view": "user_view",
         "messages": [
             {
                 "role": "user",
@@ -193,7 +184,7 @@ def main():
             }
         ],
     }
-    demo_res = core.call_api("smarttraven/regex_replace/apply", demo_payload, method="POST", namespace="modules")
+    demo_res = core.call_api("smarttraven/regex_replace/apply_messages", demo_payload, method="POST", namespace="modules")
     print(json.dumps(demo_res, ensure_ascii=False, indent=2, sort_keys=False))
 
     print("OK: regex_replace tests passed")
