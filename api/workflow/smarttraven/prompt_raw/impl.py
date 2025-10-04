@@ -68,8 +68,8 @@ async def assemble_full(
         core.call_api,
         "smarttraven/in_chat_constructor/construct",
         in_chat_payload,
-        "POST",
-        "modules",
+        method="POST",
+        namespace="modules",
     )
     in_chat_with_source = inchat_res.get("messages", []) or []
  
@@ -85,8 +85,8 @@ async def assemble_full(
         core.call_api,
         "smarttraven/framing_prompt/assemble",
         framing_payload,
-        "POST",
-        "modules",
+        method="POST",
+        namespace="modules",
     )
     final_messages = framing_res.get("messages", []) or []
     return {"messages": final_messages}

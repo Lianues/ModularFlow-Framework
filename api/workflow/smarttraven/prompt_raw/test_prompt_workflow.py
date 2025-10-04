@@ -48,7 +48,7 @@ def main():
 
     # 调用工作流 API（命名空间 workflow）
     used_fallback = False
-    res = core.call_api("smarttraven/prompt/assemble_full", payload, method="POST", namespace="workflow")
+    res = core.call_api("smarttraven/prompt_raw/assemble_full", payload, method="POST", namespace="workflow")
     if not isinstance(res, dict) or "messages" not in res:
         used_fallback = True
         # 回退方案：手动按“framing → in-chat”组装，避免工作流聚合层异常导致测试失败
