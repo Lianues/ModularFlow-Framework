@@ -651,3 +651,26 @@ def process_messages(messages: List[Dict[str, Any]],
             "final": state,
         }
     }
+
+def process_text_value(text: str,
+                       variables: Optional[Dict[str, Any]] = None,
+                       policy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    处理单个纯文本中的宏，返回处理后的文本与变量表。
+    - 按照与 process_messages 相同的规则，支持 {{...}} 与 <<...>>
+    - 严格模式默认：未定义 getvar 输出 [UndefinedVar:{name}]
+    - 不提供对话上下文（lastmessage 等历史相关宏将返回空）
+    """
+    init_state: Dict[str, Any] = dict(variables or {})
+    state: Dict[str, Any] = dict(init_state)
+    pol: Dict[str, Any] = dict(DEFAULT_POLICY)
+    if isinstance(policy, dict):
+        pol.update(policy)
+    out_text = _process_text(text, state, pol, [], 0)
+    return {
+        "text": out_text,
+        "variables": {
+            "initial": init_state,
+            "final": state,
+        }
+    }

@@ -6,7 +6,7 @@ API 封装层：SmartTraven.macro
 """
 from typing import Any, Dict, List, Optional
 import core
-from .impl import process_messages as _process_messages
+from .impl import process_messages as _process_messages, process_text_value as _process_text_value
 
 
 @core.register_api(
@@ -30,14 +30,6 @@ from .impl import process_messages as _process_messages
                 }
             },
             "variables": {"type": "object", "additionalProperties": True},
-            "policy": {
-                "type": "object",
-                "properties": {
-                    "undefined_get": {"type": "string", "enum": ["error", "empty"]},
-                    "error_token": {"type": "string"}
-                },
-                "additionalProperties": True
-            }
         },
         "required": ["messages"],
         "additionalProperties": False
@@ -78,3 +70,41 @@ def process(
     policy: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return _process_messages(messages=messages, variables=variables or {}, policy=policy or {})
+
+@core.register_api(
+    path="smarttraven/macro/process_text",
+    name="纯文本顺序宏处理（支持 {{..}} 与 <<..>>）",
+    description="按顺序处理单个纯文本中的宏，仅返回处理后的 text 与变量表（initial/final）",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "variables": {"type": "object", "additionalProperties": True},
+        },
+        "required": ["text"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "variables": {
+                "type": "object",
+                "properties": {
+                    "initial": {"type": "object", "additionalProperties": True},
+                    "final": {"type": "object", "additionalProperties": True}
+                },
+                "required": ["initial", "final"],
+                "additionalProperties": False
+            }
+        },
+        "required": ["text", "variables"],
+        "additionalProperties": False
+    },
+)
+def process_text(
+    text: str,
+    variables: Optional[Dict[str, Any]] = None,
+    policy: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return _process_text_value(text=text, variables=variables or {}, policy=policy or {})

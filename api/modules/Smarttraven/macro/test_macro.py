@@ -14,13 +14,17 @@ if str(ROOT) not in sys.path:
 import core
 
 
-def call_process(messages, variables=None, policy=None):
+def call_process(messages, variables=None):
     payload = {"messages": messages}
     if variables is not None:
         payload["variables"] = variables
-    if policy is not None:
-        payload["policy"] = policy
     return core.call_api("smarttraven/macro/process", payload, method="POST", namespace="modules")
+
+def call_process_text(text, variables=None):
+    payload = {"text": text}
+    if variables is not None:
+        payload["variables"] = variables
+    return core.call_api("smarttraven/macro/process_text", payload, method="POST", namespace="modules")
 
 
 def main():
@@ -64,6 +68,18 @@ def main():
     assert vars_obj["final"].get("a") == "2"
 
     print("✓ macro 顺序宏处理测试通过")
+
+    # 新增：测试纯文本宏处理 API（默认严格模式，无 policy 输入）
+    text = "a={{setvar:x:1}} b={{getvar:x}} c={{getvar:y}} d=<<python:3+4>>"
+    res_text = call_process_text(text, variables={"pre": "v"})
+    print(json.dumps({"macro_process_text_response": res_text}, ensure_ascii=False, indent=2, sort_keys=False))
+
+    assert isinstance(res_text, dict) and "text" in res_text and "variables" in res_text, "返回必须包含 text 与 variables"
+    assert res_text["text"] == "a= b=1 c=[UndefinedVar:y] d=7", "纯文本宏替换结果不符合预期"
+    assert res_text["variables"]["initial"].get("pre") == "v", "初始变量未正确回显"
+    assert res_text["variables"]["final"].get("x") == "1", "setvar 应写入变量表"
+
+    print("✓ macro 纯文本宏处理测试通过")
 
 
 if __name__ == "__main__":
