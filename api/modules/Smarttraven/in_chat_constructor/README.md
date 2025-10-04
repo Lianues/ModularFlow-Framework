@@ -1,114 +1,146 @@
-# SmartTraven / In-Chat Constructor（对话内构造）
+# SmartTraven.in_chat_constructor 模块说明
 
-本模块在 SmartTraven 命名空间下提供“对话内构造”能力：在既有聊天历史基础上，按 depth/order 规则注入 in-chat 预设与命中的世界书条目，并为每条消息打上来源字段 source（不合并相邻同角色）。
+位置：api/modules/SmartTraven/in_chat_constructor/
 
-- 实现层：[`impl.py`](api/modules/SmartTraven/in_chat_constructor/impl.py)
-- 封装层（API 注册）：[`in_chat_constructor.py`](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py)
-- 测试脚本：[`test_in_chat_constructor.py`](api/modules/SmartTraven/in_chat_constructor/test_in_chat_constructor.py)
+本模块在“对话历史”基础上，按 depth/order 规则将 in-chat 预设与世界书（非 before/after 的条目）注入为带来源字段的 OpenAI Chat messages 序列。模块只做“对话内（in-chat）”的注入与来源标注，不合并相邻同角色消息，且对“条件触发（conditional + keys）”进行关键词命中判断。
+
+相关代码
+- 注册封装层：[python.in_chat_constructor.in_chat_constructor.py](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:1)
+  - 注册与 Schema 定义：[python.register_api()](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:11)
+  - 封装层入口：[python.construct()](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:58)
+- 实现层（核心逻辑）：[python.in_chat_constructor.impl.py](api/modules/SmartTraven/in_chat_constructor/impl.py:1)
+  - 入口实现：[python.construct()](api/modules/SmartTraven/in_chat_constructor/impl.py:162)
+  - 世界书/预设扁平化：[python._flatten_world_books()](api/modules/SmartTraven/in_chat_constructor/impl.py:37)
+  - 候选排序（order → 角色优先级 → internal_order）：[python._sort_sources()](api/modules/SmartTraven/in_chat_constructor/impl.py:56)
+  - 历史文本拼接（用于 keys 命中判定）：[python._collect_history_text()](api/modules/SmartTraven/in_chat_constructor/impl.py:67)
+  - 条件触发（conditional + keys）：[python._is_triggered_by_keys()](api/modules/SmartTraven/in_chat_constructor/impl.py:79)
+  - 历史来源构造（规范化 type）：[python._build_source_for_history()](api/modules/SmartTraven/in_chat_constructor/impl.py:104)
+  - 预设来源构造（preset.in-chat）：[python._build_source_for_preset()](api/modules/SmartTraven/in_chat_constructor/impl.py:123)
+  - 世界书来源构造（world_book.in-chat）：[python._build_source_for_wb()](api/modules/SmartTraven/in_chat_constructor/impl.py:140)
+- 测试脚本：
+  - [python.test_in_chat_constructor.py](api/modules/SmartTraven/in_chat_constructor/test_in_chat_constructor.py:1)
 - 参考数据：
-  - 预设：[`Default.json`](backend_projects/SmartTraven/data/presets/Default.json)
-  - 世界书：[`参考用main_world.json`](backend_projects/SmartTraven/data/world_books/参考用main_world.json)
+  - [json.Default Presets（示例）](backend_projects/SmartTraven/data/presets/Default.json:1)
+  - [json.World Books（示例）](backend_projects/SmartTraven/data/world_books/参考用main_world.json:1)
 
+API 列表
+- smarttraven/in_chat_constructor/construct（对话内构造）
+  - 注册定义：[python.register_api()](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:11)
+  - 封装层函数：[python.construct()](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:58)
 
-一、职责与行为
-- 从 API 入参接收以下三类数据：history（OpenAI messages）、in-chat 预设、世界书条目，以及 conditional 命中的 id 列表
-- 根据如下规则将预设/世界书注入到历史列表中（无合并），并在每条消息上添加 source 来源信息
+模块职责与规则
+- 输入 history 按原顺序作为基底，首先被标准化为带来源的消息：
+  - source 形如 {"type":"history.user|history.assistant|history.thinking","id":"history_i","index":i}（见 [python._build_source_for_history()](api/modules/SmartTraven/in_chat_constructor/impl.py:104)）
+- 仅处理 position=="in-chat" 的预设条目与“非 before_char/after_char”的世界书条目
+- 过滤规则：
+  - 预设：position=="in-chat" 且 enabled 视为启用；content 为非空字符串
+  - 世界书：position 不在 {"before_char","after_char"}；enabled；content 非空；当 mode=="conditional" 时需 keys 命中历史文本
+- 条件触发 keys（区分大小写）：
+  - mode=="conditional" 且 keys 命中历史文本（由 [python._collect_history_text()](api/modules/SmartTraven/in_chat_constructor/impl.py:67) 拼接）时才注入
+  - keys 类型支持 string 或 string[]；去除空白后逐项包含匹配
+  - keys==0 表示“无关键词/不触发”；等价于永不触发
+- 排序与插入：
+  - 候选（预设/世界书）统一按 order 升序 → 角色优先级（assistant < user < system）→ internal_order 稳定排序（见 [python._sort_sources()](api/modules/SmartTraven/in_chat_constructor/impl.py:56)）
+  - 按 depth 分组；每组的插入下标 insertion_index = len(constructed) - depth（若为负置 0）
+  - 组内逆序插入，以保持排序后的相对顺序
+- 角色与来源：
+  - 预设：使用条目 role（非法值回退为 user），source.type 固定为 preset.in-chat（见 [python._build_source_for_preset()](api/modules/SmartTraven/in_chat_constructor/impl.py:123)）
+  - 世界书：role 由 position→role 映射（assistant/user/system），source.type 固定为 world_book.in-chat（见 [python._build_source_for_wb()](api/modules/SmartTraven/in_chat_constructor/impl.py:140)）
+  - 世界书原始 id 字段会迁移为 source.wb_id，避免与 source.id 冲突
 
+API：construct（smarttraven/in_chat_constructor/construct）
+- 输入（JSON Schema 概览，详见注册层定义 [python.register_api()](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:11)）
+  - history: array（必填）
+    - OpenAI Chat messages：[{role: "system|user|assistant|thinking", content: string}]
+    - 模块会为其补充 source 字段并作为构造基底
+  - presets_in_chat: array（必填）
+    - 仅识别 position=="in-chat" 且 enabled 的条目；读取字段 role/depth/order/content
+  - world_books: array | object（必填）
+    - 支持嵌套 [[{...}], {...}]；仅处理 position 非 {"before_char","after_char"} 的条目
+    - 条目字段示例可参考 [json.参考用main_world.json](backend_projects/SmartTraven/data/world_books/参考用main_world.json:1)
+- 输出（JSON）
+  - messages: array
+    - 每条消息含 { role, content, source }，source.type 枚举包含：
+      - history.user / history.assistant / history.thinking（来自基底历史）
+      - preset.in-chat（来自 in-chat 预设）
+      - world_book.in-chat（来自 in-chat 世界书）
 
-二、公共 API
-路由（斜杠路径）：
-- modules/smarttraven/in_chat_constructor/construct
+行为细节
+- 历史标准化：非字符串 content 将转换为字符串（None→""）；非法 role 抛出异常
+- 预设候选：identifier/name/depth/order/role 等原字段会按“原条目键顺序”复制到 source，保持 UI 可追溯性
+- 世界书候选：
+  - mode=="always"：直接加入候选
+  - mode=="conditional"：仅当 keys 命中历史拼接文本时加入（见 [python._is_triggered_by_keys()](api/modules/SmartTraven/in_chat_constructor/impl.py:79)）
+  - position→role 映射：assistant/user/system（见 [python._map_wb_pos_to_role()](api/modules/SmartTraven/in_chat_constructor/impl.py:28)）
+- 插入顺序：
+  - 先排序，后按 depth 组分发插入；不同 depth 可能插入到历史末尾之前的不同位置
+  - 不合并相邻同角色，保持单条来源标注
+- 触发字段说明：
+  - 不再需要 triggered_worldbook_ids 外部输入；本模块内部根据 keys 判断是否触发
+  - keys=0 明确表示“不触发”
 
-请求（POST，JSON）：
-- history: OpenAI Chat messages 数组
-  - [{"role":"system|user|assistant","content":"..."}]
-- presets_in_chat: in-chat 预设数组（参考 Default.json 的 prompts 条目结构），仅处理 position=="in-chat" 且 enabled 的条目
-- world_books: 世界书条目数组（参考 参考用main_world.json；支持嵌套数组 [[{...}], {...}]）
-
-响应（JSON）：
-- messages: OpenAI messages 扩展数组，元素结构：
-  - {"role":"...","content":"...","source":{...}}
-
-
-三、来源字段（source）说明
-为每条消息添加 source 字段，以便 UI 显示与业务追溯：
-
-- 历史消息（来自 history 数组）
-  - source = {"type":"history","id":"history_{i}","index":i}
-- in-chat 预设（过滤：position=="in-chat" 且 enabled，content 非空）
-  - 排序键：order 升序 → 角色优先级 assistant > user > system → internal_order（稳定）
-  - 插入键：按 depth 分组；insertion_index = len(list) - depth，若负则置 0；组内逆序插入保持相对顺序
-  - 角色：来自条目 role（非法值回退为 user）
-  - source = {"type":"preset","id":"preset_{identifier|name|index}","name","identifier","depth","order","role}
-- 世界书（过滤：排除 position ∈ {"before_char","after_char"}；enabled；content 非空；mode=="always" 或 mode=="conditional" 且 id 命中）
-  - 角色映射：position → role（assistant|user|system）
-  - 排序与插入规则同上
-  - source = {"type":"world_book","id":"wb_{id|index}","name","wb_id","mode","position","depth","order","role}
-
-注意：
-- 不合并相邻同角色消息，保持未合并序列
-- include_trace=true 时，响应 trace 提供插入概要（非重复含所有字段）以避免过大
-
-
-四、示例调用（注意：dict 的打印工具如 pprint 默认会排序键，可能导致显示顺序与插入顺序不同。若需保序请使用 json.dumps(sort_keys=False) 或 pprint(..., sort_dicts=False)。）
-
-Python（通过 core.call_api）
-```python
-import json, core
-
-gateway = core.get_api_gateway()
-sm = core.get_service_manager()
-sm.load_project_modules()
-gateway.start_server(background=True)
-
-# 准备数据
-with open("backend_projects/SmartTraven/data/presets/Default.json", "r", encoding="utf-8") as f:
-    preset_doc = json.load(f)
-presets = [p for p in (preset_doc.get("prompts") or []) if str(p.get("position")) == "in-chat"]
-
-with open("backend_projects/SmartTraven/data/world_books/参考用main_world.json", "r", encoding="utf-8") as f:
-    world_books_doc = json.load(f)
-
-payload = {
+调用示例（Python SDK）
+- 见 [python.core.call_api()](core/api_client.py:227)
+- 请求：
+  {
     "history": [
-        {"role": "system", "content": "系统开场"},
-        {"role": "user", "content": "你好"}
+      {"role": "system", "content": "系统开场"},
+      {"role": "user", "content": "你好艾拉"}
     ],
-    "presets_in_chat": presets,
-    "world_books": world_books_doc
-}
+    "presets_in_chat": [
+      {"position":"in-chat","enabled":true,"role":"system","depth":0,"order":98,"identifier":"示例","content":"系统注入示例"}
+    ],
+    "world_books": [
+      [
+        {"id":2,"name":"艾拉的背景","keys":["艾拉","工程师"],"content":"艾拉是机械工程师","mode":"conditional","position":"user","depth":0,"order":101,"enabled":true}
+      ]
+    ]
+  }
+- 代码：
+  res = core.call_api(
+    "smarttraven/in_chat_constructor/construct",
+    {
+      "history": [
+        {"role":"system","content":"系统开场"},
+        {"role":"user","content":"你好艾拉"}
+      ],
+      "presets_in_chat": [
+        {"position":"in-chat","enabled":True,"role":"system","depth":0,"order":98,"identifier":"示例","content":"系统注入示例"}
+      ],
+      "world_books": [
+        [{"id":2,"name":"艾拉的背景","keys":["艾拉","工程师"],"content":"艾拉是机械工程师","mode":"conditional","position":"user","depth":0,"order":101,"enabled":True}]
+      ]
+    },
+    method="POST",
+    namespace="modules"
+  )
 
-result = core.call_api("smarttraven/in_chat_constructor/construct", payload, method="POST", namespace="modules")
-print(result["messages"][0])  # {"role":"...", "content":"...", "source": {...}}
-```
+curl 示例（假设网关端口 8050）
+- POST http://127.0.0.1:8050/api/modules/smarttraven/in_chat_constructor/construct
+- 请求体（JSON）与上例相同
 
-curl（假设网关端口 8050）
-```bash
-curl -s -X POST "http://127.0.0.1:8050/api/modules/smarttraven/in_chat_constructor/construct" \
-  -H "Content-Type: application/json" \
-  -d "{\"history\":[{\"role\":\"system\",\"content\":\"系统开场\"},{\"role\":\"user\",\"content\":\"你好\"}],\"presets_in_chat\":[{\"position\":\"in-chat\",\"enabled\":true,\"role\":\"system\",\"depth\":0,\"order\":98,\"name\":\"示例\",\"content\":\"注入示例\"}],\"world_books\":[[{\"id\":2,\"name\":\"艾拉的背景\",\"mode\":\"conditional\",\"position\":\"user\",\"depth\":0,\"order\":101,\"enabled\":true,\"content\":\"艾拉是机械工程师\"}]]}"
-```
+返回示例（节选）
+- messages:
+  [
+    {"role":"system","content":"系统开场","source":{"type":"history.system","id":"history_0","index":0}},
+    {"role":"user","content":"你好艾拉","source":{"type":"history.user","id":"history_1","index":1}},
+    {"role":"system","content":"系统注入示例","source":{"type":"preset.in-chat","id":"preset_示例","identifier":"示例","depth":0,"order":98,"role":"system", "...": "..."}},
+    {"role":"user","content":"艾拉是机械工程师","source":{"type":"world_book.in-chat","id":"wb_2","wb_id":2,"name":"艾拉的背景","mode":"conditional","position":"user","depth":0,"order":101,"role":"user"}}
+  ]
 
+错误与边界
+- 非法 role（不在 system/user/assistant/thinking）：实现层将抛出 ValueError
+- content 不是字符串：将转换为字符串（None → ""）
+- 预设/世界书条目字段结构非法或缺失时：会被跳过
+- keys 判定大小写敏感；keys 缺失/为空数组/==0 时均视为“不触发”
 
-五、测试
-内置测试脚本会自动启动网关、加载模块，并执行全量接口调用与断言：
-- [`test_in_chat_constructor.py`](api/modules/SmartTraven/in_chat_constructor/test_in_chat_constructor.py)
+测试
+- 内置测试脚本（会启动网关、加载模块并断言返回结构）：
+  - [python.test_in_chat_constructor.py](api/modules/SmartTraven/in_chat_constructor/test_in_chat_constructor.py:1)
+- 运行（仓库根目录）：
+  python api/modules/SmartTraven/in_chat_constructor/test_in_chat_constructor.py
 
-运行（在仓库根目录执行）：
-```bash
-python api/modules/SmartTraven/in_chat_constructor/test_in_chat_constructor.py
-```
-
-该脚本将：
-- 调用 construct 接口
-- 断言 messages 内每条含 source
-
-
-六、迁移检查与注意事项
-- 已迁移：模块重命名为 in_chat_constructor，存放于 api/modules/SmartTraven；实现层与封装层拆分完成
-- 不再依赖 shared.globals；所有数据由 API 入参提供
-- 不保留旧函数注册名（in_chat.construct），仅暴露新斜杠路径 API
-- 默认参数（DEFAULT_DEPTH=0, DEFAULT_ORDER=100）已内联到实现层，未保留 variables.py
-- 待清理（如需要）：旧目录 in_chat_constructor_module/（不再使用），可后续删除以避免混淆
-
-如需进一步扩展（例如：相邻同角色合并开关、额外校验接口、支持 name 字段承载角标），可在实现层添加可选参数并更新封装层的 JSON Schema。
+参考
+- 注册层： [python.in_chat_constructor.in_chat_constructor.py](api/modules/SmartTraven/in_chat_constructor/in_chat_constructor.py:1)
+- 实现层： [python.in_chat_constructor.impl.py](api/modules/SmartTraven/in_chat_constructor/impl.py:1)
+- 相关模块（framing/prefix 构建 before/after 世界书与预设）： [python.framing_prompt.framing_prompt.py](api/modules/SmartTraven/framing_prompt/framing_prompt.py:1), [python.assemble()](api/modules/SmartTraven/framing_prompt/impl.py:297)

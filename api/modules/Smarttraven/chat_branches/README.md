@@ -1,126 +1,109 @@
-# SmartTraven / Chat Branches 模块（分支重试对话）
+# SmartTraven.chat_branches 模块说明（分支重试对话）
 
-本模块在 SmartTraven 命名空间下提供“分支重试对话”能力：不可变消息树 + 可变会话路径。支持：创建对话、追加楼层、修剪、切分支（并新建会话与归档旧会话）、导入/导出标准聊天文件（chat-branches）、导出当前分支为 OpenAI Chat messages、输出分支情况表。
+位置：api/modules/SmartTraven/chat_branches/
 
-- 实现引擎（内存）：[`impl.py`](api/modules/SmartTraven/chat_branches/impl.py)
-- API 封装与注册：[`chat_branches.py`](api/modules/SmartTraven/chat_branches/chat_branches.py)
-- 示例对话文件：[`branch_demo.json`](backend_projects/SmartTraven/data/conversations/branch_demo.json)
-- 测试脚本：[`test_chat_branches.py`](api/modules/SmartTraven/chat_branches/test_chat_branches.py)
+本模块提供“分支重试对话（chat-branches）”能力：以不可变消息树 + 可变会话路径方式管理对话，支持创建对话、追加消息、修剪路径、左右切换分支（归档旧会话并新建新会话）、导入/导出标准聊天文件（chat-branches v2），并可导出当前分支为 OpenAI messages 与分支情况表（j/n）。
 
-参考开发规范：[`DEVELOPMENT_NOTES.md`](DEVELOPMENT_NOTES.md)
+相关代码
+- 注册封装层（API 定义/Schema）：[filename](api/modules/SmartTraven/chat_branches/chat_branches.py:1)
+  - 创建对话：[python.function(create_conversation)](api/modules/SmartTraven/chat_branches/chat_branches.py:46)
+  - 获取路径：[python.function(get_path)](api/modules/SmartTraven/chat_branches/chat_branches.py:61)
+  - 追加消息：[python.function(append_message)](api/modules/SmartTraven/chat_branches/chat_branches.py:80)
+  - 修剪路径：[python.function(truncate_after)](api/modules/SmartTraven/chat_branches/chat_branches.py:98)
+  - 切换分支并新会话：[python.function(switch_branch_and_start_new_session)](api/modules/SmartTraven/chat_branches/chat_branches.py:117)
+  - 分支 j/n 指示：[python.function(branch_indicator)](api/modules/SmartTraven/chat_branches/chat_branches.py:142)
+  - 列出对话/会话：[python.function(list_conversations)](api/modules/SmartTraven/chat_branches/chat_branches.py:155), [python.function(list_sessions)](api/modules/SmartTraven/chat_branches/chat_branches.py:170)
+  - 派生视图：OpenAI 消息：[python.function(openai_messages)](api/modules/SmartTraven/chat_branches/chat_branches.py:207)，分支情况表：[python.function(branch_table)](api/modules/SmartTraven/chat_branches/chat_branches.py:222)
+  - 导出/导入别名（稳定路径）：[python.function(export)](api/modules/SmartTraven/chat_branches/chat_branches.py:237), [python.function(import_chat)](api/modules/SmartTraven/chat_branches/chat_branches.py:260)
+- 实现层（内存引擎）：[filename](api/modules/SmartTraven/chat_branches/impl.py:1)
+  - 创建对话：[python.function(create_conversation)](api/modules/SmartTraven/chat_branches/impl.py:121)
+  - 追加消息：[python.function(append_message)](api/modules/SmartTraven/chat_branches/impl.py:154)
+  - 修剪路径：[python.function(truncate_after)](api/modules/SmartTraven/chat_branches/impl.py:175)
+  - 切换分支并新会话：[python.function(switch_branch_and_start_new_session)](api/modules/SmartTraven/chat_branches/impl.py:187)
+  - 分支 j/n 指示：[python.function(branch_indicator)](api/modules/SmartTraven/chat_branches/impl.py:241)
+  - 列出对话/会话：[python.function(list_conversations)](api/modules/SmartTraven/chat_branches/impl.py:255), [python.function(list_sessions)](api/modules/SmartTraven/chat_branches/impl.py:277)
+  - 导出/导入（v2）：[python.function(export_v2)](api/modules/SmartTraven/chat_branches/impl.py:297), [python.function(import_v2)](api/modules/SmartTraven/chat_branches/impl.py:337)；稳定别名：[python.function(export)](api/modules/SmartTraven/chat_branches/impl.py:455), [python.function(import_chat)](api/modules/SmartTraven/chat_branches/impl.py:459)
+  - 派生视图：OpenAI 消息：[python.function(openai_messages)](api/modules/SmartTraven/chat_branches/impl.py:463)，分支情况表：[python.function(branch_table)](api/modules/SmartTraven/chat_branches/impl.py:478)
+- 测试脚本：[filename](api/modules/SmartTraven/chat_branches/test_chat_branches.py:1)
+- 示例数据（chat-branches 文件）：[filename](backend_projects/SmartTraven/data/conversations/branch_demo.json:1)
 
+模块职责与数据模型
+- 不可变消息树（Node）：
+  - 字段：id, conversation_id, parent_id, depth, role, content, sibling_ord（同父下的子序，用于 j/n）, created_at
+- 会话（Session）：
+  - 字段：id, conversation_id, status(active/archived), path（当前所选分支的节点 id 列表）, created_at, closed_at
+- 会话路径可变：仅 active 会话允许修改；切分支时归档旧会话、新建新会话，path 在 at_depth 处左右切换或新建子节点
 
-一、数据模型（简述）
-- 节点树不可变：每条消息是一个节点（role, content, parent_id, depth, sibling_ord）；同一父节点的子序用于“分支 j/n”。
-- 会话路径可变：一条会话是一条路径视图（root → ... → leaf）。仅 active 会话允许修改；切分支会新建新的 active 会话并归档旧会话。
+API 列表（modules 命名空间）
+- smarttraven/chat_branches/create_conversation
+  - 输入：{ user_id?: string|null, title?: string|null }
+  - 输出：{ conversation_id: string, session_id: string, path: object[] }
+- smarttraven/chat_branches/get_path
+  - 输入：{ session_id: string }
+  - 输出：{ session_id, status, path: [{ id, depth, role, content, branch_j, branch_n }] }
+- smarttraven/chat_branches/append
+  - 输入：{ session_id: string, role: "user"|"assistant"|"system", content: string }
+  - 输出：{ session_id, status, path: [...] }
+- smarttraven/chat_branches/truncate
+  - 输入：{ session_id: string, keep_depth: integer (>=1) }
+  - 输出：{ session_id, status, path: [...] }
+- smarttraven/chat_branches/switch
+  - 输入：{ session_id: string, at_depth: integer (>=2), direction: "left"|"right" }
+  - 输出：{ old_session_id, new_session_id, path: [...] }
+- smarttraven/chat_branches/branch_indicator
+  - 输入：{ session_id: string, depth: integer (>=2) }
+  - 输出：{ j: integer|null, n: integer|null }
+- smarttraven/chat_branches/list_conversations
+  - 输入：{}（空对象）
+  - 输出：{ items: [{ id, title, user_id, root_node_id, created_at, sessions_count, active_session_id }] }
+- smarttraven/chat_branches/list_sessions
+  - 输入：{ conversation_id: string }
+  - 输出：{ items: [{ id, status, rev, path_length, created_at, closed_at }] }
+- smarttraven/chat_branches/openai_messages
+  - 输入：{ session_id: string }
+  - 输出：{ conversation_id, session_id, messages: [{ role, content }] }
+- smarttraven/chat_branches/branch_table
+  - 输入：{ session_id: string }
+  - 输出：{ session_id, latest: { depth, j, n, node_id }, levels: [{ depth, node_id, j, n }, ...] }
+- smarttraven/chat_branches/export（稳定别名）
+  - 输入：{ conversation_id: string }
+  - 输出：chat-branches v2 标准文件对象：{ schema:{name:"chat-branches",version:2}, meta:{id,title}, root, nodes:{id:{pid,role,content}}, children:{pid:[cid...]}, active_path:[...] }
+- smarttraven/chat_branches/import（稳定别名）
+  - 输入：{ doc: chat-branches v2 标准文件 }
+  - 输出：{ conversation_id: string, active_session_id: string }
 
-chat-branches 标准文件
-- 仅保留 pid/role/content、children（有序）和 active_path
-- 文件示例：[`branch_demo.json`](backend_projects/SmartTraven/data/conversations/branch_demo.json)
-- 用途：外部系统存放/管理多个聊天文件 → 通过“导入接口”加载本模块 → 导出视图或再次导出 chat-branches 文件
+使用示例（Python SDK）
+- 初始化与导入
+  - 参考测试脚本：[filename](api/modules/SmartTraven/chat_branches/test_chat_branches.py:39)
+  - 典型流程：
+    1) 启动网关与模块加载
+    2) 读取 branch_demo.json 并调用 import
+    3) 获取 active_session_id，随后进行路径/派生视图/分支操作
+- 追加/修剪/切分支
+  - 追加：core.call_api("smarttraven/chat_branches/append", {"session_id": sid, "role":"user","content":"..."},"POST","modules")
+  - 修剪：core.call_api("smarttraven/chat_branches/truncate", {"session_id": sid, "keep_depth": 2},"POST","modules")
+  - 切分支：core.call_api("smarttraven/chat_branches/switch", {"session_id": sid, "at_depth": 2, "direction": "right"},"POST","modules")
 
+行为细节与边界
+- 仅 active 会话允许 append/truncate/switch（见 [python.function(_ensure_active_session)](api/modules/SmartTraven/chat_branches/impl.py:75)）
+- 分支指示 j/n 由父节点的 children 顺序与 sibling_ord 决定（见 [python.function(_branch_indicator)](api/modules/SmartTraven/chat_branches/impl.py:91)）
+- 切分支策略：
+  - at_depth≥2；left/right 会在当前子序左右寻找目标；必要时新建子节点（role="assistant"，content=None）（见 [python.function(switch_branch_and_start_new_session)](api/modules/SmartTraven/chat_branches/impl.py:187)）
+- 导入行为：
+  - 若传入的 conversation_id 已存在，将清空旧会话/节点并以文件内容重建（见 [python.function(import_v2)](api/modules/SmartTraven/chat_branches/impl.py:337)）
+  - active_path 会被规范化：确保从 root 连通，否则回退/截断
+- 导出行为：
+  - 仅导出 pid/role/content 和有序 children，active_path 选取当前 active 或最近创建的会话路径（见 [python.function(export_v2)](api/modules/SmartTraven/chat_branches/impl.py:297)）
 
-二、API 一览（路径基于新规范，命名空间 modules）
-说明：所有 API 均注册于 [`chat_branches.py`](api/modules/SmartTraven/chat_branches/chat_branches.py) 并通过 core 门面暴露。以下为“斜杠 path”（不含 /api 前缀）。
+测试
+- 内置测试脚本会自动启动网关、加载模块并调用全量接口：
+  - [filename](api/modules/SmartTraven/chat_branches/test_chat_branches.py:1)
+- 运行（仓库根目录）：
+  ```bash
+  python api/modules/SmartTraven/chat_branches/test_chat_branches.py
+  ```
 
-核心分支操作
-- POST modules/smarttraven/chat_branches/create_conversation
-  - 入参：{ user_id?, title? }
-  - 出参：{ conversation_id, session_id, path: [] }
-- GET/POST modules/smarttraven/chat_branches/get_path
-  - 入参：{ session_id }
-  - 出参：{ session_id, status, path: [] }
-- POST modules/smarttraven/chat_branches/append
-  - 入参：{ session_id, role: user|assistant|system, content }
-  - 出参：{ session_id, status, path: [] }
-- POST modules/smarttraven/chat_branches/truncate
-  - 入参：{ session_id, keep_depth >= 1 }
-  - 出参：{ session_id, status, path: [] }
-- POST modules/smarttraven/chat_branches/switch
-  - 入参：{ session_id, at_depth >= 2, direction: left|right }
-  - 出参：{ old_session_id, new_session_id, path: [] }
-- GET/POST modules/smarttraven/chat_branches/branch_indicator
-  - 入参：{ session_id, depth >= 2 }
-  - 出参：{ j, n }（若无效则为空）
-
-导入/导出与视图
-- GET/POST modules/smarttraven/chat_branches/export
-  - 入参：{ conversation_id }
-  - 出参：chat-branches 标准文件
-- POST modules/smarttraven/chat_branches/import
-  - 入参：{ doc: chat-branches 标准文件 }
-  - 出参：{ conversation_id, active_session_id }
-- GET/POST modules/smarttraven/chat_branches/openai_messages
-  - 入参：{ session_id }
-  - 出参：{ conversation_id, session_id, messages: [{ role, content }] }
-- GET/POST modules/smarttraven/chat_branches/branch_table
-  - 入参：{ session_id }
-  - 出参：{ latest: { depth, j, n, node_id }, levels: [{ depth, j, n, node_id }, ...] }
-
-列表
-- GET/POST modules/smarttraven/chat_branches/list_conversations
-- GET/POST modules/smarttraven/chat_branches/list_sessions
-  - 入参：{ conversation_id }
-
-
-三、快速开始
-1) 启动 API 网关并加载模块（在本仓库根目录执行）
-- 方式 A：测试脚本会自动启动（见下）
-- 方式 B：手动启动（Python 内部）
-  - 在脚本中写入：
-    - gateway = core.get_api_gateway(); core.get_service_manager().load_project_modules(); gateway.start_server(background=True)
-
-2) 导入示例对话（chat-branches）
-- curl 示例（假设网关端口 8050）：
-  - curl -s -X POST http://127.0.0.1:8050/api/modules/smarttraven/chat_branches/import -H "Content-Type: application/json" --data-binary @backend_projects/SmartTraven/data/conversations/branch_demo.json
-
-3) 导出当前分支为 OpenAI messages
-- curl -s "http://127.0.0.1:8050/api/modules/smarttraven/chat_branches/openai_messages?session_id=SESSION_ID"
-
-4) 获取分支情况表（含最新楼层 j/n）
-- curl -s "http://127.0.0.1:8050/api/modules/smarttraven/chat_branches/branch_table?session_id=SESSION_ID"
-
-
-四、通过 SDK（core.call_api）调用示例
-Python
-```python
-import core, json
-
-# 启动网关并加载模块
-gateway = core.get_api_gateway()
-sm = core.get_service_manager()
-sm.load_project_modules()
-gateway.start_server(background=True)
-
-# 导入 chat-branches 文件
-with open("backend_projects/SmartTraven/data/conversations/branch_demo.json", "r", encoding="utf-8") as f:
-    doc = json.load(f)
-imp = core.call_api("smarttraven/chat_branches/import", {"doc": doc}, method="POST", namespace="modules")
-print("import:", imp)
-
-sess = imp["active_session_id"]
-print("openai:", core.call_api("smarttraven/chat_branches/openai_messages", {"session_id": sess}, method="GET", namespace="modules"))
-print("table:", core.call_api("smarttraven/chat_branches/branch_table", {"session_id": sess}, method="GET", namespace="modules"))
-
-# 核心操作
-print("append:", core.call_api("smarttraven/chat_branches/append", {"session_id": sess, "role": "user", "content": "再解释下切分支"}, method="POST", namespace="modules"))
-print("truncate:", core.call_api("smarttraven/chat_branches/truncate", {"session_id": sess, "keep_depth": 2}, method="POST", namespace="modules"))
-sw = core.call_api("smarttraven/chat_branches/switch", {"session_id": sess, "at_depth": 2, "direction": "right"}, method="POST", namespace="modules")
-print("switch:", sw)
-print("indicator:", core.call_api("smarttraven/chat_branches/branch_indicator", {"session_id": sw["new_session_id"], "depth": 2}, method="GET", namespace="modules"))
-```
-
-五、实现参考
-- 内存引擎：[`impl.py`](api/modules/SmartTraven/chat_branches/impl.py)
-- API 注册：[`chat_branches.py`](api/modules/SmartTraven/chat_branches/chat_branches.py)
-- 注册规范与路由自动发现：[`core/api_registry.py`](core/api_registry.py), [`core/api_gateway.py`](core/api_gateway.py), [`core/services.py`](core/services.py)
-
-六、注意事项
-- 本模块为内存实现，进程重启后需要重新导入 chat-branches 文件
-- 仅 active 会话允许追加/修剪/切分支；切分支会归档旧会话并生成新会话
-- j/n 由父节点 children 顺序计算；文件不冗余该信息
-- 建议以 8050 作为默认 API 网关端口；如端口冲突可自定义（参见全局/项目配置）
-
-七、测试脚本
-- 见：[`test_chat_branches.py`](api/modules/SmartTraven/chat_branches/test_chat_branches.py)
-- 作用：自动启动网关、加载模块、导入示例、执行全量接口调用并打印结果
+参考
+- API 封装层： [filename](api/modules/SmartTraven/chat_branches/chat_branches.py:1)
+- 实现层： [filename](api/modules/SmartTraven/chat_branches/impl.py:1)
+- 示例对话文件： [filename](backend_projects/SmartTraven/data/conversations/branch_demo.json:1)
