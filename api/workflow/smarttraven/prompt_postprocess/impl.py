@@ -119,23 +119,25 @@ async def apply(
     messages: List[Dict[str, Any]],
     rules: Any,
     view: str,
+    variables: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     工作流主入口（实现层，单视图）
     - 顺序：before_macro → macro → after_macro
+    - 支持通过输入 variables 注入宏初始变量
     """
     base = _deepcopy_messages(messages)
 
     # step1: before_macro（单视图）
     m1 = await _regex_apply_messages(base, rules, "before_macro", view)
 
-    # step2: macro（始终执行）
-    m2, variables = await _macro_process_messages(m1, variables={})
+    # step2: macro（始终执行），使用传入的 variables 作为初始变量
+    m2, variables_out = await _macro_process_messages(m1, variables=variables or {})
 
     # step3: after_macro（单视图）
     m3 = await _regex_apply_messages(m2, rules, "after_macro", view)
 
     return {
         "message": m3,
-        "variables": variables if isinstance(variables, dict) else {},
+        "variables": variables_out if isinstance(variables_out, dict) else {},
     }

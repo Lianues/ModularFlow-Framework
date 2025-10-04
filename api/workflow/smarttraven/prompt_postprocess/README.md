@@ -42,6 +42,7 @@ API 列表
     - source: object（建议包含 source.type 以便正则 targets 命中）
   - rules: array | object（数组或 {rules:[...]} 容器；格式参考 [filename](backend_projects/SmartTraven/data/presets/Default.json) 的 regex_rules）
   - view: "user_view" | "assistant_view"
+  - variables: object（可选；作为宏初始变量注入）
 - 输出（JSON）
   - message: array（单视图处理后的消息数组，仅 content 可能被改变）
   - variables: {initial:object, final:object}
@@ -86,7 +87,7 @@ rules = {
 
 res = core.call_api(
   "smarttraven/prompt_postprocess/apply",
-  {"messages": messages, "rules": rules, "view": "user_view"},
+  {"messages": messages, "rules": rules, "view": "user_view", "variables": {"x": "y"}},
   method="POST",
   namespace="workflow"
 )

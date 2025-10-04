@@ -15,7 +15,7 @@ SmartTraven Prompt Post-Process Workflow Registration (prompt_postprocess.py)
 - 输出:
   - {"message":[...], "variables": {"initial":{}, "final":{}}}
 """
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import core  # type: ignore
 
@@ -47,7 +47,8 @@ from .impl import apply as _apply
                 }
             },
             "rules": {"type": ["array", "object"]},
-            "view": {"type": "string", "enum": ["user_view", "assistant_view"]}
+            "view": {"type": "string", "enum": ["user_view", "assistant_view"]},
+            "variables": {"type": "object", "additionalProperties": True}
         },
         "required": ["messages", "rules", "view"],
         "additionalProperties": False
@@ -86,11 +87,12 @@ async def apply(
     messages: List[Dict[str, Any]],
     rules: Any,
     view: str,
+    variables: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     适配器：转发到实现层（impl.py），遵循 “API 优先 / 解耦” 原则。
     """
-    return await _apply(messages=messages, rules=rules, view=view)
+    return await _apply(messages=messages, rules=rules, view=view, variables=variables)
 
 
 if __name__ == "__main__":
