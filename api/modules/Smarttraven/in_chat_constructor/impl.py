@@ -12,7 +12,7 @@ from collections import defaultdict
 # 默认参数（合并自旧模块 variables.py）
 DEFAULT_DEPTH: int = 0
 DEFAULT_ORDER: int = 100
-ALLOWED_ROLES = {"user", "assistant", "system"}
+ALLOWED_ROLES = {"user", "assistant", "system", "thinking"}
 
 
 def _is_enabled(val: Any) -> bool:
@@ -101,10 +101,20 @@ def _is_triggered_by_keys(history_text: str, keys: Any) -> bool:
     return False
 
 
-def _build_source_for_history(index: int) -> Dict[str, Any]:
-    # 保持简单的来源字段顺序：type → id → index
+def _build_source_for_history(index: int, role: str) -> Dict[str, Any]:
+    """历史消息来源字段，规范化 type 为 history.user/history.assistant/history.thinking"""
+    r = (role or "").lower()
+    if r == "user":
+        t = "history.user"
+    elif r == "assistant":
+        t = "history.assistant"
+    elif r == "thinking":
+        t = "history.thinking"
+    else:
+        # 兜底：未声明角色统一归为 assistant 视角（避免产生未定义的 history.system）
+        t = "history.assistant"
     return {
-        "type": "history",
+        "type": t,
         "id": f"history_{index}",
         "index": index,
     }
@@ -117,7 +127,7 @@ def _build_source_for_preset(p: Dict[str, Any], source_id: str) -> Dict[str, Any
     - 原条目字段顺序来自 JSON 加载的插入顺序（Python 3.7+ dict 保序）
     """
     src: Dict[str, Any] = {
-        "type": "preset",
+        "type": "preset.in-chat",
         "id": source_id,
     }
     # 按来源字段顺序复制
@@ -135,7 +145,7 @@ def _build_source_for_wb(wb: Dict[str, Any], source_id: str, derived_role: str) 
     - 追加 derived_role（源条目通常只有 position，没有 role），追加在末尾以不打破原字段顺序
     """
     src: Dict[str, Any] = {
-        "type": "world_book",
+        "type": "world_book.in-chat",
         "id": source_id,
     }
     for k in wb.keys():
@@ -177,7 +187,7 @@ def construct(
         constructed.append({
             "role": role,
             "content": content,
-            "source": _build_source_for_history(i),
+            "source": _build_source_for_history(i, role),
         })
 
     # 2) 收集 in-chat 预设与世界书候选

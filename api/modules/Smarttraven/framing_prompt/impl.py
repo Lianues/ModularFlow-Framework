@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Union
 
 # 常量
 DEFAULT_ORDER: int = 100
-ALLOWED_ROLES = {"user", "assistant", "system"}
+ALLOWED_ROLES = {"user", "assistant", "system", "thinking"}
 
 
 def _is_enabled(val: Any) -> bool:
@@ -116,10 +116,20 @@ def _is_triggered_by_keys(history_text: str, keys: Any) -> bool:
     return False
 
 
-def _build_source_for_history(index: int) -> Dict[str, Any]:
-    """历史消息的来源字段，字段顺序：type → id → index。"""
+def _build_source_for_history(index: int, role: str) -> Dict[str, Any]:
+    """历史消息来源字段，规范化 type 为 history.user/history.assistant/history.thinking"""
+    r = (role or "").lower()
+    if r == "user":
+        t = "history.user"
+    elif r == "assistant":
+        t = "history.assistant"
+    elif r == "thinking":
+        t = "history.thinking"
+    else:
+        # 兜底到 assistant，避免出现未定义的 history.system
+        t = "history.assistant"
     return {
-        "type": "history",
+        "type": t,
         "id": f"history_{index}",
         "index": index,
     }
@@ -132,7 +142,7 @@ def _build_source_for_preset(p: Dict[str, Any], source_id: str) -> Dict[str, Any
     - 再按原条目字段顺序复制（Python 3.7+ dict 保序）
     """
     src: Dict[str, Any] = {
-        "type": "preset",
+        "type": "preset.relative",
         "id": source_id,
     }
     for k in p.keys():
@@ -156,6 +166,12 @@ def _build_source_for_wb(wb: Dict[str, Any], source_id: str, derived_role: str) 
             src["wb_id"] = wb.get(k)
         else:
             src[k] = wb.get(k)
+    # 根据世界书位置细分类型（before_char/after_char；否则兜底为 in-chat）
+    pos = str(wb.get("position", "") or "").lower()
+    if pos in ("before_char", "after_char"):
+        src["type"] = f"world_book.{pos}"
+    else:
+        src["type"] = "world_book.in-chat"
     if "role" not in src:
         src["role"] = derived_role
     return src
@@ -168,7 +184,7 @@ def _build_source_for_character(character: Dict[str, Any]) -> Dict[str, Any]:
     - 再按原文档键顺序复制（常见字段：name, description, ...）
     """
     src: Dict[str, Any] = {
-        "type": "character",
+        "type": "char.description",
         "id": "char_description",
     }
     for k in character.keys():
@@ -179,7 +195,7 @@ def _build_source_for_character(character: Dict[str, Any]) -> Dict[str, Any]:
 def _build_source_for_persona(persona: Dict[str, Any]) -> Dict[str, Any]:
     """用户画像来源字段，同上。"""
     src: Dict[str, Any] = {
-        "type": "persona",
+        "type": "persona.description",
         "id": "persona_description",
     }
     for k in persona.keys():
@@ -317,7 +333,7 @@ def assemble(
             content = "" if content is None else str(content)
         src = msg.get("source")
         if not isinstance(src, dict):
-            src = _build_source_for_history(i)
+            src = _build_source_for_history(i, role)
         normalized_history.append({"role": role, "content": content, "source": src})
 
     # 用于 keys 匹配（大小写敏感）
@@ -339,10 +355,10 @@ def assemble(
             continue
 
         # world info before/after
-        if identifier == "worldInfoBefore":
+        if identifier == "charBefore":
             combined.extend(_world_info_messages("before_char", world_books, history_text))
             continue
-        if identifier == "worldInfoAfter":
+        if identifier == "charAfter":
             combined.extend(_world_info_messages("after_char", world_books, history_text))
             continue
 

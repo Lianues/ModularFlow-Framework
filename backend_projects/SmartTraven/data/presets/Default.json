@@ -47,7 +47,7 @@
             "content": "你好222233333"
         },
         {
-            "identifier": "worldInfoBefore",
+            "identifier": "charBefore",
             "name": "World Info (before)",
             "enabled": null,
             "role": "system",
@@ -106,7 +106,7 @@
             "content": ""
         },
         {
-            "identifier": "worldInfoAfter",
+            "identifier": "charAfter",
             "name": "World Info (after)",
             "enabled": true,
             "role": "system",
