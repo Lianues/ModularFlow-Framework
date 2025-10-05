@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import AppShell from './layouts/AppShell.vue'
 import Sidebar from './components/Sidebar.vue'
 import PresetView from './views/PresetView.vue'
@@ -16,6 +16,8 @@ import { useCharacterStore } from '@/features/characters/store'
 import { usePersonaStore } from '@/features/persona/store'
 import { useHistoryStore } from '@/features/history/store'
 import { useFileManagerStore } from '@/features/files/fileManager'
+import { usePreviewRuntime } from '@/features/preview/runtime'
+import { usePreviewStore } from '@/features/preview/store'
 
 type TabKey = 'presets' | 'files' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 const currentTab = ref<TabKey>('presets')
@@ -25,6 +27,8 @@ const characterStore = useCharacterStore()
 const personaStore = usePersonaStore()
 const historyStore = useHistoryStore()
 const fileManager = useFileManagerStore()
+const previewRuntime = usePreviewRuntime()
+const previewUI = usePreviewStore()
 
 onMounted(() => {
   presetStore.load()
@@ -32,7 +36,21 @@ onMounted(() => {
   personaStore.load()
   historyStore.load()
   fileManager.load()
+
+  // 初次进入页面，完成加载后立即生成一次当前模式的提示词
+  nextTick(() => previewRuntime.generateNow())
 })
+
+// 监听右侧栏模式切换：每次切换立即调用对应工作流
+watch(() => previewUI.mode, (m) => {
+  previewRuntime.generateNow(m)
+})
+
+// 监听各处 JSON 变更：1 秒冷却内防抖触发工作流
+watch(() => presetStore.activeData, () => previewRuntime.schedule(), { deep: true })
+watch(() => characterStore.doc, () => previewRuntime.schedule(), { deep: true })
+watch(() => personaStore.doc, () => previewRuntime.schedule(), { deep: true })
+watch(() => historyStore.activeData, () => previewRuntime.schedule(), { deep: true })
 
 /* 顶部右侧：导入（选择 JSON），导出（下载当前）
    - 预设页：仍按 PresetData 导入/导出
