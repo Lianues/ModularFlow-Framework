@@ -42,17 +42,17 @@ onMounted(() => {
   <div class="fixed top-16 left-0 right-0 bottom-0">
     <div class="grid grid-cols-[240px_minmax(0,1fr)_384px] h-full w-full">
       <!-- 左侧插槽 -->
-      <aside class="block w-60 flex-shrink-0 h-full overflow-y-auto bg-white border-r border-gray-200">
+      <aside class="block w-60 flex-shrink-0 h-full overflow-y-auto bg-white border-r border-gray-200 scrollbar-stable">
         <slot name="left" />
       </aside>
 
       <!-- 中间插槽 -->
-      <main class="flex-1 min-w-0 h-full overflow-y-auto px-6 py-4">
+      <main class="flex-1 min-w-0 h-full overflow-y-auto px-6 py-4 scrollbar-stable">
         <slot name="main" />
       </main>
 
       <!-- 右侧插槽 -->
-      <aside class="block w-96 flex-shrink-0 h-full overflow-y-auto bg-white border-l border-gray-200">
+      <aside class="block w-96 flex-shrink-0 h-full overflow-y-auto bg-white border-l border-gray-200 scrollbar-stable">
         <slot name="right" />
       </aside>
     </div>
@@ -61,4 +61,8 @@ onMounted(() => {
 
 <style scoped>
 /* 仅保持局部范围内最小覆盖，样式统一交给 Tailwind 类 */
+/* 为滚动容器预留滚动条槽位，避免出现/消失引发布局左右偏移 */
+.scrollbar-stable {
+  scrollbar-gutter: stable both-edges;
+}
 </style>
