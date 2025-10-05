@@ -6,7 +6,7 @@ import type {
   PromptItemInChat,
   PromptItemRelative,
 } from './types'
-import { isPresetData } from './types'
+import { isPresetData, SPECIAL_RELATIVE_TEMPLATES } from './types'
 
 /**
  * LocalStorage schema and key
@@ -55,6 +55,42 @@ function readFileAsText(file: File): Promise<string> {
 }
 
 /**
+ * Helpers: normalize content field presence
+ * Rule: For all items except SPECIAL_RELATIVE_TEMPLATES, ensure content: '' exists.
+ */
+function isSpecialRelative(id: string): boolean {
+  try {
+    return SPECIAL_RELATIVE_TEMPLATES.some(t => t.identifier === id)
+  } catch {
+    return false
+  }
+}
+
+function normalizePromptItem(item: PromptItem): PromptItem {
+  const x: any = item as any
+  if (x && x.position === 'relative') {
+    if (!isSpecialRelative(x.identifier)) {
+      if (!('content' in x) || x.content == null) x.content = ''
+    }
+  } else if (x && x.position === 'in-chat') {
+    if (!('content' in x) || x.content == null) x.content = ''
+  }
+  return item
+}
+
+function normalizePresetData(data: PresetData): boolean {
+  if (!data || !Array.isArray((data as any).prompts)) return false
+  let changed = false
+  for (const p of (data as any).prompts as any[]) {
+    const had = Object.prototype.hasOwnProperty.call(p, 'content')
+    const before = p.content
+    normalizePromptItem(p as any)
+    if (!had || before !== p.content) changed = true
+  }
+  return changed
+}
+
+/**
  * Preset Store
  * - Manage preset files in browser (import/export)
  * - Manage active preset data and prompt items CRUD
@@ -97,8 +133,18 @@ export const usePresetStore = defineStore('preset', {
       const { files, activeName } = loadFromLocal()
       // basic shape guard (do not strictly validate every file for performance)
       this.files = Array.isArray(files) ? files.filter(f => f && f.name && f.data) : []
+      // normalize content fields for non-special items
+      let changed = false
+      for (const f of this.files) {
+        try {
+          if (f?.data) {
+            if (normalizePresetData(f.data)) changed = true
+          }
+        } catch {}
+      }
       this.activeName = typeof activeName === 'string' ? activeName : (this.files[0]?.name ?? null)
       this.loaded = true
+      if (changed) this.persist()
     },
 
     persist() {
@@ -138,6 +184,7 @@ export const usePresetStore = defineStore('preset', {
     },
 
     upsertFile(entry: PresetFile) {
+      try { normalizePresetData(entry.data) } catch {}
       const idx = this.files.findIndex(f => f.name === entry.name)
       if (idx >= 0) this.files.splice(idx, 1, entry)
       else this.files.unshift(entry)
@@ -159,6 +206,8 @@ export const usePresetStore = defineStore('preset', {
           throw new Error('JSON 结构不符合 PresetData')
         }
       }
+      // 规范化导入数据：除一次性 Relative 外，其余条目必须含 content 字段（空则为 ""）
+      try { normalizePresetData(json as PresetData) } catch {}
       const entry: PresetFile = {
         name: file.name,
         enabled: true,
@@ -181,10 +230,11 @@ export const usePresetStore = defineStore('preset', {
     replacePrompt(next: PromptItem) {
       const data = this.activeData
       if (!data) return
-      const idx = data.prompts.findIndex(p => p.identifier === next.identifier)
+      const fixed = normalizePromptItem(next)
+      const idx = data.prompts.findIndex(p => p.identifier === fixed.identifier)
       if (idx >= 0) {
         // replace reference to keep reactivity
-        data.prompts.splice(idx, 1, next as any)
+        data.prompts.splice(idx, 1, fixed as any)
         this.persist()
       }
     },
@@ -192,7 +242,19 @@ export const usePresetStore = defineStore('preset', {
     addPrompt(item: PromptItem) {
       const data = this.activeData
       if (!data) return
-      data.prompts.push(item as any)
+      const normalized = normalizePromptItem(item)
+      // 新增放到队首
+      data.prompts.unshift(normalized as any)
+      // 若为 in-chat，规范化顺序字段，使其按当前出现顺序从 0 开始递增
+      if ((normalized as any).position === 'in-chat') {
+        let k = 0
+        for (let i = 0; i < data.prompts.length; i++) {
+          const p = data.prompts[i]
+          if (p && p.position === 'in-chat') {
+            ;(p as any).order = k++
+          }
+        }
+      }
       this.persist()
     },
 

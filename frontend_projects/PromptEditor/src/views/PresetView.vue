@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch, computed, nextTick } from 'vue'
 
 // 预设设置的简化模型（本地占位状态）
 const temperature = ref<number>(1.0)
@@ -73,6 +73,15 @@ import PresetPromptCard from '@/features/presets/components/PresetPromptCard.vue
 
 const store = usePresetStore()
 
+watch(
+  () => store.prompts.length,
+  async () => {
+    await nextTick()
+    ;(window as any).lucide?.createIcons?.()
+  },
+  { flush: 'post' }
+)
+
 
 /* 新增条目（Relative / In-Chat） */
 const specialSelect = ref<string>('')
@@ -86,7 +95,7 @@ const availableSpecials = computed(() =>
 const reservedIdSet = new Set(SPECIAL_RELATIVE_TEMPLATES.map(t => t.identifier))
 const reservedNameSet = new Set(SPECIAL_RELATIVE_TEMPLATES.map(t => t.name))
 
-function addSelectedSpecial() {
+async function addSelectedSpecial() {
   relError.value = null
   const sel = specialSelect.value
   if (!sel) return
@@ -106,10 +115,11 @@ function addSelectedSpecial() {
   }
   store.addPrompt(item as PromptItem)
   specialSelect.value = ''
+  await nextTick()
   ;(window as any).lucide?.createIcons?.()
 }
 
-function addCustomRelative() {
+async function addCustomRelative() {
   relError.value = null
   const id = newRelId.value.trim()
   const name = newRelName.value.trim()
@@ -139,10 +149,12 @@ function addCustomRelative() {
     enabled: null,
     role: 'system',
     position: 'relative',
+    content: ''
   }
   store.addPrompt(item as PromptItem)
   newRelId.value = ''
   newRelName.value = ''
+  await nextTick()
   ;(window as any).lucide?.createIcons?.()
 }
 
@@ -152,7 +164,7 @@ const newChatId = ref<string>('')
 const newChatName = ref<string>('')
 const chatError = ref<string | null>(null)
 
-function addCustomInChat() {
+async function addCustomInChat() {
   chatError.value = null
   const id = newChatId.value.trim()
   const name = newChatName.value.trim()
@@ -186,6 +198,7 @@ function addCustomInChat() {
   store.addPrompt(item as PromptItem)
   newChatId.value = ''
   newChatName.value = ''
+  await nextTick()
   ;(window as any).lucide?.createIcons?.()
 }
 
@@ -193,18 +206,38 @@ function addCustomInChat() {
 type PosType = 'relative' | 'in-chat'
 const dragging = ref<{ position: PosType; id: string } | null>(null)
 const dragOverId = ref<string | null>(null)
+const dragOverBefore = ref<boolean>(true)
+
+/**
+ * 拖拽预览采用“黑线位置指示”，不实时移动条目。
+ * 不构建预览重排列表，渲染顺序保持不变，释放时统一提交。
+ */
 
 function onDragStart(position: PosType, id: string, ev: DragEvent) {
   dragging.value = { position, id }
   try {
     ev.dataTransfer?.setData('text/plain', id)
     ev.dataTransfer!.effectAllowed = 'move'
+    // 使用极小透明拖拽影像，避免拖拽整卡片导致的布局扰动
+    const canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
   } catch {}
 }
 
 function onDragOver(position: PosType, overId: string | null, ev: DragEvent) {
   if (dragging.value?.position !== position) return
   ev.preventDefault()
+  // decide insert before/after by cursor vs target element center
+  try {
+    const el = ev.currentTarget as HTMLElement | null
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverBefore.value = ev.clientY < mid
+    }
+  } catch {}
   dragOverId.value = overId
 }
 
@@ -220,7 +253,9 @@ function onDrop(position: PosType, overId: string | null, ev: DragEvent) {
   ids.splice(fromIdx, 1)
   if (overId && overId !== dId) {
     const toIdx = ids.indexOf(overId)
-    const insertIdx = toIdx < 0 ? ids.length : toIdx
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
     ids.splice(insertIdx, 0, dId)
   } else {
     // drop at end
@@ -544,13 +579,17 @@ function onDragEnd() {
                   <p v-if="relError" class="text-xs text-red-600">* {{ relError }}</p>
                 </div>
 
-                <!-- 已有 Relative 列表 -->
+                <!-- 已有 Relative 列表（黑线预览，不实时移动） -->
                 <div v-show="relativeOpen" class="space-y-2">
                   <div
                     v-for="it in store.relativePrompts"
                     :key="it.identifier"
-                    class="flex items-stretch gap-2 group"
-                    :class="{'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'relative'}"
+                    class="flex items-stretch gap-2 group draglist-item"
+                    :class="{
+                      'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'relative',
+                      'drag-over-top': dragging && dragOverId === it.identifier && dragging.position === 'relative' && dragOverBefore,
+                      'drag-over-bottom': dragging && dragOverId === it.identifier && dragging.position === 'relative' && !dragOverBefore
+                    }"
                     @dragover.prevent="onDragOver('relative', it.identifier, $event)"
                     @drop.prevent="onDrop('relative', it.identifier, $event)"
                   >
@@ -561,14 +600,15 @@ function onDragEnd() {
                       @dragend="onDragEnd"
                       title="拖拽排序"
                     >
-                      <i data-lucide="grip-vertical" class="w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+                      <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
                     </div>
-                    <div class="flex-1" :class="{'drag-over': dragOverId === it.identifier && dragging && dragging.position === 'relative'}">
+                    <div class="flex-1">
                       <PresetPromptCard :item="it" />
                     </div>
                   </div>
                   <div
-                    class="h-3"
+                    class="h-3 draglist-end"
+                    :class="{ 'drag-over-end': dragging && dragOverId === null && dragging.position === 'relative' }"
                     @dragover.prevent="onDragOver('relative', null, $event)"
                     @drop.prevent="onDropEnd('relative', $event)"
                   />
@@ -617,8 +657,12 @@ function onDragEnd() {
                   <div
                     v-for="it in store.inChatPrompts"
                     :key="it.identifier"
-                    class="flex items-stretch gap-2 group"
-                    :class="{'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'in-chat'}"
+                    class="flex items-stretch gap-2 group draglist-item"
+                    :class="{
+                      'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'in-chat',
+                      'drag-over-top': dragging && dragOverId === it.identifier && dragging.position === 'in-chat' && dragOverBefore,
+                      'drag-over-bottom': dragging && dragOverId === it.identifier && dragging.position === 'in-chat' && !dragOverBefore
+                    }"
                     @dragover.prevent="onDragOver('in-chat', it.identifier, $event)"
                     @drop.prevent="onDrop('in-chat', it.identifier, $event)"
                   >
@@ -629,14 +673,15 @@ function onDragEnd() {
                       @dragend="onDragEnd"
                       title="拖拽排序"
                     >
-                      <i data-lucide="grip-vertical" class="w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+                      <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
                     </div>
-                    <div class="flex-1" :class="{'drag-over': dragOverId === it.identifier && dragging && dragging.position === 'in-chat'}">
+                    <div class="flex-1">
                       <PresetPromptCard :item="it" />
                     </div>
                   </div>
                   <div
-                    class="h-3"
+                    class="h-3 draglist-end"
+                    :class="{ 'drag-over-end': dragging && dragOverId === null && dragging.position === 'in-chat' }"
                     @dragover.prevent="onDragOver('in-chat', null, $event)"
                     @drop.prevent="onDropEnd('in-chat', $event)"
                   />
@@ -756,5 +801,77 @@ function onDragEnd() {
 }
 .cursor-grab:active {
   cursor: grabbing;
+}
+
+/* lucide 加载失败时的抓手占位符（确保新增条目立即可见握把） */
+.icon-grip::before {
+  content: '⋮⋮';
+  display: inline-block;
+  line-height: 1;
+  font-weight: 700;
+  color: #111;
+}
+
+/* TransitionGroup（FLIP）用于条目移动时的“推挤让位”动画 */
+.draglist-move {
+  transition: transform 180ms cubic-bezier(.2,.6,.2,1);
+}
+.draglist-enter-active,
+.draglist-leave-active {
+  transition: all 120ms ease;
+}
+.draglist-enter-from,
+.draglist-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* 让每个可拖拽条目成为相对定位容器，便于绘制顶/底插入线 */
+.draglist-item { position: relative; }
+
+/* 顶部插入提示线（推挤让位的视觉锚点） */
+.drag-over-top::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -6px; /* 与列表的 space-y-2 配合，线落在两卡片之间 */
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+/* 底部插入提示线 */
+.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+/* 正在拖拽的条目：轻微缩放、阴影与透明度，增强拟物感 */
+.dragging-item {
+  transform: scale(0.98);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  opacity: 0.92;
+  z-index: 1;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+/* 列表末尾的预览线（拖到列表末尾时显示） */
+.draglist-end { position: relative; }
+.drag-over-end::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px; /* h-3 高度约 12px，这里取居中偏上的位置 */
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
 }
 </style>

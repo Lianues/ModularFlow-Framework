@@ -7,6 +7,7 @@ import type {
   PromptItemRelative,
   Role,
 } from '../types'
+import { SPECIAL_RELATIVE_TEMPLATES } from '../types'
 
 const props = defineProps<{
   item: PromptItem
@@ -24,8 +25,13 @@ const fromTri = (s: Tri): boolean | null => (s === 'true' ? true : s === 'false'
 
 const isInChat = computed((): boolean => props.item.position === 'in-chat')
 const hasContent = computed((): boolean => 'content' in props.item)
+const isSpecialRel = computed(
+  (): boolean =>
+    props.item.position === 'relative' &&
+    SPECIAL_RELATIVE_TEMPLATES.some(t => t.identifier === props.item.identifier)
+)
 
-const enabledLabel = (v: boolean | null) => (v === true ? '启用' : v === false ? '未启用' : '未设置')
+const enabledLabel = (v: boolean | null) => (v === true ? '已启用' : v === false ? '未启用' : '未设置')
 
 // draft fields
 const draftName = ref(props.item.name)
@@ -84,8 +90,8 @@ function onSave() {
       depth: draftDepth.value,
       order: draftOrder.value,
     }
-    // content 字段：仅当原始对象具有该字段时保留；否则不写入（占位条目）
-    const out = hasContent.value ? ({ ...base, content: draftContent.value } as PromptItemInChat) : base
+    // In-Chat 必须始终包含 content 字段
+    const out = { ...base, content: draftContent.value } as PromptItemInChat
     store.replacePrompt(out)
   } else {
     const base: PromptItemRelative = {
@@ -95,7 +101,8 @@ function onSave() {
       role: draftRole.value,
       position: 'relative',
     }
-    const out = hasContent.value ? ({ ...base, content: draftContent.value } as PromptItemRelative) : base
+    // Relative：除一次性组件外，必须包含 content 字段
+    const out = isSpecialRel.value ? base : ({ ...base, content: draftContent.value } as PromptItemRelative)
     store.replacePrompt(out)
   }
   editing.value = false
@@ -108,14 +115,13 @@ function onSave() {
     <div class="flex items-center justify-between">
       <div class="text-sm flex items-center gap-2">
         <span class="font-medium">{{ props.item.name }}</span>
-        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">role: {{ props.item.role }}</span>
-        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">position: {{ props.item.position }}</span>
-        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ enabledLabel(props.item.enabled) }}</span>
         <span v-if="isInChat" class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">depth: {{ (props.item as any).depth }}</span>
         <span v-if="isInChat" class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">order: {{ (props.item as any).order }}</span>
       </div>
 
       <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ props.item.role }}</span>
+        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ enabledLabel(props.item.enabled) }}</span>
         <!-- 非编辑态：删除 + 编辑（删除在左） -->
         <button
           v-if="!editing"
@@ -182,7 +188,7 @@ function onSave() {
             v-model="draftEnabled"
             class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-white focus:outline-none focus:ring-2 focus:ring-gray-800"
           >
-            <option value="true">启用</option>
+            <option value="true">已启用</option>
             <option value="false">未启用</option>
             <option value="null">未设置</option>
           </select>
