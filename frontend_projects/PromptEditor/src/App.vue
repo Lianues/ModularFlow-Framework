@@ -11,19 +11,25 @@ import HistoryView from './views/HistoryView.vue'
 import FileManagerView from './views/FileManagerView.vue'
 
 import { usePresetStore } from './features/presets/store'
+import { useCharacterStore } from '@/features/characters/store'
+import { usePersonaStore } from '@/features/persona/store'
 
 type TabKey = 'presets' | 'files' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 const currentTab = ref<TabKey>('presets')
 
 const presetStore = usePresetStore()
+const characterStore = useCharacterStore()
+const personaStore = usePersonaStore()
 
 onMounted(() => {
   presetStore.load()
+  characterStore.load()
+  personaStore.load()
 })
 
 /* 顶部右侧：导入（选择 JSON），导出（下载当前）
    - 预设页：仍按 PresetData 导入/导出
-   - 世界书页：导入/导出 world_books（数组/嵌套数组），不涉及 Setting */
+   - 世界书页：仅支持 {entries:[...]} 或 {world_book:{entries:[...]}} 导入/导出 */
 function handleImport() {
   const input = document.createElement('input')
   input.type = 'file'
@@ -86,7 +92,27 @@ function handleImport() {
       return score >= 3
     }
 
-    // 在世界书页或检测为世界书数据时，按世界书导入（仅新格式）
+    // 角色卡页签：优先按角色卡导入（防止被世界书检测抢占）
+    if (currentTab.value === 'characters') {
+      try {
+        characterStore.setCharacter(json, file.name)
+      } catch {
+        alert('导入失败：角色卡数据结构不符合预期')
+      }
+      return
+    }
+
+    // 用户信息页签：按用户信息（Persona）导入
+    if (currentTab.value === 'user') {
+      try {
+        personaStore.setPersona(json, file.name)
+      } catch {
+        alert('导入失败：用户信息数据结构不符合预期')
+      }
+      return
+    }
+
+    // 世界书页或检测为世界书数据时，按世界书导入（仅新格式）
     if (currentTab.value === 'worldbook' || isWorldBooksJson(json)) {
       let flat: any[] = []
       if (Array.isArray(json?.entries)) {
@@ -118,6 +144,30 @@ function handleImport() {
 function handleExport() {
   if (currentTab.value === 'worldbook') {
     const res = presetStore.exportWorldBooks()
+    if (!res) return
+    const blob = new Blob([res.json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = res.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } else if (currentTab.value === 'characters') {
+    const res = characterStore.exportCharacter()
+    if (!res) return
+    const blob = new Blob([res.json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = res.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } else if (currentTab.value === 'user') {
+    const res = personaStore.exportPersona()
     if (!res) return
     const blob = new Blob([res.json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
