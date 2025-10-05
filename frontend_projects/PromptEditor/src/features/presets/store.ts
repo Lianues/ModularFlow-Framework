@@ -5,6 +5,7 @@ import type {
   PromptItem,
   PromptItemInChat,
   PromptItemRelative,
+  RegexRule,
 } from './types'
 import { isPresetData, SPECIAL_RELATIVE_TEMPLATES } from './types'
 
@@ -78,15 +79,50 @@ function normalizePromptItem(item: PromptItem): PromptItem {
   return item
 }
 
+function normalizeRegexRule(r: any): void {
+  if (!r || typeof r !== 'object') return
+  if (typeof r.id !== 'string') r.id = String(r.id ?? '')
+  if (typeof r.name !== 'string') r.name = String(r.name ?? r.id ?? '')
+  r.enabled = r.enabled === true ? true : r.enabled === false ? false : true
+  if (typeof r.find_regex !== 'string') r.find_regex = String(r.find_regex ?? '')
+  if (typeof r.replace_regex !== 'string') r.replace_regex = String(r.replace_regex ?? '')
+  if (!Array.isArray(r.targets)) r.targets = []
+  if (typeof r.placement !== 'string') r.placement = 'after_macro'
+  if (!Array.isArray(r.views)) r.views = []
+  if (r.min_depth != null) r.min_depth = Number(r.min_depth)
+  if (r.max_depth != null) r.max_depth = Number(r.max_depth)
+  if (r.description != null && typeof r.description !== 'string') r.description = String(r.description)
+}
+
 function normalizePresetData(data: PresetData): boolean {
-  if (!data || !Array.isArray((data as any).prompts)) return false
+  if (!data) return false
   let changed = false
-  for (const p of (data as any).prompts as any[]) {
-    const had = Object.prototype.hasOwnProperty.call(p, 'content')
-    const before = p.content
-    normalizePromptItem(p as any)
-    if (!had || before !== p.content) changed = true
+
+  // prompts
+  if (Array.isArray((data as any).prompts)) {
+    for (const p of (data as any).prompts as any[]) {
+      const had = Object.prototype.hasOwnProperty.call(p, 'content')
+      const before = p.content
+      normalizePromptItem(p as any)
+      if (!had || before !== p.content) changed = true
+    }
+  } else {
+    ;(data as any).prompts = []
+    changed = true
   }
+
+  // regex_rules
+  if (!Array.isArray((data as any).regex_rules)) {
+    ;(data as any).regex_rules = []
+    changed = true
+  } else {
+    for (const r of (data as any).regex_rules as any[]) {
+      const before = JSON.stringify(r)
+      normalizeRegexRule(r)
+      if (JSON.stringify(r) !== before) changed = true
+    }
+  }
+
   return changed
 }
 
@@ -124,6 +160,9 @@ export const usePresetStore = defineStore('preset', {
     inChatPrompts(): PromptItemInChat[] {
       const list = (((this as any).prompts ?? []) as PromptItem[])
       return list.filter((p: PromptItem) => p.position === 'in-chat') as PromptItemInChat[]
+    },
+    regexRules(): RegexRule[] {
+      return (((this as any).activeData?.regex_rules ?? []) as any[]) as RegexRule[]
     },
   },
 
@@ -266,6 +305,88 @@ export const usePresetStore = defineStore('preset', {
         data.prompts.splice(idx, 1)
         this.persist()
       }
+    },
+
+    /**
+     * Regex Rules CRUD
+     */
+    addRegexRule(rule: RegexRule) {
+      const data = this.activeData
+      if (!data) return
+      if (!Array.isArray(data.regex_rules)) data.regex_rules = []
+      const i = data.regex_rules.findIndex(r => r && r.id === rule.id)
+      if (i >= 0) {
+        data.regex_rules.splice(i, 1, rule as any)
+      } else {
+        data.regex_rules.unshift(rule as any)
+      }
+      this.persist()
+    },
+
+    replaceRegexRule(updated: RegexRule) {
+      const data = this.activeData
+      if (!data || !Array.isArray(data.regex_rules)) return
+      const idx = data.regex_rules.findIndex(r => r && r.id === updated.id)
+      if (idx >= 0) {
+        data.regex_rules.splice(idx, 1, updated as any)
+        this.persist()
+      }
+    },
+
+    removeRegexRule(id: string) {
+      const data = this.activeData
+      if (!data || !Array.isArray(data.regex_rules)) return
+      const idx = data.regex_rules.findIndex(r => r && r.id === id)
+      if (idx >= 0) {
+        data.regex_rules.splice(idx, 1)
+        this.persist()
+      }
+    },
+
+    /**
+     * Replace entire regex_rules list (used by Regex panel import)
+     */
+    setRegexRules(rules: RegexRule[]) {
+      const data = this.activeData
+      if (!data) return
+      const list: any[] = Array.isArray(rules) ? rules.map(r => ({ ...(r as any) })) : []
+      for (const r of list) {
+        try { normalizeRegexRule(r) } catch {}
+      }
+      data.regex_rules = list as any
+      this.persist()
+    },
+
+    /**
+     * Reorder regex_rules by provided id order (ids not present keep original order at tail)
+     */
+    reorderRegexRules(orderedIds: string[]) {
+      const data = this.activeData
+      if (!data || !Array.isArray(data.regex_rules)) return
+      const items = data.regex_rules
+      const idSet = new Set(items.map(i => i.id))
+      const normalized = (orderedIds || []).filter((id): id is string => !!id && idSet.has(id))
+      const missing = items.map(i => i.id).filter(id => !normalized.includes(id))
+      const finalIds = normalized.concat(missing)
+      const map = new Map<string, RegexRule>(items.map(i => [i.id, i as RegexRule]))
+      const next: RegexRule[] = []
+      for (const id of finalIds) {
+        const x = map.get(id)
+        if (x) next.push(x)
+      }
+      data.regex_rules.splice(0, data.regex_rules.length, ...(next as any))
+      this.persist()
+    },
+
+    /**
+     * Export regex_rules array only (array schema like backend .../regex_rules/*.json)
+     */
+    exportRegexRules(): { filename: string; json: string } | null {
+      const data = this.activeData
+      if (!data) return null
+      const filename = 'regex_rules.json'
+      const json = JSON.stringify(data.regex_rules ?? [], null, 2)
+      return { filename, json }
     },
 
     /**

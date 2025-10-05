@@ -67,14 +67,24 @@ onMounted(() => {
 
 /* 使用 Store 管理预设数据 */
 import { usePresetStore } from '../features/presets/store'
-import type { PromptItem, PromptItemRelative, PromptItemInChat } from '@/features/presets/types'
+import type { PromptItem, PromptItemRelative, PromptItemInChat, RegexRule } from '@/features/presets/types'
 import { SPECIAL_RELATIVE_TEMPLATES } from '@/features/presets/types'
 import PresetPromptCard from '@/features/presets/components/PresetPromptCard.vue'
+import RegexRuleCard from '@/features/regex/components/RegexRuleCard.vue'
 
 const store = usePresetStore()
 
 watch(
   () => store.prompts.length,
+  async () => {
+    await nextTick()
+    ;(window as any).lucide?.createIcons?.()
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => store.activeData?.regex_rules?.length ?? 0,
   async () => {
     await nextTick()
     ;(window as any).lucide?.createIcons?.()
@@ -202,6 +212,45 @@ async function addCustomInChat() {
   ;(window as any).lucide?.createIcons?.()
 }
 
+// 正则规则新增（右对齐 id + 名称 + 添加）
+const newRegexId = ref<string>('')
+const newRegexName = ref<string>('')
+const regexError = ref<string | null>(null)
+
+async function addCustomRegex() {
+  regexError.value = null
+  const id = newRegexId.value.trim()
+  const name = newRegexName.value.trim()
+  if (!id) {
+    regexError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    regexError.value = '请填写 名称'
+    return
+  }
+  const rules = store.activeData?.regex_rules ?? []
+  if (rules.some(r => r.id === id)) {
+    regexError.value = 'id 已存在'
+    return
+  }
+  const rule: RegexRule = {
+    id,
+    name,
+    enabled: true,
+    find_regex: '',
+    replace_regex: '',
+    targets: [],
+    placement: 'after_macro',
+    views: [],
+  }
+  store.addRegexRule(rule)
+  newRegexId.value = ''
+  newRegexName.value = ''
+  await nextTick()
+  ;(window as any).lucide?.createIcons?.()
+}
+
 // 拖拽排序（Relative / In-Chat）
 type PosType = 'relative' | 'in-chat'
 const dragging = ref<{ position: PosType; id: string } | null>(null)
@@ -275,6 +324,69 @@ function onDropEnd(position: PosType, ev: DragEvent) {
 function onDragEnd() {
   dragging.value = null
   dragOverId.value = null
+}
+
+/* 正则规则拖拽排序（黑线预览） */
+const draggingRegex = ref<string | null>(null)
+const dragOverRegexId = ref<string | null>(null)
+const dragOverRegexBefore = ref<boolean>(true)
+
+function onRegexDragStart(id: string, ev: DragEvent) {
+  draggingRegex.value = id
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer!.effectAllowed = 'move'
+    const canvas = document.createElement('canvas')
+    canvas.width = 1; canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
+  } catch {}
+}
+
+function onRegexDragOver(overId: string | null, ev: DragEvent) {
+  if (!draggingRegex.value) return
+  ev.preventDefault()
+  try {
+    const el = ev.currentTarget as HTMLElement | null
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverRegexBefore.value = ev.clientY < mid
+    }
+  } catch {}
+  dragOverRegexId.value = overId
+}
+
+function onRegexDrop(overId: string | null, ev: DragEvent) {
+  if (!draggingRegex.value) return
+  ev.preventDefault()
+  const dId = draggingRegex.value
+  const list = [...(store.activeData?.regex_rules || [])]
+  let ids = list.map(i => i.id)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverRegexBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    ids.push(dId)
+  }
+  store.reorderRegexRules(ids)
+  draggingRegex.value = null
+  dragOverRegexId.value = null
+  ;(window as any).lucide?.createIcons?.()
+}
+
+function onRegexDropEnd(ev: DragEvent) {
+  onRegexDrop(null, ev)
+}
+
+function onRegexDragEnd() {
+  draggingRegex.value = null
+  dragOverRegexId.value = null
 }
 </script>
 
@@ -712,42 +824,70 @@ function onDragEnd() {
       </button>
 
       <div v-show="regexOpen" class="space-y-2">
-        <!-- 示例规则条目 -->
-        <div class="border border-gray-200 rounded-4 p-3 transition-all duration-200 ease-soft hover:shadow-elevate">
-          <div class="flex items-center justify-between">
-            <div class="text-sm">
-              <span class="font-mono">preset_rule_example</span>
-              <span class="text-black/60 ml-2">状态：启用</span>
+        <!-- 新增 Regex：右侧 id + 名称 + 添加 -->
+        <div class="mb-2 flex justify-end">
+          <div class="flex items-center gap-2">
+            <input
+              v-model="newRegexId"
+              placeholder="id"
+              class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
+            <input
+              v-model="newRegexName"
+              placeholder="名称"
+              class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
+            <button
+              class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+              @click="addCustomRegex"
+            >
+              添加
+            </button>
+          </div>
+        </div>
+        <p v-if="regexError" class="text-xs text-red-600">* {{ regexError }}</p>
+
+        <!-- 规则列表（可拖拽排序，黑线插入预览） -->
+        <div class="space-y-2">
+          <div
+            v-for="r in (store.activeData?.regex_rules || [])"
+            :key="r.id"
+            class="flex items-stretch gap-2 group draglist-item"
+            :class="{
+              'dragging-item': draggingRegex && draggingRegex === r.id,
+              'drag-over-top': draggingRegex && dragOverRegexId === r.id && dragOverRegexBefore,
+              'drag-over-bottom': draggingRegex && dragOverRegexId === r.id && !dragOverRegexBefore
+            }"
+            @dragover.prevent="onRegexDragOver(r.id, $event)"
+            @drop.prevent="onRegexDrop(r.id, $event)"
+          >
+            <div
+              class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+              draggable="true"
+              @dragstart="onRegexDragStart(r.id, $event)"
+              @dragend="onRegexDragEnd"
+              title="拖拽排序"
+            >
+              <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
             </div>
-            <div class="flex items-center gap-2">
-              <button
-                class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-              >
-                编辑
-              </button>
-              <button
-                class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-              >
-                复制
-              </button>
+            <div class="flex-1">
+              <RegexRuleCard :rule="r" />
             </div>
           </div>
-          <div class="mt-2 text-xs text-black/70 leading-6">
-            find: <span class="font-mono">示例</span> →
-            replace: <span class="font-mono">【预设替换】</span>，
-            targets: <span class="font-mono">user, assistant</span>，
-            placement: <span class="font-mono">after_macro</span>
-          </div>
+          <div
+            class="h-3 draglist-end"
+            :class="{ 'drag-over-end': draggingRegex && dragOverRegexId === null }"
+            @dragover.prevent="onRegexDragOver(null, $event)"
+            @drop.prevent="onRegexDropEnd($event)"
+          />
+        </div>
+
+        <div v-if="(store.activeData?.regex_rules || []).length === 0" class="text-xs text-black/50 px-1 py-1">
+          暂无规则，请在右上角输入后点击添加
         </div>
       </div>
 
-      <div v-show="regexOpen" class="mt-3">
-        <button
-          class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-        >
-          新增规则
-        </button>
-      </div>
+      <!-- 新增按钮移除，采用右上角输入 + 添加 -->
     </div>
   </section>
 </template>

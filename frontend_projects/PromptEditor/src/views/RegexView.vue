@@ -1,236 +1,313 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
+import { usePresetStore } from '@/features/presets/store'
+import RegexRuleCard from '@/features/regex/components/RegexRuleCard.vue'
+import type { PresetData, PresetFile, PresetSetting, RegexRule } from '@/features/presets/types'
 
-/**
- * 参考正则规则结构（backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json）
- * 本视图仅做 UI 占位与交互演示，暂不接入后端
- */
+const store = usePresetStore()
 
-type Placement = 'before_macro' | 'after_macro' | string
-interface Rule {
-  id: string
-  name: string
-  enabled?: boolean
-  find_regex: string
-  replace_regex: string
-  targets?: string[]
-  placement?: Placement
-  views?: string[]
-  min_depth?: number
-  max_depth?: number
-  description?: string
+// 独立面板专用文件名（在 Store 中维护一份仅含 regex_rules 的文件）
+const PANEL_NAME = 'RegexPanel'
+
+// 默认 Setting（用于占位，便于 Store 通过统一的 PresetData 管理）
+const DEFAULT_SETTING: PresetSetting = {
+  temperature: 1,
+  frequency_penalty: 0,
+  presence_penalty: 0,
+  top_p: 1,
+  top_k: 0,
+  max_context: 4095,
+  max_tokens: 300,
+  stream: true,
 }
 
-const rules = ref<Rule[]>([
-  {
-    id: 'remove_xml_tags_rule',
-    name: 'Remove XML Tags',
-    enabled: true,
-    find_regex: '<([a-zA-Z0-9]+)>(.|\\n)*?</\\\\1>',
-    replace_regex: '移除xml',
-    targets: ['preset', 'world_book', 'history'],
-    placement: 'before_macro',
-    views: ['user_view', 'assistant_view'],
-    description: 'Removes XML tags and their content, affecting only the user_view.'
-  },
-  {
-    id: '53a86be21-aaa329111a-45b5-88c1-4209d4d232f1a11',
-    name: '状态栏',
-    enabled: true,
-    find_regex: '<StatusPlaceHolderImpl/>',
-    replace_regex: '这里是状态栏',
-    targets: ['history'],
-    placement: 'after_macro',
-    views: ['user_view'],
-    min_depth: 0,
-    max_depth: 5,
-    description: '仅对Markdown内容生效'
+function ensureRegexPanelActive() {
+  if (!store.loaded) store.load()
+  const exists = store.files.find(f => f.name === PANEL_NAME)
+  if (!exists) {
+    const data: PresetData = { setting: DEFAULT_SETTING, regex_rules: [], prompts: [] }
+    const entry: PresetFile = { name: PANEL_NAME, enabled: true, data }
+    store.upsertFile(entry)
+  } else {
+    store.setActive(PANEL_NAME)
   }
-])
-
-const search = ref('')
-const placementFilter = ref<'all' | Placement>('all')
-const onlyEnabled = ref(false)
-
-const targetFilters = ref<{ [k: string]: boolean }>({
-  preset: false,
-  world_book: false,
-  history: false
-})
-const viewFilters = ref<{ [k: string]: boolean }>({
-  user_view: false,
-  assistant_view: false
-})
-
-const filtered = computed(() => {
-  return rules.value
-    .filter(r => (onlyEnabled.value ? r.enabled !== false : true))
-    .filter(r => (placementFilter.value === 'all' ? true : r.placement === placementFilter.value))
-    .filter(r => {
-      const anyTargetSelected = Object.values(targetFilters.value).some(v => v)
-      if (!anyTargetSelected) return true
-      const set = new Set(r.targets || [])
-      return Object.entries(targetFilters.value).every(([k, v]) => (v ? set.has(k) : true))
-    })
-    .filter(r => {
-      const anyViewSelected = Object.values(viewFilters.value).some(v => v)
-      if (!anyViewSelected) return true
-      const set = new Set(r.views || [])
-      return Object.entries(viewFilters.value).every(([k, v]) => (v ? set.has(k) : true))
-    })
-    .filter(r => {
-      if (!search.value) return true
-      const hay = `${r.id} ${r.name} ${r.find_regex} ${r.replace_regex} ${(r.targets || []).join(' ')} ${(r.views || []).join(' ')} ${r.description || ''}`
-      return hay.toLowerCase().includes(search.value.toLowerCase())
-    })
-})
-
-function toggleEnabled(r: Rule) {
-  r.enabled = !r.enabled
 }
 
 onMounted(() => {
+  ensureRegexPanelActive()
   ;(window as any).lucide?.createIcons?.()
 })
+
+watch(
+  () => store.activeData?.regex_rules?.length ?? 0,
+  async () => {
+    await nextTick()
+    ;(window as any).lucide?.createIcons?.()
+  },
+  { flush: 'post' }
+)
+
+// 右上角：新增规则
+const newId = ref<string>('') 
+const newName = ref<string>('') 
+const error = ref<string | null>(null)
+
+async function addRule() {
+  error.value = null
+  const id = newId.value.trim()
+  const name = newName.value.trim()
+  if (!id) { error.value = '请填写 id'; return }
+  if (!name) { error.value = '请填写 名称'; return }
+  const rules = store.activeData?.regex_rules ?? []
+  if (rules.some(r => r.id === id)) { error.value = 'id 已存在'; return }
+  const rule: RegexRule = {
+    id, name, enabled: true, find_regex: '', replace_regex: '', targets: [], placement: 'after_macro', views: [],
+  }
+  store.addRegexRule(rule)
+  newId.value = ''
+  newName.value = ''
+  await nextTick()
+  ;(window as any).lucide?.createIcons?.()
+}
+
+// 导入/导出（数组 JSON，参考 backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json）
+const fileInput = ref<HTMLInputElement | null>(null)
+
+function triggerImport() {
+  fileInput.value?.click()
+}
+
+async function onImportChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files && input.files[0]
+  if (!file) return
+  try {
+    const text = await file.text()
+    const json = JSON.parse(text)
+    if (!Array.isArray(json)) {
+      error.value = '文件内容应为数组（参考 backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json）'
+      input.value = ''
+      return
+    }
+    store.setRegexRules(json as RegexRule[])
+    error.value = null
+  } catch {
+    error.value = '导入失败：JSON 解析错误'
+  } finally {
+    input.value = ''
+  }
+}
+
+function exportRules() {
+  const res = store.exportRegexRules()
+  if (!res) return
+  const blob = new Blob([res.json], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = res.filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/* 拖拽排序（黑线插入预览） */
+const dragging = ref<string | null>(null)
+const dragOverId = ref<string | null>(null)
+const dragOverBefore = ref<boolean>(true)
+
+function onDragStart(id: string, ev: DragEvent) {
+  dragging.value = id
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer!.effectAllowed = 'move'
+    const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
+  } catch {}
+}
+
+function onDragOver(overId: string | null, ev: DragEvent) {
+  if (!dragging.value) return
+  ev.preventDefault()
+  try {
+    const el = ev.currentTarget as HTMLElement | null
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverBefore.value = ev.clientY < mid
+    }
+  } catch {}
+  dragOverId.value = overId
+}
+
+function onDrop(overId: string | null, ev: DragEvent) {
+  if (!dragging.value) return
+  ev.preventDefault()
+  const dId = dragging.value
+  const list = [...(store.activeData?.regex_rules || [])]
+  let ids = list.map(i => i.id)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    ids.push(dId)
+  }
+  store.reorderRegexRules(ids)
+  dragging.value = null
+  dragOverId.value = null
+  ;(window as any).lucide?.createIcons?.()
+}
+
+function onDropEnd(ev: DragEvent) { onDrop(null, ev) }
+function onDragEnd() { dragging.value = null; dragOverId.value = null }
+
 </script>
 
 <template>
   <section class="space-y-6">
+    <!-- 标题 -->
     <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center space-x-3">
-          <i data-lucide="code" class="w-6 h-6 text-black"></i>
-          <h2>正则规则</h2>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="code" class="w-5 h-5 text-black"></i>
+          <h2>正则规则（独立面板）</h2>
         </div>
-        <div class="text-xs text-black/50">参考：backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json</div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
-        <div class="md:col-span-3">
-          <label class="block text-sm font-medium text-black mb-2">搜索</label>
-          <input
-            v-model="search"
-            type="text"
-            placeholder="按名称、ID、正则、描述搜索..."
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 focus:outline-none focus:ring-2 focus:ring-gray-800"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">阶段（placement）</label>
-          <select
-            v-model="placementFilter"
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-white focus:outline-none focus:ring-2 focus:ring-gray-800"
-          >
-            <option value="all">全部</option>
-            <option value="before_macro">before_macro</option>
-            <option value="after_macro">after_macro</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">Targets</label>
-          <div class="flex items-center gap-3">
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" v-model="targetFilters.preset" class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2" />
-              <span>preset</span>
-            </label>
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" v-model="targetFilters.world_book" class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2" />
-              <span>world_book</span>
-            </label>
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" v-model="targetFilters.history" class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2" />
-              <span>history</span>
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">Views</label>
-          <div class="flex items-center gap-3">
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" v-model="viewFilters.user_view" class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2" />
-              <span>user_view</span>
-            </label>
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" v-model="viewFilters.assistant_view" class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2" />
-              <span>assistant_view</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="md:col-span-1 flex items-end">
-          <label class="inline-flex items-center space-x-2 select-none">
-            <input type="checkbox" v-model="onlyEnabled" class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2" />
-            <span class="text-sm text-black/80">仅启用</span>
-          </label>
-        </div>
+        <div class="text-xs text-black/60">导入/导出参考：backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json</div>
       </div>
     </div>
 
-    <div class="space-y-4">
-      <div
-        v-for="r in filtered"
-        :key="r.id"
-        class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate"
-      >
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="flex items-center gap-2">
-                <i data-lucide="sparkles" class="w-4 h-4 text-black"></i>
-                <h3 class="text-lg font-bold text-black">{{ r.name }}</h3>
-              </div>
-              <span class="text-xs text-black/60">ID: {{ r.id }}</span>
-              <span class="text-xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">{{ r.placement ?? '—' }}</span>
-              <span v-if="r.min_depth !== undefined" class="text-xs text-black/60">min: {{ r.min_depth }}</span>
-              <span v-if="r.max_depth !== undefined" class="text-xs text-black/60">max: {{ r.max_depth }}</span>
-            </div>
-
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <span v-for="t in r.targets || []" :key="t" class="text-xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">{{ t }}</span>
-              <span v-for="v in r.views || []" :key="v" class="text-xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">{{ v }}</span>
-            </div>
-
-            <p v-if="r.description" class="mt-2 text-xs text-black/60">{{ r.description }}</p>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button
-              class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-            >
-              编辑
-            </button>
-            <button
-              class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-            >
-              测试
-            </button>
-            <button
-              class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-              @click="toggleEnabled(r)"
-            >
-              {{ r.enabled === false ? '启用' : '禁用' }}
-            </button>
-          </div>
+    <!-- 工具栏：导入/导出 + 新增 -->
+    <div class="bg-white rounded-4 border border-gray-200 p-4 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-sm text-black/70">
+          规则数量：{{ (store.activeData?.regex_rules || []).length }}
         </div>
-
-        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="border border-gray-200 rounded-4 p-3">
-            <div class="text-xs font-medium text-black mb-2">find_regex</div>
-            <div class="text-xs text-black/70 font-mono break-all whitespace-pre-wrap">{{ r.find_regex }}</div>
-          </div>
-          <div class="border border-gray-200 rounded-4 p-3">
-            <div class="text-xs font-medium text-black mb-2">replace_regex</div>
-            <div class="text-xs text-black/70 font-mono break-all whitespace-pre-wrap">{{ r.replace_regex }}</div>
-          </div>
+        <div class="flex items-center gap-2">
+          <input ref="fileInput" type="file" accept="application/json" class="hidden" @change="onImportChange" />
+          <button
+            class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-xs hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="triggerImport"
+          >
+            导入
+          </button>
+          <button
+            class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-xs hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="exportRules"
+          >
+            导出
+          </button>
+          <div class="w-px h-5 bg-gray-300 mx-1"></div>
+          <input
+            v-model="newId"
+            placeholder="id"
+            class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-xs focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+          <input
+            v-model="newName"
+            placeholder="名称"
+            class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-xs focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+          <button
+            class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-xs hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="addRule"
+          >
+            添加
+          </button>
         </div>
       </div>
+      <p v-if="error" class="text-xs text-red-600 mt-2">* {{ error }}</p>
+    </div>
+
+    <!-- 列表（可拖拽排序，左侧握把 + 黑线插入预览） -->
+    <div class="space-y-2">
+      <div
+        v-for="r in (store.activeData?.regex_rules || [])"
+        :key="r.id"
+        class="flex items-stretch gap-2 group draglist-item"
+        :class="{
+          'dragging-item': dragging && dragging === r.id,
+          'drag-over-top': dragging && dragOverId === r.id && dragOverBefore,
+          'drag-over-bottom': dragging && dragOverId === r.id && !dragOverBefore
+        }"
+        @dragover.prevent="onDragOver(r.id, $event)"
+        @drop.prevent="onDrop(r.id, $event)"
+      >
+        <div
+          class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+          draggable="true"
+          @dragstart="onDragStart(r.id, $event)"
+          @dragend="onDragEnd"
+          title="拖拽排序"
+        >
+          <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+        </div>
+        <div class="flex-1">
+          <RegexRuleCard :rule="r" />
+        </div>
+      </div>
+      <div
+        class="h-3 draglist-end"
+        :class="{ 'drag-over-end': dragging && dragOverId === null }"
+        @dragover.prevent="onDragOver(null, $event)"
+        @drop.prevent="onDropEnd($event)"
+      />
     </div>
   </section>
 </template>
 
 <style scoped>
-/* 仅少量局部样式，整体使用 Tailwind 工具类 */
+/* lucide 加载失败时的握把占位符 */
+.icon-grip::before {
+  content: '⋮⋮';
+  display: inline-block;
+  line-height: 1;
+  font-weight: 700;
+  color: #111;
+}
+
+/* 拖拽动效与黑线插入预览（与预设页面一致） */
+.draglist-item { position: relative; }
+.drag-over-top::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+.dragging-item {
+  transform: scale(0.98);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  opacity: 0.92;
+  z-index: 1;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+.draglist-end { position: relative; }
+.drag-over-end::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
 </style>

@@ -23,9 +23,12 @@ export interface RegexRule {
   enabled: boolean
   find_regex: string
   replace_regex: string
-  targets: ('user' | 'assistant')[]
-  placement: 'after_macro' | 'before_macro' | 'postprocess'
+  targets: string[]
+  placement: 'after_macro' | 'before_macro' | 'postprocess' | string
   views: string[]
+  min_depth?: number
+  max_depth?: number
+  description?: string
 }
 
 export interface PromptItemBase {
