@@ -3,6 +3,11 @@ import { ref } from 'vue'
 import AppShell from './layouts/AppShell.vue'
 import Sidebar from './components/Sidebar.vue'
 import PresetView from './views/PresetView.vue'
+import WorldbookView from './views/WorldbookView.vue'
+import CharactersView from './views/CharactersView.vue'
+import RegexView from './views/RegexView.vue'
+import UserView from './views/UserView.vue'
+import HistoryView from './views/HistoryView.vue'
 
 type TabKey = 'presets' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 const currentTab = ref<TabKey>('presets')
@@ -21,14 +26,30 @@ const currentTab = ref<TabKey>('presets')
         <PresetView />
       </section>
 
-      <!-- 其他视图占位（后续替换成对应视图组件） -->
-      <section
-        v-else
-        class="bg-white rounded-4 card-shadow border border-gray-200 p-8 transition-all duration-200 ease-soft hover:shadow-elevate"
-      >
+      <section v-else-if="currentTab === 'worldbook'" class="h-full">
+        <WorldbookView />
+      </section>
+
+      <section v-else-if="currentTab === 'characters'" class="h-full">
+        <CharactersView />
+      </section>
+
+      <section v-else-if="currentTab === 'regex'" class="h-full">
+        <RegexView />
+      </section>
+
+      <section v-else-if="currentTab === 'user'" class="h-full">
+        <UserView />
+      </section>
+
+      <section v-else-if="currentTab === 'history'" class="h-full">
+        <HistoryView />
+      </section>
+
+      <section v-else class="bg-white rounded-4 card-shadow border border-gray-200 p-8 transition-all duration-200 ease-soft hover:shadow-elevate">
         <div class="text-center">
           <i data-lucide="circle-dashed" class="w-10 h-10 text-black/40 mx-auto mb-4"></i>
-          <p class="text-black/60">该视图即将上线：{{ currentTab }}</p>
+          <p class="text-black/60">未知视图：{{ currentTab }}</p>
         </div>
       </section>
     </template>

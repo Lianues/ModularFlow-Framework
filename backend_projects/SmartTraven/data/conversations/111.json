@@ -1,6 +1,0 @@
-[
-    {
-        "role": "assistant",
-        "content": "{{python:1+1}}早晨艾拉"
-    }
-]
