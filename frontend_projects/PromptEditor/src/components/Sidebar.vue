@@ -16,10 +16,10 @@ const current = computed({
   set: (v: TabKey) => emit('update:modelValue', v)
 })
 
-// 导航项定义
+// 导航项定义（将“文件 Files”置于“预设 Presets”之前）
 const items: { key: TabKey; icon: string; label: string; sub: string }[] = [
-  { key: 'presets',    icon: 'list',      label: '预设',     sub: 'Presets' },
   { key: 'files',      icon: 'folder',    label: '文件',     sub: 'Files' },
+  { key: 'presets',    icon: 'list',      label: '预设',     sub: 'Presets' },
   { key: 'worldbook',  icon: 'book-open', label: '世界书',   sub: 'World Book' },
   { key: 'characters', icon: 'user',      label: '角色卡',   sub: 'Characters' },
   { key: 'regex',      icon: 'code',      label: '正则',     sub: 'Regex' },

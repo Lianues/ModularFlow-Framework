@@ -13,6 +13,7 @@ import FileManagerView from './views/FileManagerView.vue'
 import { usePresetStore } from './features/presets/store'
 import { useCharacterStore } from '@/features/characters/store'
 import { usePersonaStore } from '@/features/persona/store'
+import { useFileManagerStore } from '@/features/files/fileManager'
 
 type TabKey = 'presets' | 'files' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 const currentTab = ref<TabKey>('presets')
@@ -20,11 +21,13 @@ const currentTab = ref<TabKey>('presets')
 const presetStore = usePresetStore()
 const characterStore = useCharacterStore()
 const personaStore = usePersonaStore()
+const fileManager = useFileManagerStore()
 
 onMounted(() => {
   presetStore.load()
   characterStore.load()
   personaStore.load()
+  fileManager.load()
 })
 
 /* 顶部右侧：导入（选择 JSON），导出（下载当前）
@@ -37,6 +40,13 @@ function handleImport() {
   input.onchange = async () => {
     const file = input.files?.[0]
     if (!file) return
+
+    // 捕获当前页签快照，避免异步过程中切换导致误判
+    const mainTab = currentTab.value
+
+    // 如果是在“文件库”页签，则完全依赖文件库内部的类型（不做任何类型推断）
+    const currentType = (fileManager as any)?.getCurrentType || 'presets'
+    const targetTab = mainTab === 'files' ? currentType : mainTab
 
     // 读取文本并清理 BOM/不可见字符
     let text = ''
@@ -71,72 +81,80 @@ function handleImport() {
       return out
     }
 
-    // 启发式判断世界书 JSON（仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}）
-    const isWorldBooksJson = (val: any): boolean => {
-      let objs: any[] = []
-      if (Array.isArray(val?.entries)) {
-        objs = flattenObjects(val.entries)
-      } else if (Array.isArray(val?.world_book?.entries)) {
-        objs = flattenObjects(val.world_book.entries)
-      }
-      if (!objs.length) return false
-      let score = 0
-      for (const o of objs.slice(0, Math.min(5, objs.length))) {
-        if (o && typeof o === 'object') {
-          if (typeof o.position === 'string') score++
-          if ('mode' in o) score++
-          if ('content' in o) score++
-          if ('name' in o) score++
-        }
-      }
-      return score >= 3
-    }
+    // 重要：不进行文件类型检查。严格按 targetTab 分流导入与入库。
 
-    // 角色卡页签：优先按角色卡导入（防止被世界书检测抢占）
-    if (currentTab.value === 'characters') {
+    // 角色卡（SmartTraven 角色卡结构）
+    if (targetTab === 'characters') {
       try {
         characterStore.setCharacter(json, file.name)
-      } catch {
-        alert('导入失败：角色卡数据结构不符合预期')
-      }
+      } catch {}
+      try { fileManager.upsertFile('characters', file.name, json) } catch {}
       return
     }
 
-    // 用户信息页签：按用户信息（Persona）导入
-    if (currentTab.value === 'user') {
+    // 用户信息（Persona）
+    if (targetTab === 'user') {
+      try { personaStore.setPersona(json, file.name) } catch {}
+      try { fileManager.upsertFile('user', file.name, json) } catch {}
+      return
+    }
+
+    // 正则（数组或 { regex_rules: [] }）
+    if (targetTab === 'regex') {
+      const rules: any[] = Array.isArray(json)
+        ? json
+        : (Array.isArray(json?.regex_rules) ? json.regex_rules : [])
       try {
-        personaStore.setPersona(json, file.name)
-      } catch {
-        alert('导入失败：用户信息数据结构不符合预期')
-      }
+        if (!presetStore.activeData) {
+          presetStore.upsertFile({
+            name: 'RegexPanel',
+            enabled: true,
+            data: { setting: {}, prompts: [], regex_rules: [] } as any,
+          } as any)
+        }
+        presetStore.setRegexRules(rules as any)
+      } catch {}
+      try { fileManager.upsertFile('regex', file.name, json) } catch {}
       return
     }
 
-    // 世界书页或检测为世界书数据时，按世界书导入（仅新格式）
-    if (currentTab.value === 'worldbook' || isWorldBooksJson(json)) {
+    // 对话历史：仅入库，暂不镜像
+    if (targetTab === 'history') {
+      try { fileManager.upsertFile('history', file.name, json) } catch {}
+      return
+    }
+
+    // 世界书（仅当在世界书页签下）
+    if (targetTab === 'worldbook') {
       let flat: any[] = []
       if (Array.isArray(json?.entries)) {
         flat = flattenObjects(json.entries)
       } else if (Array.isArray(json?.world_book?.entries)) {
         flat = flattenObjects(json.world_book.entries)
+      } else if (Array.isArray(json)) {
+        flat = flattenObjects(json)
       } else {
-        alert('导入失败：世界书数据结构仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}')
+        try { fileManager.upsertFile('worldbook', file.name, json) } catch {}
         return
       }
+      try { presetStore.setWorldBooks(flat as any) } catch {}
+      try { fileManager.upsertFile('worldbook', file.name, json) } catch {}
+      return
+    }
+
+    // 预设（仅当在预设页签或文件库当前类型为 presets 时）
+    if (targetTab === 'presets') {
       try {
-        presetStore.setWorldBooks(flat as any)
+        await presetStore.importFromFile(file)
+        try { fileManager.upsertFile('presets', file.name, json) } catch {}
       } catch {
-        alert('导入失败：世界书数据结构不符合预期')
+        alert('导入失败：预设数据结构不符合预期')
       }
       return
     }
 
-    // 否则按预设数据导入（完整 PresetData）
-    try {
-      await presetStore.importFromFile(file)
-    } catch {
-      alert('导入失败：预设数据结构不符合预期')
-    }
+    // 未识别页签保护（理论不应到达）
+    alert('导入失败：当前页签未配置导入行为')
   }
   input.click()
 }
