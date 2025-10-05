@@ -3,17 +3,15 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useHistoryStore, deriveMessagesFromHistory } from '@/features/history/store'
 
 /**
- * 分支对话可视化（仅分支，不包含线性示例）
- * - 输入优先支持 chat-branches v2 标准文件（export）
- * - 也可接收 branch_table / get_path / openai_messages 的派生视图数据
- * - 暂不接入后端，仅做前端展示；无状态修改
+ * 分支对话可视化 + 本地分支编辑（前端缓存 json，不调用后端）
+ * - 优先使用 chat-branches v2 标准结构
+ * - 否则从 messages 推导为线性分支树
  *
  * 参考：
- * - [python.chat_branches.README](api/modules/SmartTraven/chat_branches/README.md:1)
- * - [python.function(export)](api/modules/SmartTraven/chat_branches/chat_branches.py:237)
- * - [python.function(branch_table)](api/modules/SmartTraven/chat_branches/chat_branches.py:222)
- * - [python.function(get_path)](api/modules/SmartTraven/chat_branches/chat_branches.py:61)
- * - [python.function(openai_messages)](api/modules/SmartTraven/chat_branches/chat_branches.py:207)
+ * - [python.chat_branches.export](api/modules/SmartTraven/chat_branches/chat_branches.py:237)
+ * - [python.chat_branches.branch_table](api/modules/SmartTraven/chat_branches/chat_branches.py:222)
+ * - [python.chat_branches.get_path](api/modules/SmartTraven/chat_branches/chat_branches.py:61)
+ * - [python.chat_branches.openai_messages](api/modules/SmartTraven/chat_branches/chat_branches.py:207)
  */
 
 type MsgRole = 'system' | 'user' | 'assistant'
@@ -148,11 +146,6 @@ function handleReset() {
   }
 }
 
-// TS 插件模板可见性兼容：显式读取，避免未使用告警
-void handleFormat
-void handleSave
-void handleReset
-
 // 归一化 active_path（确保 root 开头）
 const activePath = computed<string[]>(() => {
   const ap = (doc.value.active_path ?? []).slice()
@@ -238,14 +231,99 @@ const latest = computed(() => {
 
 const metaTitle = computed(() => props.title ?? doc.value.meta?.title ?? '分支会话')
 
-// UI helpers
-function isInActivePath(nid: string) {
+// UI helpers（需暴露给模板）
+function isInActivePath(nid: string): boolean {
   return activePath.value.includes(nid)
+}
+
+// 本地分支编辑（前端缓存修改）
+const appendRole = ref<'user' | 'assistant' | 'system'>('user')
+const appendText = ref('')
+const trimDepth = ref<number>(2)
+
+function onAppend() {
+  if (!appendText.value.trim()) return
+  history.append(appendRole.value, appendText.value)
+  appendText.value = ''
+}
+
+function onTrim() {
+  if (!trimDepth.value || trimDepth.value < 1) return
+  history.truncateAfter(trimDepth.value)
+}
+
+function onSwitch(dir: 'left' | 'right') {
+  const depth = latest.value?.depth ?? 2
+  if (!depth || depth < 2) return
+  history.switchBranch(depth, dir)
+}
+
+// 节点上下文菜单与内联追加
+const menuFor = ref<string | null>(null)
+const inlineFor = ref<string | null>(null)
+const inlineRole = ref<'user' | 'assistant' | 'system'>('user')
+const inlineText = ref('')
+
+function pruneToHere(nid: string) {
+  const idx = activePath.value.indexOf(nid)
+  if (idx === -1) return
+  history.truncateAfter(idx + 1)
+  menuFor.value = null
+}
+
+function switchAtHere(nid: string, dir: 'left' | 'right') {
+  const idx = activePath.value.indexOf(nid)
+  if (idx === -1) return
+  history.switchBranch(idx + 1, dir)
+  menuFor.value = null
+}
+
+function submitInline() {
+  if (!inlineFor.value || !inlineText.value.trim()) return
+  history.appendAt(inlineFor.value, inlineRole.value, inlineText.value)
+  inlineText.value = ''
+  inlineFor.value = null
+}
+
+// 导出 chat-branches（按当前 activeFile.data）
+function handleExportBranches() {
+  try {
+    const file = history.activeFile
+    if (!file) {
+      alert('无可导出的活动文件')
+      return
+    }
+    const json = JSON.stringify(file.data ?? {}, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const base = file.name.endsWith('.json') ? file.name.slice(0, -5) : file.name
+    a.download = `${base}.chat-branches.json`
+    a.href = url
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    alert('导出失败')
+  }
 }
 
 onMounted(() => {
   ;(window as any).lucide?.createIcons?.()
 })
+
+// TS 插件模板可见性兼容
+void handleFormat
+void handleSave
+void handleReset
+void onAppend
+void onTrim
+void onSwitch
+void pruneToHere
+void switchAtHere
+void submitInline
+void handleExportBranches
 </script>
 
 <template>
@@ -260,6 +338,12 @@ onMounted(() => {
         <div class="flex items-center gap-2 text-xs text-black/60">
           <span class="px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">nodes: {{ Object.keys(doc.nodes).length }}</span>
           <span class="px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">path: {{ activePath.length }}</span>
+          <button
+            class="ml-2 px-2 h-8 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+            @click="handleExportBranches"
+          >
+            导出 chat-branches
+          </button>
         </div>
       </div>
 
@@ -316,6 +400,57 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 本地分支编辑工具栏（前端缓存 json） -->
+    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center gap-3 mb-3">
+        <i data-lucide="hammer" class="w-4 h-4 text-black"></i>
+        <span class="text-sm font-medium text-black">本地分支编辑（前端缓存 json）</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <!-- 追加消息（多行输入 + Ctrl+Enter 发送） -->
+        <div class="md:col-span-2">
+          <div class="flex gap-2">
+            <select v-model="appendRole" class="h-10 px-2 border border-gray-900 rounded-4 bg-white text-black">
+              <option value="user">user</option>
+              <option value="assistant">assistant</option>
+              <option value="system">system</option>
+            </select>
+            <textarea
+              v-model="appendText"
+              placeholder="输入消息内容（支持多行，Ctrl+Enter 快速追加）"
+              class="flex-1 h-24 px-3 py-2 border border-gray-200 rounded-4 bg-white text-black resize-y"
+              @keydown.ctrl.enter.prevent="onAppend"
+            ></textarea>
+            <button
+              class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+              @click="onAppend"
+            >追加</button>
+          </div>
+        </div>
+
+        <!-- 修剪 -->
+        <div class="flex gap-2">
+          <input v-model.number="trimDepth" type="number" min="1" class="w-24 h-10 px-2 border border-gray-200 rounded-4 bg-white text-black" />
+          <button
+            class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+            @click="onTrim"
+          >修剪到深度</button>
+        </div>
+      </div>
+
+      <div class="mt-3 flex gap-2">
+        <button
+          class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+          @click="onSwitch('left')"
+        >左切换</button>
+        <button
+          class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+          @click="onSwitch('right')"
+        >右切换/新建</button>
+      </div>
+    </div>
+
     <!-- 树视图 -->
     <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
       <div class="flex items-center justify-between mb-3">
@@ -340,7 +475,7 @@ onMounted(() => {
           class="py-2 border-b last:border-b-0 border-gray-100"
           :style="{ paddingLeft: `${Math.max(0, depthOf(doc, nid)) * 16}px` }"
         >
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 relative">
             <span class="text-xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">{{ nid }}</span>
             <span class="text-2xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">{{ doc.nodes[nid]?.role || 'unknown' }}</span>
             <span class="text-2xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">
@@ -356,8 +491,70 @@ onMounted(() => {
               v-if="isInActivePath(nid)"
               class="text-2xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-gray-100"
             >active</span>
+
+            <button
+              class="ml-auto p-1 rounded-4 border border-gray-200 hover:bg-gray-50"
+              @click="menuFor = (menuFor === nid ? null : nid)"
+              title="更多操作"
+            >
+              <i data-lucide="more-horizontal" class="w-4 h-4 text-black"></i>
+            </button>
+
+            <!-- 上下文菜单 -->
+            <div
+              v-if="menuFor === nid"
+              class="absolute right-0 top-6 z-10 w-48 bg-white border border-gray-200 rounded-4 shadow"
+            >
+              <button
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                @click="inlineFor = nid; menuFor = null"
+              >追加子节点…</button>
+              <button
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                :disabled="!isInActivePath(nid)"
+                @click="pruneToHere(nid)"
+              >修剪至此</button>
+              <button
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                :disabled="!isInActivePath(nid) || (jnOf(doc, nid).j ?? 0) <= 1"
+                @click="switchAtHere(nid, 'left')"
+              >从此层向左切换</button>
+              <button
+                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                :disabled="!isInActivePath(nid)"
+                @click="switchAtHere(nid, 'right')"
+              >从此层向右切换/新建</button>
+            </div>
           </div>
-          <div class="mt-1 text-sm text-black/70 leading-6 line-clamp-3">
+
+          <!-- 内联追加输入 -->
+          <div v-if="inlineFor === nid" class="mt-2">
+            <div class="flex gap-2">
+              <select v-model="inlineRole" class="h-10 px-2 border border-gray-900 rounded-4 bg-white text-black">
+                <option value="user">user</option>
+                <option value="assistant">assistant</option>
+                <option value="system">system</option>
+              </select>
+              <textarea
+                v-model="inlineText"
+                placeholder="输入子节点内容（Ctrl+Enter 添加）"
+                class="flex-1 h-24 px-3 py-2 border border-gray-200 rounded-4 bg-white text-black resize-y"
+                @keydown.ctrl.enter.prevent="submitInline"
+              ></textarea>
+            </div>
+            <div class="mt-2 flex gap-2">
+              <button
+                class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+                @click="submitInline"
+              >添加</button>
+              <button
+                class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+                @click="inlineFor = null; inlineText = ''"
+              >取消</button>
+            </div>
+          </div>
+
+          <div class="mt-1 text-sm text-black/70 leading-6 break-words">
             {{ doc.nodes[nid]?.content || '（无内容）' }}
           </div>
         </div>
