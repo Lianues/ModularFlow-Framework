@@ -563,13 +563,15 @@ export const usePresetStore = defineStore('preset', {
     exportWorldBooks(): { filename: string; json: string } | null {
       const data = this.activeData
       if (!data) return null
-      const arr = (((data as any).world_books ?? []) as any[]).map(w => {
+      const name = (this.activeFile?.name || 'WorldBook').replace(/\.json$/,'')
+      const entries = (((data as any).world_books ?? []) as any[]).map(w => {
         const obj: any = { ...(w as any) }
         obj.id = String(obj.id ?? '')
         return obj
       })
-      const json = JSON.stringify([arr], null, 2)
-      return { filename: 'world_books.json', json }
+      const payload = { name, entries }
+      const json = JSON.stringify(payload, null, 2)
+      return { filename: 'world_book.json', json }
     },
 
     /**

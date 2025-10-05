@@ -35,21 +35,23 @@ def _map_wb_pos_to_role(position: str) -> str:
 
 
 def _flatten_world_books(items: Any) -> List[Dict[str, Any]]:
-    """扁平化世界书数组，兼容 [[{...}], {...}] 结构"""
+    """展平成新世界书格式：仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}"""
     out: List[Dict[str, Any]] = []
-    if not items:
+    if not isinstance(items, dict):
         return out
-    if isinstance(items, dict):
-        out.append(items)  # 容错：单个对象
+
+    entries = items.get("entries")
+    if isinstance(entries, list):
+        for e in entries:
+            if isinstance(e, dict):
+                out.append(e)
         return out
-    if isinstance(items, list):
-        for it in items:
-            if isinstance(it, dict):
-                out.append(it)
-            elif isinstance(it, list):
-                for sub in it:
-                    if isinstance(sub, dict):
-                        out.append(sub)
+
+    wb = items.get("world_book")
+    if isinstance(wb, dict) and isinstance(wb.get("entries"), list):
+        for e in wb["entries"]:
+            if isinstance(e, dict):
+                out.append(e)
     return out
 
 

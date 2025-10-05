@@ -20,7 +20,7 @@ from .impl import assemble as _assemble
                 "additionalProperties": True
             },
             "world_books": {
-                "type": ["array", "object"]
+                "type": "object"
             },
             "presets_relative": {
                 "type": "array",

@@ -146,24 +146,26 @@ def _collect_rules_from_mixed(container: Any, add_source: Optional[str] = None) 
 
 def _flatten_world_books(items: Any) -> List[Dict[str, Any]]:
     """
-    将 world_books 展平为 list[dict]：
-    - 支持 [[{...}], {...}] 与单对象容错
-    - 仅保留 dict 项
+    展平成新世界书格式：仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}。
     """
     out: List[Dict[str, Any]] = []
-    if not items:
+    if not _is_dict(items):
         return out
-    if _is_dict(items):
-        out.append(_deepcopy_json(items))
+
+    # { "entries": [ ... ] }
+    ens = items.get("entries")
+    if _is_list(ens):
+        for e in ens:
+            if _is_dict(e):
+                out.append(_deepcopy_json(e))
         return out
-    if _is_list(items):
-        for it in items:
-            if _is_dict(it):
-                out.append(_deepcopy_json(it))
-            elif _is_list(it):
-                for sub in it:
-                    if _is_dict(sub):
-                        out.append(_deepcopy_json(sub))
+
+    # { "world_book": { "entries": [ ... ] } }
+    wb = items.get("world_book")
+    if _is_dict(wb) and _is_list(wb.get("entries")):
+        for e in wb.get("entries"):
+            if _is_dict(e):
+                out.append(_deepcopy_json(e))
     return out
 
 def _normalize_char_world_book_entries(character: Any) -> List[Dict[str, Any]]:
@@ -206,14 +208,14 @@ def extract_preset_regex_impl(preset: Dict[str, Any]) -> Dict[str, Any]:
 
 def extract_character_world_book_impl(character: Dict[str, Any]) -> Dict[str, Any]:
     """
-    提取角色卡 world_book.entries，输出 {"items":[...]}
+    提取角色卡 world_book.entries，输出 {"entries":[...]}
     """
-    items = _normalize_char_world_book_entries(character)
+    entries = _normalize_char_world_book_entries(character)
     return {
-        "items": items,
+        "entries": entries,
         "meta": {
             "source": "character",
-            "count": len(items),
+            "count": len(entries),
         }
     }
 
@@ -252,11 +254,8 @@ def merge_world_books_impl(
       {"world_book":[...], "meta":{...}}
     """
     base_list: List[Dict[str, Any]] = _flatten_world_books(world_books)
-    char_items: List[Dict[str, Any]] = []
-    if _is_dict(character_world_book) and _is_list(character_world_book.get("items")):
-        char_items = [e for e in character_world_book.get("items") if _is_dict(e)]
-    elif _is_list(character_world_book):
-        char_items = [e for e in character_world_book if _is_dict(e)]
+    # 统一新格式：character_world_book 也是 {entries:[...]} 或 {world_book:{entries:[...]}}
+    char_items: List[Dict[str, Any]] = _flatten_world_books(character_world_book) if character_world_book is not None else []
 
     result: List[Dict[str, Any]] = []
     seen: Dict[str, int] = {}

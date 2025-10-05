@@ -9,7 +9,7 @@ SmartTraven.framing_prompt 实现层
   1) 原始 OpenAI messages（不含 source）→ 规范化补齐 source
   2) 已处理过的 in-chat 风格 messages（含 source）→ 原样透传并校验结构
 - 支持从 presets_doc.prompts 或直接传入 presets_relative 数组两种来源
-- 从 world_books（支持嵌套数组结构）中抽取 before_char/after_char 的条目
+- 从 world_books（新格式：{entries:[...]} 或 {world_book:{entries:[...]}}）中抽取 before_char/after_char 的条目
 - 支持 persona/character 描述占位符
 - 输出键顺序统一：role → content → source（source 字段内部尽量保持来源条目字段顺序）
 
@@ -50,21 +50,27 @@ def _map_wb_pos_to_role(position: str) -> str:
 
 
 def _flatten_world_books(items: Any) -> List[Dict[str, Any]]:
-    """扁平化世界书数组，兼容 [[{...}], {...}] 与单对象容错。"""
+    """展平成新世界书格式：仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}"""
     out: List[Dict[str, Any]] = []
-    if not items:
+    if not isinstance(items, dict):
         return out
-    if isinstance(items, dict):
-        out.append(items)  # 容错：单个对象
+
+    # { "entries": [ ... ] }
+    entries = items.get("entries")
+    if isinstance(entries, list):
+        for e in entries:
+            if isinstance(e, dict):
+                out.append(e)
         return out
-    if isinstance(items, list):
-        for it in items:
-            if isinstance(it, dict):
-                out.append(it)
-            elif isinstance(it, list):
-                for sub in it:
-                    if isinstance(sub, dict):
-                        out.append(sub)
+
+    # { "world_book": { "entries": [ ... ] } }
+    wb = items.get("world_book")
+    if isinstance(wb, dict):
+        ens = wb.get("entries")
+        if isinstance(ens, list):
+            for e in ens:
+                if isinstance(e, dict):
+                    out.append(e)
     return out
 
 
@@ -310,8 +316,8 @@ def assemble(
     - worldInfoBefore/After：注入对应 position 的世界书（enabled==True + keys 命中，大小写敏感）
     - charDescription/personaDescription：使用传入的 description
     """
-    # 0) 归一化入参
-    world_books = world_books or []
+    # 0) 归一化入参（仅新格式对象）
+    world_books = world_books or {}
 
     # 提取原始 history 列表（支持 {"messages":[...]} 或直接数组）
     raw_hist: List[Dict[str, Any]] = []

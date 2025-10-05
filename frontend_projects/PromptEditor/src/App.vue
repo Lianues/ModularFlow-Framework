@@ -65,13 +65,14 @@ function handleImport() {
       return out
     }
 
-    // 启发式判断世界书 JSON（数组/嵌套数组，含 position/mode/content/name 等字段）
+    // 启发式判断世界书 JSON（仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}）
     const isWorldBooksJson = (val: any): boolean => {
-      const objs = Array.isArray(val)
-        ? flattenObjects(val)
-        : Array.isArray(val?.world_books)
-          ? flattenObjects(val.world_books)
-          : []
+      let objs: any[] = []
+      if (Array.isArray(val?.entries)) {
+        objs = flattenObjects(val.entries)
+      } else if (Array.isArray(val?.world_book?.entries)) {
+        objs = flattenObjects(val.world_book.entries)
+      }
       if (!objs.length) return false
       let score = 0
       for (const o of objs.slice(0, Math.min(5, objs.length))) {
@@ -85,13 +86,17 @@ function handleImport() {
       return score >= 3
     }
 
-    // 在世界书页或检测为世界书数据时，按世界书导入
+    // 在世界书页或检测为世界书数据时，按世界书导入（仅新格式）
     if (currentTab.value === 'worldbook' || isWorldBooksJson(json)) {
-      const flat = Array.isArray(json)
-        ? flattenObjects(json)
-        : Array.isArray(json?.world_books)
-          ? flattenObjects(json.world_books)
-          : flattenObjects([json])
+      let flat: any[] = []
+      if (Array.isArray(json?.entries)) {
+        flat = flattenObjects(json.entries)
+      } else if (Array.isArray(json?.world_book?.entries)) {
+        flat = flattenObjects(json.world_book.entries)
+      } else {
+        alert('导入失败：世界书数据结构仅支持 {entries:[...]} 或 {world_book:{entries:[...]}}')
+        return
+      }
       try {
         presetStore.setWorldBooks(flat as any)
       } catch {

@@ -32,7 +32,7 @@ from .impl import (
         "type": "object",
         "properties": {
             "preset": {"type": "object", "additionalProperties": True},
-            "world_books": {"type": ["array", "object"]},
+            "world_books": {"type": "object"},
             "character": {"type": "object", "additionalProperties": True},
             "regex_files": {"type": ["array", "object"]}
         },
@@ -114,10 +114,10 @@ def extract_preset_regex(preset: Dict[str, Any]) -> Dict[str, Any]:
     output_schema={
         "type": "object",
         "properties": {
-            "items": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+            "entries": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
             "meta": {"type": "object", "additionalProperties": True}
         },
-        "required": ["items"]
+        "required": ["entries"]
     },
 )
 def extract_character_world_book(character: Dict[str, Any]) -> Dict[str, Any]:
@@ -159,8 +159,8 @@ def extract_character_regex(character: Dict[str, Any]) -> Dict[str, Any]:
     input_schema={
         "type": "object",
         "properties": {
-            "world_books": {"type": ["array", "object"]},
-            "character_world_book": {"type": ["array", "object"]}
+            "world_books": {"type": "object"},
+            "character_world_book": {"type": "object"}
         },
         "required": ["world_books"]
     },

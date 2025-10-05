@@ -31,7 +31,7 @@ from .impl import construct as _construct
                 "items": {"type": "object", "additionalProperties": True}
             },
             "world_books": {
-                "type": ["array", "object"]
+                "type": "object"
             }
         },
         "required": ["history", "presets_in_chat", "world_books"]
