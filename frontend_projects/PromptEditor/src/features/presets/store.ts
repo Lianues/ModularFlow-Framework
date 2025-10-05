@@ -205,5 +205,52 @@ export const usePresetStore = defineStore('preset', {
         this.persist()
       }
     },
+
+    /**
+     * Reorder items within a given position while preserving positions of other item types.
+     * orderedIds defines the new order (identifiers) for the given position.
+     */
+    reorderWithinPosition(position: 'relative' | 'in-chat', orderedIds: string[]) {
+      const data = this.activeData
+      if (!data || !Array.isArray(data.prompts)) return
+
+      // Current items and identifier set for the target position
+      const items = data.prompts.filter(p => p && p.position === position)
+      const idSet = new Set(items.map(i => i.identifier))
+
+      // Normalize provided ids to existing items only and append any missing ids in original order
+      const normalized = orderedIds.filter((id): id is string => !!id && idSet.has(id))
+      const missing = items.map(i => i.identifier).filter(id => !normalized.includes(id))
+      const finalIds = normalized.concat(missing)
+
+      // Map for quick lookup
+      const map = new Map<string, PromptItem>(items.map(i => [i.identifier, i as PromptItem]))
+
+      // Write back into original slots to preserve other-position order
+      let writeIdx = 0
+      for (let i = 0; i < data.prompts.length; i++) {
+        const cur = data.prompts[i]
+        if (cur && cur.position === position) {
+          if (writeIdx >= finalIds.length) continue
+          const id = finalIds[writeIdx++]
+          if (!id) continue
+          const next = map.get(id)
+          if (next) data.prompts.splice(i, 1, next as any)
+        }
+      }
+
+      // If reordering in-chat items, normalize their "order" field to reflect new sequence
+      if (position === 'in-chat') {
+        let k = 0
+        for (let i = 0; i < data.prompts.length; i++) {
+          const p = data.prompts[i]
+          if (p && p.position === 'in-chat') {
+            ;(p as any).order = k++
+          }
+        }
+      }
+
+      this.persist()
+    },
   },
 })

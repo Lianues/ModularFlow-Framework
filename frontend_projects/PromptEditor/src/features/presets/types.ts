@@ -61,6 +61,48 @@ export interface PresetData {
 }
 
 /**
+ * 一次性 Relative 组件清单（id/name/参数固定）
+ * 若已存在同 id 条目则不可再次新增
+ */
+export const SPECIAL_RELATIVE_TEMPLATES: PromptItemRelative[] = [
+  {
+    identifier: 'charBefore',
+    name: 'char Before',
+    enabled: null,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'personaDescription',
+    name: 'Persona Description',
+    enabled: false,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'charDescription',
+    name: 'Char Description',
+    enabled: true,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'charAfter',
+    name: 'char After',
+    enabled: true,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'chatHistory',
+    name: 'Chat History',
+    enabled: true,
+    role: 'system',
+    position: 'relative',
+  },
+]
+
+/**
  * Browser-managed file entry for presets.
  * Stored in LocalStorage.
  */

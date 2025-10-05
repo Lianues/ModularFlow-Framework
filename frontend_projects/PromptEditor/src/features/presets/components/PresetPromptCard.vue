@@ -67,6 +67,11 @@ function onCancel() {
   editing.value = false
 }
 
+function onDelete() {
+  // 从当前活动预设中删除该条目
+  store.removePrompt(props.item.identifier)
+}
+
 function onSave() {
   // Build new item based on position
   if (isInChat.value) {
@@ -111,6 +116,14 @@ function onSave() {
       </div>
 
       <div class="flex items-center gap-2">
+        <!-- 非编辑态：删除 + 编辑（删除在左） -->
+        <button
+          v-if="!editing"
+          class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+          @click="onDelete"
+        >
+          删除
+        </button>
         <button
           v-if="!editing"
           class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
@@ -118,6 +131,8 @@ function onSave() {
         >
           编辑
         </button>
+
+        <!-- 编辑态：保存 + 取消 -->
         <div v-else class="flex items-center gap-2">
           <button
             class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
@@ -137,7 +152,7 @@ function onSave() {
 
     <!-- Identifier -->
     <div class="text-xs text-black/60 mt-2">
-      <span class="font-mono">identifier:</span>
+      <span class="font-mono">id:</span>
       <span class="ml-1 font-mono">{{ props.item.identifier }}</span>
     </div>
 

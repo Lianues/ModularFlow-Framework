@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 
 // 预设设置的简化模型（本地占位状态）
 const temperature = ref<number>(1.0)
@@ -14,6 +14,8 @@ const PANEL_STATE_KEY = 'prompt_editor_ui_panels'
 const apiOpen = ref(true)
 const promptsOpen = ref(true)
 const regexOpen = ref(true)
+const relativeOpen = ref(true)
+const inChatOpen = ref(true)
 
 /**
  * LLM API 参数在下方“API 配置”面板中编辑；
@@ -42,13 +44,18 @@ function loadPanelStates() {
       if (typeof obj.apiOpen === 'boolean') apiOpen.value = obj.apiOpen
       if (typeof obj.promptsOpen === 'boolean') promptsOpen.value = obj.promptsOpen
       if (typeof obj.regexOpen === 'boolean') regexOpen.value = obj.regexOpen
+      if (typeof obj.relativeOpen === 'boolean') relativeOpen.value = obj.relativeOpen
+      if (typeof obj.inChatOpen === 'boolean') inChatOpen.value = obj.inChatOpen
     }
   } catch {}
 }
 
-watch([apiOpen, promptsOpen, regexOpen], ([a, p, r]) => {
+watch([apiOpen, promptsOpen, regexOpen, relativeOpen, inChatOpen], ([a, p, r, ro, io]) => {
   try {
-    localStorage.setItem(PANEL_STATE_KEY, JSON.stringify({ apiOpen: a, promptsOpen: p, regexOpen: r }))
+    localStorage.setItem(
+      PANEL_STATE_KEY,
+      JSON.stringify({ apiOpen: a, promptsOpen: p, regexOpen: r, relativeOpen: ro, inChatOpen: io })
+    )
   } catch {}
 })
 
@@ -60,31 +67,115 @@ onMounted(() => {
 
 /* 使用 Store 管理预设数据 */
 import { usePresetStore } from '../features/presets/store'
-import type { PromptItem, PromptItemRelative, PromptItemInChat } from '../features/presets/types'
+import type { PromptItem, PromptItemRelative, PromptItemInChat } from '@/features/presets/types'
+import { SPECIAL_RELATIVE_TEMPLATES } from '@/features/presets/types'
 import PresetPromptCard from '@/features/presets/components/PresetPromptCard.vue'
 
 const store = usePresetStore()
 
-function uuid(): string {
-  return (window as any).crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+/* 新增条目（Relative / In-Chat） */
+const specialSelect = ref<string>('')
+const newRelId = ref<string>('')
+const newRelName = ref<string>('')
+const relError = ref<string | null>(null)
+
+const availableSpecials = computed(() =>
+  SPECIAL_RELATIVE_TEMPLATES.filter(t => !store.relativePrompts.some(p => p.identifier === t.identifier))
+)
+const reservedIdSet = new Set(SPECIAL_RELATIVE_TEMPLATES.map(t => t.identifier))
+const reservedNameSet = new Set(SPECIAL_RELATIVE_TEMPLATES.map(t => t.name))
+
+function addSelectedSpecial() {
+  relError.value = null
+  const sel = specialSelect.value
+  if (!sel) return
+  const tpl = SPECIAL_RELATIVE_TEMPLATES.find(t => t.identifier === sel)
+  if (!tpl) return
+  if (store.relativePrompts.some(p => p.identifier === tpl.identifier)) {
+    relError.value = '该一次性组件已存在'
+    return
+  }
+  // 深拷贝，保持占位条目的 content 语义（不写入 content 字段）
+  const item: PromptItemRelative = {
+    identifier: tpl.identifier,
+    name: tpl.name,
+    enabled: tpl.enabled,
+    role: tpl.role,
+    position: tpl.position,
+  }
+  store.addPrompt(item as PromptItem)
+  specialSelect.value = ''
+  ;(window as any).lucide?.createIcons?.()
 }
 
-/* 新增条目 */
-function addRelative() {
+function addCustomRelative() {
+  relError.value = null
+  const id = newRelId.value.trim()
+  const name = newRelName.value.trim()
+  if (!id) {
+    relError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    relError.value = '请填写名称'
+    return
+  }
+  if (reservedIdSet.has(id) || reservedNameSet.has(name)) {
+    relError.value = 'id 或 名称 与保留组件重复'
+    return
+  }
+  if (store.relativePrompts.some(p => p.identifier === id)) {
+    relError.value = 'id 已存在'
+    return
+  }
+  if (store.relativePrompts.some(p => p.name === name)) {
+    relError.value = '名称已存在'
+    return
+  }
   const item: PromptItemRelative = {
-    identifier: uuid(),
-    name: '新 Relative 条目',
+    identifier: id,
+    name,
     enabled: null,
     role: 'system',
     position: 'relative',
-    // 不包含 content 字段 → 占位条目，不显示内容区
   }
   store.addPrompt(item as PromptItem)
+  newRelId.value = ''
+  newRelName.value = ''
+  ;(window as any).lucide?.createIcons?.()
 }
-function addInChat() {
+
+
+// In-Chat 新增（右对齐 id + 名称 + 添加）
+const newChatId = ref<string>('')
+const newChatName = ref<string>('')
+const chatError = ref<string | null>(null)
+
+function addCustomInChat() {
+  chatError.value = null
+  const id = newChatId.value.trim()
+  const name = newChatName.value.trim()
+  if (!id) {
+    chatError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    chatError.value = '请填写名称'
+    return
+  }
+  // 唯一性校验：identifier 需全局唯一；名称在 In-Chat 内唯一
+  if (store.prompts.some(p => p.identifier === id)) {
+    chatError.value = 'id 已存在'
+    return
+  }
+  if (store.inChatPrompts.some(p => p.name === name)) {
+    chatError.value = '名称已存在'
+    return
+  }
   const item: PromptItemInChat = {
-    identifier: uuid(),
-    name: '新 In-Chat 条目',
+    identifier: id,
+    name,
     enabled: true,
     role: 'system',
     position: 'in-chat',
@@ -93,6 +184,62 @@ function addInChat() {
     content: ''
   }
   store.addPrompt(item as PromptItem)
+  newChatId.value = ''
+  newChatName.value = ''
+  ;(window as any).lucide?.createIcons?.()
+}
+
+// 拖拽排序（Relative / In-Chat）
+type PosType = 'relative' | 'in-chat'
+const dragging = ref<{ position: PosType; id: string } | null>(null)
+const dragOverId = ref<string | null>(null)
+
+function onDragStart(position: PosType, id: string, ev: DragEvent) {
+  dragging.value = { position, id }
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer!.effectAllowed = 'move'
+  } catch {}
+}
+
+function onDragOver(position: PosType, overId: string | null, ev: DragEvent) {
+  if (dragging.value?.position !== position) return
+  ev.preventDefault()
+  dragOverId.value = overId
+}
+
+function onDrop(position: PosType, overId: string | null, ev: DragEvent) {
+  if (dragging.value?.position !== position) return
+  ev.preventDefault()
+  const dId = dragging.value.id
+  const list = position === 'relative' ? [...store.relativePrompts] : [...store.inChatPrompts]
+  let ids = list.map(i => i.identifier)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  // remove original
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    const insertIdx = toIdx < 0 ? ids.length : toIdx
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    // drop at end
+    ids.push(dId)
+  }
+  store.reorderWithinPosition(position, ids)
+  // cleanup
+  dragging.value = null
+  dragOverId.value = null
+  ;(window as any).lucide?.createIcons?.()
+}
+
+function onDropEnd(position: PosType, ev: DragEvent) {
+  onDrop(position, null, ev)
+}
+
+function onDragEnd() {
+  dragging.value = null
+  dragOverId.value = null
 }
 </script>
 
@@ -327,55 +474,171 @@ function addInChat() {
                 <i data-lucide="list" class="w-4 h-4 text-black"></i>
                 <span class="text-sm font-medium text-black">提示词条目</span>
               </div>
-              <button
-                class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-              >
-                新增
-              </button>
             </div>
             <div class="space-y-6">
               <!-- Relative 条目 -->
               <div>
-                <div class="flex items-center justify-between mb-2">
+                <button
+                  type="button"
+                  class="w-full flex items-center justify-between mb-2 rounded-4"
+                  @click="relativeOpen = !relativeOpen"
+                >
                   <div class="flex items-center gap-2">
                     <i data-lucide="layers" class="w-4 h-4 text-black"></i>
                     <span class="text-sm font-medium text-black">Relative 条目</span>
                   </div>
-                  <button
-                    class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
-                    @click="addRelative"
-                  >
-                    新增 Relative
-                  </button>
+                  <i
+                    data-lucide="chevron-down"
+                    class="w-4 h-4 text-black transition-transform duration-200 ease-soft"
+                    :class="relativeOpen ? 'rotate-180' : ''"
+                  />
+                </button>
+
+                <!-- 新增 Relative：一次性组件 + 自定义 -->
+                <div v-show="relativeOpen" class="space-y-2 mb-2">
+                  <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                    <!-- 一次性组件选择（仅显示尚未添加过的保留组件） -->
+                    <div class="flex items-center gap-2">
+                      <select
+                        v-model="specialSelect"
+                        class="min-w-[220px] px-3 py-2 border border-gray-300 rounded-4 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                      >
+                        <option value="" disabled>选择一次性组件</option>
+                        <option
+                          v-for="sp in availableSpecials"
+                          :key="sp.identifier"
+                          :value="sp.identifier"
+                        >
+                          {{ sp.name }} (id: {{ sp.identifier }})
+                        </option>
+                      </select>
+                      <button
+                        class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs disabled:opacity-50"
+                        :disabled="!specialSelect"
+                        @click="addSelectedSpecial"
+                      >
+                        添加特殊
+                      </button>
+                    </div>
+
+                    <!-- 自定义 Relative（允许设定 id 与 名称；禁止与保留组件重名/重 id） -->
+                    <div class="flex items-center gap-2 justify-end">
+                      <input
+                        v-model="newRelId"
+                        placeholder="id"
+                        class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                      />
+                      <input
+                        v-model="newRelName"
+                        placeholder="名称"
+                        class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                      />
+                      <button
+                        class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+                        @click="addCustomRelative"
+                      >
+                        添加
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="relError" class="text-xs text-red-600">* {{ relError }}</p>
                 </div>
-                <div class="space-y-2">
-                  <PresetPromptCard
+
+                <!-- 已有 Relative 列表 -->
+                <div v-show="relativeOpen" class="space-y-2">
+                  <div
                     v-for="it in store.relativePrompts"
                     :key="it.identifier"
-                    :item="it"
+                    class="flex items-stretch gap-2 group"
+                    :class="{'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'relative'}"
+                    @dragover.prevent="onDragOver('relative', it.identifier, $event)"
+                    @drop.prevent="onDrop('relative', it.identifier, $event)"
+                  >
+                    <div
+                      class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+                      draggable="true"
+                      @dragstart="onDragStart('relative', it.identifier, $event)"
+                      @dragend="onDragEnd"
+                      title="拖拽排序"
+                    >
+                      <i data-lucide="grip-vertical" class="w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+                    </div>
+                    <div class="flex-1" :class="{'drag-over': dragOverId === it.identifier && dragging && dragging.position === 'relative'}">
+                      <PresetPromptCard :item="it" />
+                    </div>
+                  </div>
+                  <div
+                    class="h-3"
+                    @dragover.prevent="onDragOver('relative', null, $event)"
+                    @drop.prevent="onDropEnd('relative', $event)"
                   />
                 </div>
               </div>
 
               <!-- In-Chat 条目 -->
               <div>
-                <div class="flex items-center justify-between mb-2">
+                <button
+                  type="button"
+                  class="w-full flex items-center justify-between mb-2 rounded-4"
+                  @click="inChatOpen = !inChatOpen"
+                >
                   <div class="flex items-center gap-2">
                     <i data-lucide="message-square" class="w-4 h-4 text-black"></i>
                     <span class="text-sm font-medium text-black">In-Chat 条目</span>
                   </div>
-                  <button
-                    class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
-                    @click="addInChat"
-                  >
-                    新增 In-Chat
-                  </button>
+                  <i
+                    data-lucide="chevron-down"
+                    class="w-4 h-4 text-black transition-transform duration-200 ease-soft"
+                    :class="inChatOpen ? 'rotate-180' : ''"
+                  />
+                </button>
+                <div v-show="inChatOpen" class="mb-2 flex justify-end">
+                  <div class="flex items-center gap-2">
+                    <input
+                      v-model="newChatId"
+                      placeholder="id"
+                      class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                    />
+                    <input
+                      v-model="newChatName"
+                      placeholder="名称"
+                      class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                    />
+                    <button
+                      class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+                      @click="addCustomInChat"
+                    >
+                      添加
+                    </button>
+                  </div>
                 </div>
-                <div class="space-y-2">
-                  <PresetPromptCard
+                <p v-show="inChatOpen && chatError" class="text-xs text-red-600">* {{ chatError }}</p>
+                <div v-show="inChatOpen" class="space-y-2">
+                  <div
                     v-for="it in store.inChatPrompts"
                     :key="it.identifier"
-                    :item="it"
+                    class="flex items-stretch gap-2 group"
+                    :class="{'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'in-chat'}"
+                    @dragover.prevent="onDragOver('in-chat', it.identifier, $event)"
+                    @drop.prevent="onDrop('in-chat', it.identifier, $event)"
+                  >
+                    <div
+                      class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+                      draggable="true"
+                      @dragstart="onDragStart('in-chat', it.identifier, $event)"
+                      @dragend="onDragEnd"
+                      title="拖拽排序"
+                    >
+                      <i data-lucide="grip-vertical" class="w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+                    </div>
+                    <div class="flex-1" :class="{'drag-over': dragOverId === it.identifier && dragging && dragging.position === 'in-chat'}">
+                      <PresetPromptCard :item="it" />
+                    </div>
+                  </div>
+                  <div
+                    class="h-3"
+                    @dragover.prevent="onDragOver('in-chat', null, $event)"
+                    @drop.prevent="onDropEnd('in-chat', $event)"
                   />
                 </div>
               </div>
@@ -485,5 +748,13 @@ function addInChat() {
   background: #111;
   border-radius: 50%;
   border: 2px solid #111;
+}
+
+/* 抓手光标与 hover 提示对比度 */
+.cursor-grab {
+  cursor: grab;
+}
+.cursor-grab:active {
+  cursor: grabbing;
 }
 </style>
