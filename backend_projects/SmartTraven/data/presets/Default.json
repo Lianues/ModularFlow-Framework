@@ -42,8 +42,6 @@
             "enabled": null,
             "role": "user",
             "position": "relative",
-            "depth": 0,
-            "order": 100,
             "content": "你好222233333"
         },
         {

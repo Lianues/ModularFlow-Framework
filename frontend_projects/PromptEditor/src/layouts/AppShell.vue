@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onMounted, nextTick } from 'vue'
 
+/* 顶部右侧：导入/导出按钮事件 */
+const emit = defineEmits<{ (e: 'import-files'): void; (e: 'export-file'): void }>()
+
 // 组件挂载后渲染 Lucide 图标（避免图标未初始化）
 onMounted(() => {
   nextTick(() => (window as any).lucide?.createIcons?.())
@@ -23,6 +26,18 @@ onMounted(() => {
 
         <!-- 顶部右侧操作（透明背景，浅灰交互） -->
         <div class="hidden md:flex items-center space-x-2">
+          <button
+            class="px-4 py-2 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 hover:text-black transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+            @click="emit('import-files')"
+          >
+            导入
+          </button>
+          <button
+            class="px-4 py-2 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 hover:text-black transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+            @click="emit('export-file')"
+          >
+            导出
+          </button>
           <button
             class="px-4 py-2 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 hover:text-black transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
           >

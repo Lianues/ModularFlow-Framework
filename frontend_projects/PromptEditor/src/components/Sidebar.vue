@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-type TabKey = 'presets' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
+type TabKey = 'presets' | 'files' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 
 // v-model 支持
 const props = defineProps<{
@@ -19,6 +19,7 @@ const current = computed({
 // 导航项定义
 const items: { key: TabKey; icon: string; label: string; sub: string }[] = [
   { key: 'presets',    icon: 'list',      label: '预设',     sub: 'Presets' },
+  { key: 'files',      icon: 'folder',    label: '文件',     sub: 'Files' },
   { key: 'worldbook',  icon: 'book-open', label: '世界书',   sub: 'World Book' },
   { key: 'characters', icon: 'user',      label: '角色卡',   sub: 'Characters' },
   { key: 'regex',      icon: 'code',      label: '正则',     sub: 'Regex' },

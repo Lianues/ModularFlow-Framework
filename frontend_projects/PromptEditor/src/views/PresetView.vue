@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 // 预设设置的简化模型（本地占位状态）
 const temperature = ref<number>(1.0)
@@ -9,8 +9,11 @@ const topP = ref<number>(1.0)
 const frequencyPenalty = ref<number>(0)
 const presencePenalty = ref<number>(0)
 
-/* 折叠开关（API 默认收起） */
-const apiOpen = ref(false)
+/* 面板收起/展开（默认全部展开）；状态持久化到 LocalStorage */
+const PANEL_STATE_KEY = 'prompt_editor_ui_panels'
+const apiOpen = ref(true)
+const promptsOpen = ref(true)
+const regexOpen = ref(true)
 
 /**
  * LLM API 参数在下方“API 配置”面板中编辑；
@@ -31,10 +34,66 @@ const enablePresencePenalty = ref(true)
 const topK = ref<number>(0)
 const maxContext = ref<number>(4095)
 
-// 初始化 Lucide 图标（组件挂载后）
-onMounted(() => {
-  (window as any).lucide?.createIcons?.()
+function loadPanelStates() {
+  try {
+    const raw = localStorage.getItem(PANEL_STATE_KEY)
+    if (raw) {
+      const obj = JSON.parse(raw)
+      if (typeof obj.apiOpen === 'boolean') apiOpen.value = obj.apiOpen
+      if (typeof obj.promptsOpen === 'boolean') promptsOpen.value = obj.promptsOpen
+      if (typeof obj.regexOpen === 'boolean') regexOpen.value = obj.regexOpen
+    }
+  } catch {}
+}
+
+watch([apiOpen, promptsOpen, regexOpen], ([a, p, r]) => {
+  try {
+    localStorage.setItem(PANEL_STATE_KEY, JSON.stringify({ apiOpen: a, promptsOpen: p, regexOpen: r }))
+  } catch {}
 })
+
+/* 初始化 Lucide 图标（组件挂载后） */
+onMounted(() => {
+  loadPanelStates()
+  ;(window as any).lucide?.createIcons?.()
+})
+
+/* 使用 Store 管理预设数据 */
+import { usePresetStore } from '../features/presets/store'
+import type { PromptItem, PromptItemRelative, PromptItemInChat } from '../features/presets/types'
+import PresetPromptCard from '@/features/presets/components/PresetPromptCard.vue'
+
+const store = usePresetStore()
+
+function uuid(): string {
+  return (window as any).crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/* 新增条目 */
+function addRelative() {
+  const item: PromptItemRelative = {
+    identifier: uuid(),
+    name: '新 Relative 条目',
+    enabled: null,
+    role: 'system',
+    position: 'relative',
+    // 不包含 content 字段 → 占位条目，不显示内容区
+  }
+  store.addPrompt(item as PromptItem)
+}
+function addInChat() {
+  const item: PromptItemInChat = {
+    identifier: uuid(),
+    name: '新 In-Chat 条目',
+    enabled: true,
+    role: 'system',
+    position: 'in-chat',
+    depth: 0,
+    order: 0,
+    content: ''
+  }
+  store.addPrompt(item as PromptItem)
+}
 </script>
 
 <template>
@@ -61,7 +120,6 @@ onMounted(() => {
         <div class="flex items-center gap-2">
           <i data-lucide="server-cog" class="w-4 h-4 text-black"></i>
           <span class="text-sm font-medium text-black">API 配置</span>
-          <span class="text-xs text-black/50">(默认收起)</span>
         </div>
         <i
           data-lucide="chevron-down"
@@ -112,7 +170,7 @@ onMounted(() => {
           <div>
             <div class="flex items-center justify-between mb-2">
               <label class="text-sm font-medium text-black">Top P</label>
-              <label class="inline-flex items中心 gap-2 select-none">
+              <label class="inline-flex items-center gap-2 select-none">
                 <input type="checkbox" v-model="enableTopP" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
                 <span class="text-xs text-black/60">启用</span>
               </label>
@@ -223,7 +281,7 @@ onMounted(() => {
           <!-- presence_penalty -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text黑">Presence Penalty</label>
+              <label class="text-sm font-medium text-black">Presence Penalty</label>
               <label class="inline-flex items-center gap-2 select-none">
                 <input type="checkbox" v-model="enablePresencePenalty" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
                 <span class="text-xs text-black/60">启用</span>
@@ -242,12 +300,23 @@ onMounted(() => {
 
     <!-- 提示词编辑（默认展开） -->
     <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center gap-2 mb-4">
-        <i data-lucide="edit-3" class="w-4 h-4 text-black"></i>
-        <span class="text-sm font-medium text-black">提示词编辑</span>
-      </div>
+      <button
+        type="button"
+        class="w-full flex items-center justify-between mb-4 rounded-4"
+        @click="promptsOpen = !promptsOpen"
+      >
+        <div class="flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-black"></i>
+          <span class="text-sm font-medium text-black">提示词编辑</span>
+        </div>
+        <i
+          data-lucide="chevron-down"
+          class="w-4 h-4 text-black transition-transform duration-200 ease-soft"
+          :class="promptsOpen ? 'rotate-180' : ''"
+        />
+      </button>
 
-      <div class="grid grid-cols-1 gap-6">
+      <div v-show="promptsOpen" class="grid grid-cols-1 gap-6">
         <!-- 左侧生成参数已迁移到“API 配置”面板，此处仅保留右侧提示词条目 -->
 
         <!-- 右：提示词条目 -->
@@ -264,38 +333,50 @@ onMounted(() => {
                 新增
               </button>
             </div>
-            <div class="space-y-2">
-              <div class="border border-gray-200 rounded-4 p-3 transition-all duration-200 ease-soft hover:shadow-elevate">
-                <div class="flex items-center justify-between">
-                  <div class="text-sm">
-                    <span class="font-mono">main</span>
-                    <span class="text-black/60 ml-2">role: user</span>
+            <div class="space-y-6">
+              <!-- Relative 条目 -->
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-black"></i>
+                    <span class="text-sm font-medium text-black">Relative 条目</span>
                   </div>
                   <button
-                    class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                    class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+                    @click="addRelative"
                   >
-                    编辑
+                    新增 Relative
                   </button>
                 </div>
-                <div class="text-xs text-black/60 mt-2 truncate" v-pre>
-                  Write {{char}}'s next reply in a fictional chat between {{char}} and {{user}}.
+                <div class="space-y-2">
+                  <PresetPromptCard
+                    v-for="it in store.relativePrompts"
+                    :key="it.identifier"
+                    :item="it"
+                  />
                 </div>
               </div>
 
-              <div class="border border-gray-200 rounded-4 p-3 transition-all duration-200 ease-soft hover:shadow-elevate">
-                <div class="flex items-center justify-between">
-                  <div class="text-sm">
-                    <span class="font-mono">charAfter</span>
-                    <span class="text-black/60 ml-2">role: system</span>
+              <!-- In-Chat 条目 -->
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="message-square" class="w-4 h-4 text-black"></i>
+                    <span class="text-sm font-medium text-black">In-Chat 条目</span>
                   </div>
                   <button
-                    class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+                    class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+                    @click="addInChat"
                   >
-                    编辑
+                    新增 In-Chat
                   </button>
                 </div>
-                <div class="text-xs text-black/60 mt-2 truncate">
-                  World Info (after) ...
+                <div class="space-y-2">
+                  <PresetPromptCard
+                    v-for="it in store.inChatPrompts"
+                    :key="it.identifier"
+                    :item="it"
+                  />
                 </div>
               </div>
             </div>
@@ -306,12 +387,23 @@ onMounted(() => {
 
     <!-- 正则编辑（默认展开） -->
     <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center gap-2 mb-3">
-        <i data-lucide="code" class="w-4 h-4 text-black"></i>
-        <span class="text-sm font-medium text-black">正则编辑</span>
-      </div>
+      <button
+        type="button"
+        class="w-full flex items-center justify-between mb-3 rounded-4"
+        @click="regexOpen = !regexOpen"
+      >
+        <div class="flex items-center gap-2">
+          <i data-lucide="code" class="w-4 h-4 text-black"></i>
+          <span class="text-sm font-medium text-black">正则编辑</span>
+        </div>
+        <i
+          data-lucide="chevron-down"
+          class="w-4 h-4 text-black transition-transform duration-200 ease-soft"
+          :class="regexOpen ? 'rotate-180' : ''"
+        />
+      </button>
 
-      <div class="space-y-2">
+      <div v-show="regexOpen" class="space-y-2">
         <!-- 示例规则条目 -->
         <div class="border border-gray-200 rounded-4 p-3 transition-all duration-200 ease-soft hover:shadow-elevate">
           <div class="flex items-center justify-between">
@@ -341,7 +433,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="mt-3">
+      <div v-show="regexOpen" class="mt-3">
         <button
           class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
         >

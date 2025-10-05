@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import AppShell from './layouts/AppShell.vue'
 import Sidebar from './components/Sidebar.vue'
 import PresetView from './views/PresetView.vue'
@@ -8,13 +8,53 @@ import CharactersView from './views/CharactersView.vue'
 import RegexView from './views/RegexView.vue'
 import UserView from './views/UserView.vue'
 import HistoryView from './views/HistoryView.vue'
+import FileManagerView from './views/FileManagerView.vue'
 
-type TabKey = 'presets' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
+import { usePresetStore } from './features/presets/store'
+
+type TabKey = 'presets' | 'files' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 const currentTab = ref<TabKey>('presets')
+
+const presetStore = usePresetStore()
+
+onMounted(() => {
+  presetStore.load()
+})
+
+/* 顶部右侧：导入（选择 JSON），导出（下载当前） */
+function handleImport() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json,application/json'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+    try {
+      await presetStore.importFromFile(file)
+    } catch {
+      // ignore invalid json
+    }
+  }
+  input.click()
+}
+
+function handleExport() {
+  const res = presetStore.exportActive()
+  if (!res) return
+  const blob = new Blob([res.json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = res.filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
-  <AppShell>
+  <AppShell @import-files="handleImport" @export-file="handleExport">
     <!-- 左侧栏插槽：侧边导航 -->
     <template #left>
       <Sidebar v-model="currentTab" />
@@ -24,6 +64,10 @@ const currentTab = ref<TabKey>('presets')
     <template #main>
       <section v-if="currentTab === 'presets'" class="h-full">
         <PresetView />
+      </section>
+
+      <section v-else-if="currentTab === 'files'" class="h-full">
+        <FileManagerView />
       </section>
 
       <section v-else-if="currentTab === 'worldbook'" class="h-full">
