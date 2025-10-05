@@ -9,10 +9,12 @@ import RegexView from './views/RegexView.vue'
 import UserView from './views/UserView.vue'
 import HistoryView from './views/HistoryView.vue'
 import FileManagerView from './views/FileManagerView.vue'
+import GlobalPromptPreview from './features/preview/components/GlobalPromptPreview.vue'
 
 import { usePresetStore } from './features/presets/store'
 import { useCharacterStore } from '@/features/characters/store'
 import { usePersonaStore } from '@/features/persona/store'
+import { useHistoryStore } from '@/features/history/store'
 import { useFileManagerStore } from '@/features/files/fileManager'
 
 type TabKey = 'presets' | 'files' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
@@ -21,12 +23,14 @@ const currentTab = ref<TabKey>('presets')
 const presetStore = usePresetStore()
 const characterStore = useCharacterStore()
 const personaStore = usePersonaStore()
+const historyStore = useHistoryStore()
 const fileManager = useFileManagerStore()
 
 onMounted(() => {
   presetStore.load()
   characterStore.load()
   personaStore.load()
+  historyStore.load()
   fileManager.load()
 })
 
@@ -118,8 +122,9 @@ function handleImport() {
       return
     }
 
-    // 对话历史：仅入库，暂不镜像
+    // 对话历史：入库 + 镜像到历史面板
     if (targetTab === 'history') {
+      try { historyStore.setDoc(json, file.name) } catch {}
       try { fileManager.upsertFile('history', file.name, json) } catch {}
       return
     }
@@ -196,6 +201,18 @@ function handleExport() {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  } else if (currentTab.value === 'history') {
+    const res = historyStore.exportActive()
+    if (!res) return
+    const blob = new Blob([res.json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = res.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   } else {
     const res = presetStore.exportActive()
     if (!res) return
@@ -257,17 +274,9 @@ function handleExport() {
       </section>
     </template>
 
-    <!-- 右侧预览插槽（占位，后续接入全局提示词拼装状态） -->
+    <!-- 右侧预览插槽：全局提示词预览组件 -->
     <template #right>
-      <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
-        <div class="flex items-center space-x-2 mb-3">
-          <i data-lucide="eye" class="w-5 h-5 text-black"></i>
-          <h3 class="text-lg font-bold text-black">全局提示词预览</h3>
-        </div>
-        <div class="text-sm text-black/60">
-          暂不实现实时构建。后续将基于全局状态拼装完整提示词。
-        </div>
-      </div>
+      <GlobalPromptPreview />
     </template>
   </AppShell>
 </template>

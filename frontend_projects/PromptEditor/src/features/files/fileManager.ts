@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { usePresetStore } from '@/features/presets/store'
 import { useCharacterStore } from '@/features/characters/store'
 import { usePersonaStore } from '@/features/persona/store'
+import { useHistoryStore } from '@/features/history/store'
 
 export type TypeKey = 'presets' | 'worldbook' | 'characters' | 'regex' | 'user' | 'history'
 
@@ -160,7 +161,8 @@ export const useFileManagerStore = defineStore('fileManager', {
           const persona = usePersonaStore()
           persona.setPersona(clone(json), found.name)
         } else if (type === 'history') {
-          // 暂不镜像到其他面板
+          const history = useHistoryStore()
+          history.setDoc(clone(json), found.name)
         }
       } catch {}
     },

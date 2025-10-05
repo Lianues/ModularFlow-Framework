@@ -132,7 +132,7 @@ class ProjectManagerBackend:
             print(f"⚠️ 读取 modularflow_config.py 失败，继续使用默认配置: {e}")
 
     def _write_frontend_runtime_config(self):
-        """已弃用：不再生成 mf_frontend_config.json；前端使用固定的后端端口与 /api 配置"""
+        """前端使用固定的后端端口与 /api 配置"""
         pass
 
     def load_modules(self):

@@ -232,13 +232,11 @@ resp = core.call_api("project_manager/start_project", {"project_name": "ProjectM
 
 ## 8) 前端调用约定（管理面板）
 
-- 前端 API 客户端读取 `mf_frontend_config.json` 以推导 `baseURL` 与 `apiPrefix`：
-  - 见 [javascript.APIClient](frontend_projects/ProjectManager/js/api.js:6)
-- 管理面板加载数据前确保客户端已就绪：
-  - 见 [javascript.ProjectManagerApp.ensureApiClientReady()](frontend_projects/ProjectManager/js/main.js:289)
+- 前端 API 客户端默认使用 http://localhost:8050 + /api（参考 [python.get_api_config()](core/config/api_config.py:29) 默认值）
+- 管理面板加载数据前确保客户端已就绪（若使用自建客户端可直接调用，无需外部配置文件）
 - 统一调用：
-  - `GET /api/modules/project_manager/get_status` → `window.apiClient.getProjectStatus()`
-  - `POST /api/modules/project_manager/start_project` → `window.apiClient.startProject(name)`
+  - GET /api/modules/project_manager/get_status → window.apiClient.getProjectStatus()
+  - POST /api/modules/project_manager/start_project → window.apiClient.startProject(name)
 
 ---
 

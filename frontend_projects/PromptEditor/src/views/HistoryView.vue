@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useHistoryStore, deriveMessagesFromHistory } from '@/features/history/store'
 
 /**
  * 分支对话可视化（仅分支，不包含线性示例）
@@ -72,8 +73,85 @@ const demoDoc = computed<BranchDoc>(() => ({
   active_path: ['n_root', 'n_user1', 'n_ass1', 'n_user2', 'n_ass3'],
 }))
 
-// 使用 props.branchDoc 或 demo
-const doc = computed<BranchDoc>(() => props.branchDoc ?? demoDoc.value)
+// 使用 Store 活动文档或 props，回退 demo；并在非 chat-branches 时生成线性树
+const history = useHistoryStore()
+history.load()
+
+const sourceAny = computed<any>(() => (history.activeData ?? (props.branchDoc ?? demoDoc.value)))
+
+const messages = computed<{ role: MsgRole; content: string }[]>(() => deriveMessagesFromHistory(sourceAny.value))
+
+const doc = computed<BranchDoc>(() => {
+  const v: any = sourceAny.value
+  // 若为标准 chat-branches 结构，直接使用
+  if (v && v.schema?.name === 'chat-branches' && v.nodes && v.children && v.root) {
+    return v as BranchDoc
+  }
+  // 否则根据 messages 生成一棵线性分支树（root -> 消息1 -> 消息2 ...）
+  const msgs = messages.value
+  const nodes: Record<string, { pid: string | null; role: MsgRole; content?: string | null }> = {}
+  const children: Record<string, string[]> = {}
+  const root = 'n_root'
+  nodes[root] = { pid: null, role: 'system', content: '对话记录' }
+  let prev = root
+  const active_path: string[] = [root]
+  let i = 0
+  for (const m of msgs) {
+    const id = `n_${++i}`
+    nodes[id] = { pid: prev, role: m.role, content: m.content }
+    const arr = (children[prev] ?? (children[prev] = []))
+    arr.push(id)
+    prev = id
+    active_path.push(id)
+  }
+  return {
+    schema: { name: 'chat-branches', version: 2 },
+    meta: { id: 'linear', title: '线性对话（由 messages 推导）' },
+    root,
+    nodes,
+    children,
+    active_path,
+  }
+})
+
+// 原始 JSON 文本编辑（保持与 Store 同步）
+const jsonText = ref('')
+watch(sourceAny, (v) => {
+  try {
+    jsonText.value = JSON.stringify(v ?? {}, null, 2)
+  } catch {
+    jsonText.value = ''
+  }
+}, { immediate: true })
+
+function handleFormat() {
+  try {
+    const obj = JSON.parse(jsonText.value)
+    jsonText.value = JSON.stringify(obj, null, 2)
+  } catch {
+    alert('JSON 解析失败，无法格式化')
+  }
+}
+function handleSave() {
+  try {
+    const obj = JSON.parse(jsonText.value)
+    history.setDoc(obj)
+  } catch {
+    alert('JSON 解析失败，无法保存')
+  }
+}
+function handleReset() {
+  try {
+    jsonText.value = JSON.stringify(sourceAny.value ?? {}, null, 2)
+  } catch {
+    jsonText.value = ''
+  }
+}
+
+// TS 插件模板可见性兼容：显式读取，避免未使用告警
+void handleFormat
+void handleSave
+void handleReset
 
 // 归一化 active_path（确保 root 开头）
 const activePath = computed<string[]>(() => {
@@ -143,18 +221,7 @@ function branchLevelsFromDoc(d: BranchDoc): { depth: number; node_id: string; j:
   return levels
 }
 
-// OpenAI messages 视图（若未传入，则从 doc 的 active_path 构造）
-const messages = computed<{ role: MsgRole; content: string }[]>(() => {
-  if (props.messagesView?.messages?.length) return props.messagesView.messages
-  const out: { role: MsgRole; content: string }[] = []
-  for (const nid of activePath.value) {
-    const node = doc.value.nodes[nid]
-    if (node && (node.role === 'system' || node.role === 'user' || node.role === 'assistant')) {
-      out.push({ role: node.role, content: String(node.content ?? '') })
-    }
-  }
-  return out
-})
+// messages 已基于 deriveMessagesFromHistory(sourceAny) 计算（见顶部 messages 计算属性）
 
 const onlyActive = ref(false)
 const order = computed(() => (onlyActive.value ? activePath.value : listDepthFirst(doc.value)))

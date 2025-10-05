@@ -357,7 +357,6 @@ class APIClient {
 }
 
 /**
- * 简化初始化：不再依赖 mf_frontend_config.json
  * 统一使用后端端口 + /api 作为默认配置
  * WebSocket 走后端端口 /ws
  */
