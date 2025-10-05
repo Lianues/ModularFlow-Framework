@@ -6,6 +6,7 @@ import type {
   PromptItemInChat,
   PromptItemRelative,
   RegexRule,
+  WorldBookEntry,
 } from './types'
 import { isPresetData, SPECIAL_RELATIVE_TEMPLATES } from './types'
 
@@ -94,6 +95,30 @@ function normalizeRegexRule(r: any): void {
   if (r.description != null && typeof r.description !== 'string') r.description = String(r.description)
 }
 
+function normalizeWorldEntry(w: any): void {
+  if (!w || typeof w !== 'object') return
+  if (typeof w.id !== 'string') w.id = String(w.id ?? '')
+  if (typeof w.name !== 'string') w.name = String(w.name ?? w.id ?? '')
+  w.enabled = w.enabled === true ? true : w.enabled === false ? false : true
+  if (typeof w.content !== 'string') w.content = String(w.content ?? '')
+  if (typeof w.mode !== 'string') w.mode = 'always'
+  if (typeof w.position !== 'string') w.position = 'system'
+  if (w.order != null) w.order = Number(w.order)
+  if (w.depth != null) w.depth = Number(w.depth)
+  if (!Array.isArray(w.keys)) {
+    if (w.mode === 'conditional' && w.keys != null) {
+      const s = String(w.keys)
+      // 使用英文分号 ; 分割关键词
+      w.keys = s.split(/;/).map((x: string) => x.trim()).filter(Boolean)
+    } else {
+      w.keys = []
+    }
+  } else {
+    w.keys = w.keys.map((x: any) => String(x ?? '')).map((x: string) => x.trim()).filter(Boolean)
+  }
+  if (w.mode !== 'conditional') w.keys = []
+}
+
 function normalizePresetData(data: PresetData): boolean {
   if (!data) return false
   let changed = false
@@ -120,6 +145,18 @@ function normalizePresetData(data: PresetData): boolean {
       const before = JSON.stringify(r)
       normalizeRegexRule(r)
       if (JSON.stringify(r) !== before) changed = true
+    }
+  }
+
+  // world_books
+  if (!Array.isArray((data as any).world_books)) {
+    ;(data as any).world_books = []
+    changed = true
+  } else {
+    for (const w of (data as any).world_books as any[]) {
+      const s = JSON.stringify(w)
+      normalizeWorldEntry(w)
+      if (JSON.stringify(w) !== s) changed = true
     }
   }
 
@@ -163,6 +200,9 @@ export const usePresetStore = defineStore('preset', {
     },
     regexRules(): RegexRule[] {
       return (((this as any).activeData?.regex_rules ?? []) as any[]) as RegexRule[]
+    },
+    worldBooks(): WorldBookEntry[] {
+      return (((this as any).activeData?.world_books ?? []) as any[]) as WorldBookEntry[]
     },
   },
 
@@ -387,6 +427,149 @@ export const usePresetStore = defineStore('preset', {
       const filename = 'regex_rules.json'
       const json = JSON.stringify(data.regex_rules ?? [], null, 2)
       return { filename, json }
+    },
+
+    /**
+     * WorldBooks CRUD
+     */
+    addWorldBook(entry: WorldBookEntry) {
+      const data = this.activeData
+      if (!data) return
+      if (!Array.isArray((data as any).world_books)) (data as any).world_books = []
+      const list = (data as any).world_books as WorldBookEntry[]
+      const i = list.findIndex(w => w && w.id === entry.id)
+      if (i >= 0) list.splice(i, 1, entry as any)
+      else list.unshift(entry as any)
+      this.persist()
+    },
+
+    replaceWorldBook(updated: WorldBookEntry) {
+      const data = this.activeData
+      if (!data || !Array.isArray((data as any).world_books)) return
+      const list = (data as any).world_books as WorldBookEntry[]
+      const idx = list.findIndex(w => w && w.id === updated.id)
+      if (idx >= 0) {
+        list.splice(idx, 1, updated as any)
+        this.persist()
+      }
+    },
+
+    removeWorldBook(id: string) {
+      const data = this.activeData
+      if (!data || !Array.isArray((data as any).world_books)) return
+      const list = (data as any).world_books as WorldBookEntry[]
+      const idx = list.findIndex(w => w && w.id === id)
+      if (idx >= 0) {
+        list.splice(idx, 1)
+        this.persist()
+      }
+    },
+
+    /**
+     * Upsert world_book, preserving position when renaming id
+     */
+    upsertWorldBookWithOldId(updated: WorldBookEntry, oldId?: string | null) {
+      const data = this.activeData as any
+      if (!data) return
+      if (!Array.isArray(data.world_books)) data.world_books = []
+      const list = data.world_books as WorldBookEntry[]
+      const next: any = { ...(updated as any) }
+      try { normalizeWorldEntry(next) } catch {}
+
+      const old = (oldId ?? next.id) as string
+      const oldIdx = list.findIndex(w => w && w.id === old)
+
+      // 若发生重命名且新 id 已存在于其他条目，避免覆盖冲突
+      const dupIdx = list.findIndex(w => w && w.id === next.id)
+      if (dupIdx >= 0 && dupIdx !== oldIdx) {
+        // 回退为不改 id 的替换，保持原位置
+        if (oldIdx >= 0) {
+          const keep = { ...(list[oldIdx] as any), ...(next as any), id: old } as any
+          try { normalizeWorldEntry(keep) } catch {}
+          list.splice(oldIdx, 1, keep)
+          this.persist()
+        }
+        return
+      }
+
+      if (oldIdx >= 0) {
+        list.splice(oldIdx, 1, next as any)
+      } else {
+        // 原条目不存在，按新增到队首
+        list.unshift(next as any)
+      }
+      this.persist()
+    },
+
+    /**
+     * Replace entire world_books list (used by Worldbook panel import)
+     */
+    setWorldBooks(entries: WorldBookEntry[]) {
+      let data = this.activeData
+      if (!data) {
+        // 若当前没有活动文件（初次仅导入世界书），创建一个最小承载文件（Setting 仅作占位，不在 UI 使用）
+        const DEFAULT_SETTING: any = {
+          temperature: 1,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          top_p: 1,
+          top_k: 0,
+          max_context: 4095,
+          max_tokens: 300,
+          stream: true,
+        }
+        const holder: PresetFile = {
+          name: 'WorldBookPanel',
+          enabled: true,
+          data: { setting: DEFAULT_SETTING, regex_rules: [], prompts: [], world_books: [] } as any,
+        }
+        this.upsertFile(holder)
+        data = this.activeData
+      }
+      if (!data) return
+      const list: any[] = Array.isArray(entries) ? entries.map(e => ({ ...(e as any) })) : []
+      for (const w of list) {
+        try { normalizeWorldEntry(w) } catch {}
+      }
+      ;(data as any).world_books = list as any
+      this.persist()
+    },
+
+    /**
+     * Reorder world_books by provided id order
+     */
+    reorderWorldBooks(orderedIds: string[]) {
+      const data = this.activeData
+      const list = (data as any)?.world_books
+      if (!data || !Array.isArray(list)) return
+      const items = list as WorldBookEntry[]
+      const idSet = new Set(items.map(i => i.id))
+      const normalized = (orderedIds || []).filter((id): id is string => !!id && idSet.has(id))
+      const missing = items.map(i => i.id).filter(id => !normalized.includes(id))
+      const finalIds = normalized.concat(missing)
+      const map = new Map<string, WorldBookEntry>(items.map(i => [i.id, i as WorldBookEntry]))
+      const next: WorldBookEntry[] = []
+      for (const id of finalIds) {
+        const x = map.get(id)
+        if (x) next.push(x)
+      }
+      ;(data as any).world_books.splice(0, items.length, ...(next as any))
+      this.persist()
+    },
+
+    /**
+     * Export world_books array wrapped in an outer array to align with backend .../world_books/*.json
+     */
+    exportWorldBooks(): { filename: string; json: string } | null {
+      const data = this.activeData
+      if (!data) return null
+      const arr = (((data as any).world_books ?? []) as any[]).map(w => {
+        const obj: any = { ...(w as any) }
+        obj.id = String(obj.id ?? '')
+        return obj
+      })
+      const json = JSON.stringify([arr], null, 2)
+      return { filename: 'world_books.json', json }
     },
 
     /**

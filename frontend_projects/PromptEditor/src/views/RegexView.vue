@@ -223,39 +223,48 @@ function onDragEnd() { dragging.value = null; dragOverId.value = null }
       <p v-if="error" class="text-xs text-red-600 mt-2">* {{ error }}</p>
     </div>
 
-    <!-- 列表（可拖拽排序，左侧握把 + 黑线插入预览） -->
-    <div class="space-y-2">
-      <div
-        v-for="r in (store.activeData?.regex_rules || [])"
-        :key="r.id"
-        class="flex items-stretch gap-2 group draglist-item"
-        :class="{
-          'dragging-item': dragging && dragging === r.id,
-          'drag-over-top': dragging && dragOverId === r.id && dragOverBefore,
-          'drag-over-bottom': dragging && dragOverId === r.id && !dragOverBefore
-        }"
-        @dragover.prevent="onDragOver(r.id, $event)"
-        @drop.prevent="onDrop(r.id, $event)"
-      >
-        <div
-          class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
-          draggable="true"
-          @dragstart="onDragStart(r.id, $event)"
-          @dragend="onDragEnd"
-          title="拖拽排序"
-        >
-          <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
-        </div>
-        <div class="flex-1">
-          <RegexRuleCard :rule="r" />
-        </div>
+    <!-- 条目区域容器（白色背景，小标题：正则编辑） -->
+    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="sliders" class="w-4 h-4 text-black"></i>
+        <h3 class="text-base font-semibold text-black">正则编辑</h3>
       </div>
-      <div
-        class="h-3 draglist-end"
-        :class="{ 'drag-over-end': dragging && dragOverId === null }"
-        @dragover.prevent="onDragOver(null, $event)"
-        @drop.prevent="onDropEnd($event)"
-      />
+
+      <!-- 列表（可拖拽排序，左侧握把 + 黑线插入预览） -->
+      <div class="space-y-2">
+        <div
+          v-for="r in (store.activeData?.regex_rules || [])"
+          :key="r.id"
+          class="flex items-stretch gap-2 group draglist-item"
+          :class="{
+            'dragging-item': dragging && dragging === r.id,
+            'drag-over-top': dragging && dragOverId === r.id && dragOverBefore,
+            'drag-over-bottom': dragging && dragOverId === r.id && !dragOverBefore
+          }"
+          @dragover.prevent="onDragOver(r.id, $event)"
+          @drop.prevent="onDrop(r.id, $event)"
+        >
+          <div
+            class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+            draggable="true"
+            @dragstart="onDragStart(r.id, $event)"
+            @dragend="onDragEnd"
+            title="拖拽排序"
+          >
+            <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+          </div>
+          <div class="flex-1">
+            <RegexRuleCard :rule="r" />
+          </div>
+        </div>
+
+        <div
+          class="h-3 draglist-end"
+          :class="{ 'drag-over-end': dragging && dragOverId === null }"
+          @dragover.prevent="onDragOver(null, $event)"
+          @drop.prevent="onDropEnd($event)"
+        />
+      </div>
     </div>
   </section>
 </template>

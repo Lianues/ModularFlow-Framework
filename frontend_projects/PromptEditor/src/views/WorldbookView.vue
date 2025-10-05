@@ -1,261 +1,252 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
+import { usePresetStore } from '@/features/presets/store'
+import type { WorldBookEntry } from '@/features/presets/types'
+import WorldBookCard from '@/features/worldbook/components/WorldBookCard.vue'
 
-/**
- * 参考后端 world_book 结构（backend_projects/SmartTraven/data/world_books/参考用main_world.json）
- * 本视图仅做 UI 占位与交互演示，暂不接入后端
- */
+const store = usePresetStore()
 
-type Mode = 'always' | 'conditional' | string
-type Position = 'before_char' | 'user' | 'after_char' | 'system' | 'in-chat' | string
-
-interface WorldEntry {
-  id?: number
-  name: string
-  content?: string
-  mode?: Mode
-  position?: Position
-  order?: number
-  enabled?: boolean
-  keys?: string[]
-  depth?: number
-}
-
-const entries = ref<WorldEntry[]>([
-  {
-    id: 1,
-    name: '未来都市',
-    content: '故事发生在一座名为「新星港」的未来都市。这里科技高度发达，悬浮车穿梭于摩天大楼之间。',
-    mode: 'always',
-    position: 'before_char',
-    order: 5,
-    enabled: true
-  },
-  {
-    id: 2,
-    name: '艾拉的背景',
-    keys: ['艾拉', '工程师'],
-    content: '艾拉是新星港最顶尖的机械工程师之一。',
-    mode: 'conditional',
-    position: 'user',
-    depth: 0,
-    order: 101,
-    enabled: true
-  }
-])
-
-// 过滤/检索
-const search = ref('')
-const modeFilter = ref<'all' | Mode>('all')
-const posFilter = ref<'all' | Position>('all')
-const onlyEnabled = ref(false)
-
-const filtered = computed(() =>
-  entries.value
-    .filter((e) => (onlyEnabled.value ? e.enabled !== false : true))
-    .filter((e) => (modeFilter.value === 'all' ? true : e.mode === modeFilter.value))
-    .filter((e) => (posFilter.value === 'all' ? true : e.position === posFilter.value))
-    .filter((e) => {
-      if (!search.value) return true
-      const hay = `${e.name} ${e.content ?? ''} ${(e.keys ?? []).join(' ')}`
-      return hay.toLowerCase().includes(search.value.toLowerCase())
-    })
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-)
-
-function toggleEnabled(item: WorldEntry) {
-  item.enabled = !item.enabled
-}
+/* 世界书面板：导入/导出复用顶部按钮；使用当前活动文件的 world_books */
 
 onMounted(() => {
+  if (!store.loaded) store.load()
   ;(window as any).lucide?.createIcons?.()
 })
+
+// 变更后刷新 lucide 图标
+watch(
+  () => store.activeData?.world_books?.length ?? 0,
+  async () => {
+    await nextTick()
+    ;(window as any).lucide?.createIcons?.()
+  },
+  { flush: 'post' }
+)
+
+// 右上角：新增条目（id + 名称 + 添加）
+const newId = ref<string>('') 
+const newName = ref<string>('')
+
+async function addEntry() {
+  const id = newId.value.trim()
+  const name = newName.value.trim()
+  if (!id) { alert('请填写 id'); return }
+  if (!name) { alert('请填写 名称'); return }
+  const list = (store.activeData?.world_books || []) as WorldBookEntry[]
+  if (list.some(e => e.id === id)) { alert('id 已存在'); return }
+  const entry: WorldBookEntry = {
+    id,
+    name,
+    enabled: true,
+    content: '',
+    mode: 'always',
+    // position 可为 framing(before_char/after_char) 或 in-chat(user/assistant/system)
+    position: 'before_char',
+    order: 100,
+    depth: 0,
+    keys: [],
+  }
+  store.addWorldBook(entry)
+  newId.value = ''
+  newName.value = ''
+  await nextTick()
+  ;(window as any).lucide?.createIcons?.()
+}
+
+// 导入/导出逻辑复用右上角按钮（App.vue），此处不再提供独立导入/导出
+
+/* 拖拽排序（黑线插入预览） */
+const dragging = ref<string | null>(null)
+const dragOverId = ref<string | null>(null)
+const dragOverBefore = ref<boolean>(true)
+
+function onDragStart(id: string, ev: DragEvent) {
+  dragging.value = id
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer!.effectAllowed = 'move'
+    const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
+  } catch {}
+}
+
+function onDragOver(overId: string | null, ev: DragEvent) {
+  if (!dragging.value) return
+  ev.preventDefault()
+  try {
+    const el = ev.currentTarget as HTMLElement | null
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverBefore.value = ev.clientY < mid
+    }
+  } catch {}
+  dragOverId.value = overId
+}
+
+function onDrop(overId: string | null, ev: DragEvent) {
+  if (!dragging.value) return
+  ev.preventDefault()
+  const dId = dragging.value
+  const list = [...((store.activeData?.world_books || []) as WorldBookEntry[])]
+  let ids = list.map(i => i.id)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    ids.push(dId)
+  }
+  store.reorderWorldBooks(ids)
+  dragging.value = null
+  dragOverId.value = null
+  ;(window as any).lucide?.createIcons?.()
+}
+
+function onDropEnd(ev: DragEvent) { onDrop(null, ev) }
+function onDragEnd() { dragging.value = null; dragOverId.value = null }
 </script>
 
 <template>
   <section class="space-y-6">
-    <!-- 概览 -->
-    <div
-      class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate"
-    >
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center space-x-3">
-          <i data-lucide="book-open" class="w-6 h-6 text-black"></i>
-          <h2>世界书</h2>
+    <!-- 标题 -->
+    <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="book-open" class="w-5 h-5 text-black"></i>
+          <h2>世界书（独立面板）</h2>
         </div>
-        <div class="text-xs text-black/50">
-          参考数据结构：backend_projects/SmartTraven/data/world_books/参考用main_world.json
-        </div>
-      </div>
-
-      <!-- 工具条 -->
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="md:col-span-2">
-          <label class="block text-sm font-medium text-black mb-2">搜索</label>
-          <input
-            v-model="search"
-            type="text"
-            placeholder="按名称、内容、keys 搜索..."
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 focus:outline-none focus:ring-2 focus:ring-gray-800"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">模式</label>
-          <select
-            v-model="modeFilter"
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-white focus:outline-none focus:ring-2 focus:ring-gray-800"
-          >
-            <option value="all">全部</option>
-            <option value="always">always</option>
-            <option value="conditional">conditional</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">位置</label>
-          <select
-            v-model="posFilter"
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-white focus:outline-none focus:ring-2 focus:ring-gray-800"
-          >
-            <option value="all">全部</option>
-            <option value="before_char">before_char</option>
-            <option value="user">user</option>
-            <option value="after_char">after_char</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="mt-4 flex items-center justify-between">
-        <label class="inline-flex items-center space-x-2 select-none">
-          <input
-            type="checkbox"
-            v-model="onlyEnabled"
-            class="w-5 h-5 border border-gray-400 rounded-4 accent-black focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-          />
-          <span class="text-sm text-black/80">仅显示启用</span>
-        </label>
-
-        <div class="flex items-center space-x-2 text-sm text-black/60">
-          <span>总数：{{ entries.length }}</span>
-          <span class="mx-1">/</span>
-          <span>已过滤：{{ filtered.length }}</span>
-        </div>
+        <div class="text-xs text-black/60">使用右上角 导入/导出 · 参考：backend_projects/SmartTraven/data/world_books/参考用main_world.json</div>
       </div>
     </div>
 
-    <!-- 列表 -->
-    <div class="space-y-4">
-      <div
-        v-for="item in filtered"
-        :key="item.id ?? item.name"
-        class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate"
-      >
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="flex items-center space-x-2">
-              <i data-lucide="layers" class="w-4 h-4 text-black"></i>
-              <h3 class="text-lg font-bold text-black">{{ item.name }}</h3>
-              <span
-                class="text-xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent"
-                >{{ item.mode ?? '—' }}</span
-              >
-              <span
-                class="text-xs px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent"
-                >{{ item.position ?? '—' }}</span
-              >
-              <span v-if="item.order !== undefined" class="text-xs text-black/60">#{{ item.order }}</span>
-              <span v-if="item.depth !== undefined" class="text-xs text-black/60">depth: {{ item.depth }}</span>
-            </div>
-            <div v-if="item.keys?.length" class="mt-2 text-xs text-black/60">
-              keys：<span class="font-mono">{{ item.keys.join(', ') }}</span>
-            </div>
-          </div>
-
-          <div class="flex items-center space-x-2">
-            <button
-              class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-            >
-              编辑
-            </button>
-            <button
-              class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-            >
-              复制
-            </button>
-            <button
-              class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
-              @click="toggleEnabled(item)"
-            >
-              {{ item.enabled === false ? '启用' : '禁用' }}
-            </button>
-          </div>
+    <!-- 工具栏：仅新增（导入/导出请使用右上角按钮） -->
+    <div class="bg-white rounded-4 border border-gray-200 p-4 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-sm text-black/70">
+          条目数量：{{ (store.activeData?.world_books || []).length }}
         </div>
-
-        <div class="mt-3 text-sm text-black/70 leading-6">
-          <p class="line-clamp-3">
-            {{ item.content || '（暂无内容）' }}
-          </p>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="newId"
+            placeholder="id"
+            class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-xs focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+          <input
+            v-model="newName"
+            placeholder="名称"
+            class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-xs focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+          <button
+            class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-xs hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="addEntry"
+          >
+            添加
+          </button>
         </div>
       </div>
+      <p class="text-xs text-black/50 mt-2">导入/导出请使用右上角按钮</p>
     </div>
 
-    <!-- 新建条目（占位） -->
-    <div
-      class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center space-x-2">
-          <i data-lucide="plus" class="w-4 h-4 text-black"></i>
-          <span class="text-sm font-medium text-black">新增条目</span>
-        </div>
-        <button
-          class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft hover:-translate-y-0.5 hover:shadow-elevate text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
+    <!-- 条目区域容器（白色背景，小标题：世界书编辑） -->
+    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="settings-2" class="w-4 h-4 text-black"></i>
+        <h3 class="text-base font-semibold text-black">世界书编辑</h3>
+      </div>
+
+      <!-- 列表（可拖拽排序，左侧握把 + 黑线插入预览） -->
+      <div class="space-y-2">
+        <div
+          v-for="w in (store.activeData?.world_books || [])"
+          :key="w.id"
+          class="flex items-stretch gap-2 group draglist-item"
+          :class="{
+            'dragging-item': dragging && dragging === w.id,
+            'drag-over-top': dragging && dragOverId === w.id && dragOverBefore,
+            'drag-over-bottom': dragging && dragOverId === w.id && !dragOverBefore
+          }"
+          @dragover.prevent="onDragOver(w.id, $event)"
+          @drop.prevent="onDrop(w.id, $event)"
         >
-          提交
-        </button>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">名称</label>
-          <input
-            type="text"
-            placeholder="例如：新条目"
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 focus:outline-none focus:ring-2 focus:ring-gray-800"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">模式</label>
-          <select
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-white focus:outline-none focus:ring-2 focus:ring-gray-800"
+          <div
+            class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+            draggable="true"
+            @dragstart="onDragStart(w.id, $event)"
+            @dragend="onDragEnd"
+            title="拖拽排序"
           >
-            <option value="always">always</option>
-            <option value="conditional">conditional</option>
-          </select>
+            <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+          </div>
+          <div class="flex-1">
+            <WorldBookCard :entry="w" />
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-black mb-2">位置</label>
-          <select
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-white focus:outline-none focus:ring-2 focus:ring-gray-800"
-          >
-            <option value="before_char">before_char</option>
-            <option value="user">user</option>
-            <option value="after_char">after_char</option>
-          </select>
-        </div>
-        <div class="md:col-span-3">
-          <label class="block text-sm font-medium text-black mb-2">内容</label>
-          <textarea
-            rows="3"
-            placeholder="在这里输入条目的描述内容..."
-            class="w-full px-3 py-2 border border-gray-300 rounded-4 focus:outline-none focus:ring-2 focus:ring-gray-800"
-          ></textarea>
-        </div>
+
+        <div
+          class="h-3 draglist-end"
+          :class="{ 'drag-over-end': dragging && dragOverId === null }"
+          @dragover.prevent="onDragOver(null, $event)"
+          @drop.prevent="onDropEnd($event)"
+        />
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-/* 仅少量局部样式，整体使用 Tailwind 工具类 */
+/* lucide 加载失败时的握把占位符 */
+.icon-grip::before {
+  content: '⋮⋮';
+  display: inline-block;
+  line-height: 1;
+  font-weight: 700;
+  color: #111;
+}
+
+/* 拖拽动效与黑线插入预览（与预设/正则页面一致） */
+.draglist-item { position: relative; }
+.drag-over-top::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+.dragging-item {
+  transform: scale(0.98);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  opacity: 0.92;
+  z-index: 1;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+.draglist-end { position: relative; }
+.drag-over-end::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
 </style>

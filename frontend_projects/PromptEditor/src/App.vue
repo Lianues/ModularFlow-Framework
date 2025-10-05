@@ -21,7 +21,9 @@ onMounted(() => {
   presetStore.load()
 })
 
-/* 顶部右侧：导入（选择 JSON），导出（下载当前） */
+/* 顶部右侧：导入（选择 JSON），导出（下载当前）
+   - 预设页：仍按 PresetData 导入/导出
+   - 世界书页：导入/导出 world_books（数组/嵌套数组），不涉及 Setting */
 function handleImport() {
   const input = document.createElement('input')
   input.type = 'file'
@@ -29,27 +31,111 @@ function handleImport() {
   input.onchange = async () => {
     const file = input.files?.[0]
     if (!file) return
+
+    // 读取文本并清理 BOM/不可见字符
+    let text = ''
+    try {
+      text = await file.text()
+    } catch {
+      alert('导入失败：无法读取文件')
+      return
+    }
+    if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1)
+    text = text.replace(/\uFEFF/g, '').trim()
+
+    let json: any
+    try {
+      json = JSON.parse(text)
+    } catch {
+      alert('导入失败：JSON 解析错误')
+      return
+    }
+
+    // 工具：扁平化数组/嵌套数组为对象列表
+    const flattenObjects = (input: any): any[] => {
+      const out: any[] = []
+      const walk = (x: any) => {
+        if (Array.isArray(x)) {
+          for (const it of x) walk(it)
+        } else if (x && typeof x === 'object') {
+          out.push(x)
+        }
+      }
+      walk(input)
+      return out
+    }
+
+    // 启发式判断世界书 JSON（数组/嵌套数组，含 position/mode/content/name 等字段）
+    const isWorldBooksJson = (val: any): boolean => {
+      const objs = Array.isArray(val)
+        ? flattenObjects(val)
+        : Array.isArray(val?.world_books)
+          ? flattenObjects(val.world_books)
+          : []
+      if (!objs.length) return false
+      let score = 0
+      for (const o of objs.slice(0, Math.min(5, objs.length))) {
+        if (o && typeof o === 'object') {
+          if (typeof o.position === 'string') score++
+          if ('mode' in o) score++
+          if ('content' in o) score++
+          if ('name' in o) score++
+        }
+      }
+      return score >= 3
+    }
+
+    // 在世界书页或检测为世界书数据时，按世界书导入
+    if (currentTab.value === 'worldbook' || isWorldBooksJson(json)) {
+      const flat = Array.isArray(json)
+        ? flattenObjects(json)
+        : Array.isArray(json?.world_books)
+          ? flattenObjects(json.world_books)
+          : flattenObjects([json])
+      try {
+        presetStore.setWorldBooks(flat as any)
+      } catch {
+        alert('导入失败：世界书数据结构不符合预期')
+      }
+      return
+    }
+
+    // 否则按预设数据导入（完整 PresetData）
     try {
       await presetStore.importFromFile(file)
     } catch {
-      // ignore invalid json
+      alert('导入失败：预设数据结构不符合预期')
     }
   }
   input.click()
 }
 
 function handleExport() {
-  const res = presetStore.exportActive()
-  if (!res) return
-  const blob = new Blob([res.json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = res.filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  if (currentTab.value === 'worldbook') {
+    const res = presetStore.exportWorldBooks()
+    if (!res) return
+    const blob = new Blob([res.json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = res.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } else {
+    const res = presetStore.exportActive()
+    if (!res) return
+    const blob = new Blob([res.json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = res.filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
 }
 </script>
 

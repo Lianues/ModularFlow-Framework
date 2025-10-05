@@ -31,6 +31,22 @@ export interface RegexRule {
   description?: string
 }
 
+/** World Book domain */
+export type WorldBookMode = 'always' | 'conditional' | string
+export type WorldBookPosition = 'before_char' | 'after_char' | 'user' | 'assistant' | 'system' | string
+
+export interface WorldBookEntry {
+  id: string
+  name: string
+  enabled: boolean
+  content: string
+  mode: WorldBookMode
+  position: WorldBookPosition
+  order?: number
+  depth?: number
+  keys?: string[]
+}
+
 export interface PromptItemBase {
   identifier: string
   name: string
@@ -60,6 +76,7 @@ export type PromptItem = PromptItemRelative | PromptItemInChat
 export interface PresetData {
   setting: PresetSetting
   regex_rules: RegexRule[]
+  world_books?: WorldBookEntry[]
   prompts: PromptItem[]
 }
 
@@ -139,6 +156,17 @@ export function isRegexRule(val: any): val is RegexRule {
     && Array.isArray(val.targets)
     && typeof val.placement === 'string'
     && Array.isArray(val.views)
+}
+
+export function isWorldBookEntry(val: any): val is WorldBookEntry {
+  return val && typeof val === 'object'
+    && typeof val.id === 'string'
+    && typeof val.name === 'string'
+    && (val.enabled === true || val.enabled === false)
+    && typeof val.content === 'string'
+    && typeof val.mode === 'string'
+    && typeof val.position === 'string'
+    && (val.keys == null || Array.isArray(val.keys))
 }
 
 export function isPromptItemBase(val: any): val is PromptItemBase {
