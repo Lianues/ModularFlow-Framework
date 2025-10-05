@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, nextTick, ref } from 'vue'
+import { computed, onMounted, nextTick, ref, watch } from 'vue'
 import { usePreviewStore, type PreviewMode } from '@/features/preview/store'
 import { usePreviewRuntime } from '../runtime'
 
@@ -18,15 +18,11 @@ const current = computed<PreviewMode>({
 })
 
 onMounted(() => {
-  // 确保首次渲染使用持久化选项
   preview.load()
-  // 渲染 Lucide 图标
   nextTick(() => (window as any).lucide?.createIcons?.())
 })
 
-// 自动结果展示（来自运行时自动生成，仅显示当前模式）
-const subTab = ref<'messages' | 'variables'>('messages')
-
+// 自动结果（仅显示当前选择的模式）
 const autoMessages = computed(() => {
   if (preview.mode === 'raw') {
     return runtime.results.raw?.messages ?? []
@@ -37,6 +33,7 @@ const autoMessages = computed(() => {
   }
   return []
 })
+
 const autoVariables = computed(() => {
   if (preview.mode === 'message') return runtime.results.dialog?.variables ?? null
   if (preview.mode === 'preflight') return runtime.results.preflight?.variables ?? null
@@ -44,12 +41,12 @@ const autoVariables = computed(() => {
 })
 const autoHasVariables = computed(() => {
   const v = autoVariables.value
-  return !!(v && typeof v === 'object' && Object.keys(v).length)
+  return !!(v && typeof v === 'object' && (Object.keys(v).length > 0))
 })
 const autoLoading = computed(() => runtime.generating)
 const autoError = computed(() => runtime.lastError)
 
-// 操作：复制当前模式的自动 messages
+// 复制 messages JSON
 function copyAuto() {
   try {
     const txt = JSON.stringify(autoMessages.value ?? [], null, 2)
@@ -66,7 +63,7 @@ function copyAuto() {
   } catch {}
 }
 
-// 显示工具
+// 提取 source.type
 function sourceType(m: any): string {
   try {
     return String(m?.source?.type ?? '—')
@@ -81,82 +78,85 @@ function pretty(obj: any): string {
     return ''
   }
 }
+
+// 底部“变量”页：展开/收起 + 持久化
+const VARS_OPEN_KEY = 'prompt_editor_preview_vars_open'
+const varsOpen = ref(true)
+onMounted(() => {
+  try {
+    const raw = localStorage.getItem(VARS_OPEN_KEY)
+    if (raw === '0' || raw === 'false') varsOpen.value = false
+    else varsOpen.value = true
+  } catch {}
+})
+watch(varsOpen, (v) => {
+  try {
+    localStorage.setItem(VARS_OPEN_KEY, v ? '1' : '0')
+  } catch {}
+})
 </script>
 
 <template>
-  <section class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
+  <!-- 占满右侧栏：flex 列布局，消息区占据余下空间，变量面板固定在底部 -->
+  <section class="h-full flex flex-col">
+    <!-- 标题 -->
     <div class="flex items-center space-x-2 mb-4">
       <i data-lucide="eye" class="w-5 h-5 text-black"></i>
       <h3 class="text-lg font-bold text-black">全局提示词预览</h3>
     </div>
 
-    <label class="block text-sm text-black mb-2">预览类型</label>
-    <div class="relative">
-      <select
-        v-model="current"
-        class="w-full h-12 px-3 pr-9 bg-white text-black border border-gray-900 rounded-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 appearance-none"
-      >
-        <option v-for="opt in options" :key="opt.value" :value="opt.value">
-          {{ opt.label }}
-        </option>
-      </select>
-      <i
-        data-lucide="chevron-down"
-        class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-black"
-      ></i>
+    <!-- 选择模式 -->
+    <div>
+      <label class="block text-sm text-black mb-2">预览类型</label>
+      <div class="relative">
+        <select
+          v-model="current"
+          class="w-full h-12 px-3 pr-9 bg-white text-black border border-gray-900 rounded-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 appearance-none"
+        >
+          <option v-for="opt in options" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <i
+          data-lucide="chevron-down"
+          class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-black"
+        ></i>
+      </div>
+
+      <p class="text-xs text-black/60 mt-3">
+        默认“原始提示词”。该选择会被持久化保存。
+      </p>
     </div>
 
-    <p class="text-xs text-black/60 mt-3">
-      默认“原始提示词”。该选择会被持久化保存。
-    </p>
-
-    <!-- 自动生成结果（仅显示当前选择的模式） -->
-    <div class="mt-6 p-4 bg-white border border-gray-200 rounded-4">
+    <!-- 自动消息结果：占据剩余空间，内部滚动 -->
+    <div class="mt-6 flex-1 min-h-0 bg-white border border-gray-200 rounded-4 p-4">
       <div class="flex items-center gap-2 mb-3">
         <i data-lucide="sparkles" class="w-5 h-5 text-black"></i>
         <span class="text-sm font-medium text-black">自动生成结果</span>
         <span class="ml-auto text-xs text-black/60" v-if="autoMessages?.length">总条数：{{ autoMessages.length }}</span>
       </div>
 
-      <!-- 子页签：messages / variables（若有） -->
-      <div class="flex items-center gap-2 mb-3">
-        <button
-          class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
-          :class="subTab==='messages' ? 'bg-gray-100' : ''"
-          @click="subTab='messages'"
-        >
-          消息
-        </button>
-        <button
-          v-if="autoHasVariables"
-          class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
-          :class="subTab==='variables' ? 'bg-gray-100' : ''"
-          @click="subTab='variables'"
-        >
-          变量
-        </button>
-
-        <div class="ml-auto flex items-center gap-2">
-          <button
-            class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
-            :disabled="autoLoading || !autoMessages?.length"
-            @click="copyAuto"
-          >
-            复制 JSON
-          </button>
-        </div>
-      </div>
-
-      <!-- 错误提示 -->
+      <!-- 错误 -->
       <div v-if="autoError" class="p-3 border border-gray-900 rounded-4 text-sm text-black bg-white mb-3">
         {{ autoError }}
       </div>
 
-      <!-- 子页签：消息 -->
-      <div v-if="subTab==='messages'">
+      <!-- 顶部操作（仅保留复制） -->
+      <div class="mb-3 flex items-center gap-2">
+        <button
+          class="px-3 h-10 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
+          :disabled="autoLoading || !autoMessages?.length"
+          @click="copyAuto"
+        >
+          复制 JSON
+        </button>
+      </div>
+
+      <!-- 消息列表（可滚动） -->
+      <div class="h-full overflow-auto space-y-2">
         <div
           v-if="autoMessages && autoMessages.length"
-          class="space-y-2 max-h-72 overflow-auto"
+          class="space-y-2"
         >
           <div
             v-for="(m, i) in autoMessages"
@@ -175,10 +175,27 @@ function pretty(obj: any): string {
         </div>
         <div v-else class="text-sm text-black/60">暂无消息。</div>
       </div>
+    </div>
 
-      <!-- 子页签：变量 -->
-      <div v-else-if="subTab==='variables' && autoHasVariables">
-        <div class="grid grid-cols-1 gap-3">
+    <!-- 底部变量面板（默认展开，可收起，状态持久化） -->
+    <div class="mt-4 bg-white border border-gray-200 rounded-4">
+      <button
+        class="w-full flex items-center justify-between px-4 h-12 text-left text-sm text-black hover:bg-gray-50 transition rounded-4"
+        @click="varsOpen = !varsOpen"
+      >
+        <span class="flex items-center gap-2">
+          <i data-lucide="variable" class="w-4 h-4 text-black"></i>
+          变量
+          <span v-if="!autoHasVariables" class="text-black/50">(无)</span>
+        </span>
+        <i
+          :data-lucide="varsOpen ? 'chevron-up' : 'chevron-down'"
+          class="w-4 h-4 text-black"
+        ></i>
+      </button>
+
+      <div v-if="varsOpen" class="px-4 pb-4">
+        <div v-if="autoHasVariables" class="grid grid-cols-1 gap-3">
           <div class="border border-gray-200 rounded-4 p-3">
             <div class="text-xs font-medium text-black mb-2">initial</div>
             <pre class="text-xs text-black/80 overflow-auto whitespace-pre-wrap">{{ pretty(autoVariables?.initial) }}</pre>
@@ -188,11 +205,12 @@ function pretty(obj: any): string {
             <pre class="text-xs text-black/80 overflow-auto whitespace-pre-wrap">{{ pretty(autoVariables?.final) }}</pre>
           </div>
         </div>
+        <div v-else class="text-sm text-black/60">暂无变量。</div>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-/* 遵循 ui美化规范：仅黑白与灰阶、圆角4px、触控区域≥48px、微交互轻阴影 */
+/* 仅黑白与灰阶、圆角4px、微交互；右侧栏内容铺满，高度内滚动 */
 </style>
