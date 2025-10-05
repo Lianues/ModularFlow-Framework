@@ -129,7 +129,7 @@ watch(varsOpen, (v) => {
     </div>
 
     <!-- 自动消息结果：占据剩余空间，内部滚动 -->
-    <div class="mt-6 flex-1 min-h-0 bg-white border border-gray-200 rounded-4 p-4">
+    <div class="mt-6 flex-1 min-h-0 bg-white border border-gray-200 rounded-4 p-4 flex flex-col overflow-hidden">
       <div class="flex items-center gap-2 mb-3">
         <i data-lucide="sparkles" class="w-5 h-5 text-black"></i>
         <span class="text-sm font-medium text-black">自动生成结果</span>
@@ -153,7 +153,7 @@ watch(varsOpen, (v) => {
       </div>
 
       <!-- 消息列表（可滚动） -->
-      <div class="h-full overflow-auto space-y-2">
+      <div class="flex-1 min-h-0 overflow-auto space-y-2">
         <div
           v-if="autoMessages && autoMessages.length"
           class="space-y-2"
