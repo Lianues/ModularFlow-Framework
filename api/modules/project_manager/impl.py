@@ -188,8 +188,9 @@ class ProjectManager:
                 except Exception:
                     pass
 
+            # 后端端口不再进行动态分配：保持配置中的端口（可能冲突，但不自动调整）
             preferred_backend_port = backend_port_from_config or 8050
-            backend_port = self._allocate_port(preferred_backend_port, f"{project_name}_backend")
+            backend_port = preferred_backend_port
 
             status_obj = ProjectStatus(
                 name=project_info.get("name", project_name),
@@ -241,9 +242,10 @@ class ProjectManager:
                 except:
                     pass
             
+            # 后端端口不再进行动态分配：保持配置中的端口（可能冲突，但不自动调整）
             # 如果配置中没有端口信息，使用默认值8050
             preferred_backend_port = backend_port_from_config or 8050
-            backend_port = self._allocate_port(preferred_backend_port, f"{project_name}_backend")
+            backend_port = preferred_backend_port
             
             # 构建状态对象后，立即探测端口以“实时”确定运行状态（而不是默认False）
             status_obj = ProjectStatus(
