@@ -2,6 +2,7 @@
  * 轻量 API 客户端
  * - 遵循 DEVELOPMENT_NOTES：默认走 http://localhost:8050 + /api
  * - 仅实现 workflow POST 能力：/api/workflow/{path}
+ * - 现在支持从项目根的 modularflow_config.py 读取端口（FRONTEND_PORT/BACKEND_PORT/WEBSOCKET_PORT）
  */
 const DEFAULT_BASE_URL = 'http://localhost:8050'
 const DEFAULT_API_PREFIX = '/api'
@@ -19,14 +20,72 @@ const cfg: APIConfig = {
 let inited = false
 let initPromise: Promise<void> | null = null
 
+type PortTriplet = { backend: number | null; frontend: number | null; websocket: number | null }
 
-// Deprecated: external config file is no longer used (see DEVELOPMENT_NOTES.md)
+/**
+ * 尝试读取并解析 /modularflow_config.py 中的端口常量
+ * - 该文件位于项目根（Vite dev 和静态部署时可直接以根路径访问）
+ * - 仅做轻量解析：BACKEND_PORT/FRONTEND_PORT/WEBSOCKET_PORT = 整数
+ */
+async function readPortsFromPythonConfig(): Promise<PortTriplet | null> {
+  try {
+    // 使用 sessionStorage 做一次性缓存，避免每次刷新重复解析
+    const cacheKey = '__mf_ports_PE__'
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        return JSON.parse(cached) as PortTriplet
+      } catch {}
+    }
 
+    const res = await fetch('/modularflow_config.py', { cache: 'no-store' })
+    if (!res.ok) return null
+    const text = await res.text()
+
+    // 解析简单的常量赋值（忽略注释与空白）
+    const getNum = (name: string): number | null => {
+      const re = new RegExp(String.raw`(^|\n)\s*${name}\s*=\s*([0-9]+)\s*(#.*)?$`, 'm')
+      const m = text.match(re)
+      if (!m) return null
+      const n = Number(m[2])
+      return Number.isFinite(n) ? n : null
+    }
+
+    const backend = getNum('BACKEND_PORT')
+    const frontend = getNum('FRONTEND_PORT')
+    const websocket = getNum('WEBSOCKET_PORT')
+
+    const payload: PortTriplet = { backend, frontend, websocket }
+    sessionStorage.setItem(cacheKey, JSON.stringify(payload))
+    return payload
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 根据 modularflow_config.py（若可用）配置 API baseURL
+ * - 优先使用 BACKEND_PORT，fallback 到默认 8050
+ * - host 采用当前 location.hostname，protocol 优先使用 http(s)
+ */
+function applyPorts(ports: PortTriplet | null): void {
+  const port = ports?.backend ?? 8050
+  let protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:'
+  if (!/^https?:/.test(protocol)) protocol = 'http:'
+  const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost'
+  cfg.baseURL = `${protocol}//${host}:${port}`
+  cfg.apiPrefix = DEFAULT_API_PREFIX
+}
+
+/**
+ * 初始化：尝试读取 modularflow_config.py 中端口；失败则使用默认
+ */
 export async function ensureApiClientReady(): Promise<void> {
   if (inited) return
   if (!initPromise) {
     initPromise = (async () => {
-      // external config removed; use defaults from core/config/api_config.py
+      const ports = await readPortsFromPythonConfig()
+      applyPorts(ports)
       inited = true
     })()
   }

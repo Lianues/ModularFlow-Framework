@@ -6,7 +6,7 @@ PromptEditor 简化配置脚本（常量式）
 """
 
 # 基本端口
-FRONTEND_PORT = 5173
+FRONTEND_PORT = 5178
 BACKEND_PORT = 8050
 WEBSOCKET_PORT = 8050
 
