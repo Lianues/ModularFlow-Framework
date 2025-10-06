@@ -71,8 +71,28 @@ import type { PromptItem, PromptItemRelative, PromptItemInChat, RegexRule } from
 import { SPECIAL_RELATIVE_TEMPLATES } from '@/features/presets/types'
 import PresetPromptCard from '@/features/presets/components/PresetPromptCard.vue'
 import RegexRuleCard from '@/features/regex/components/RegexRuleCard.vue'
+import { useFileManagerStore } from '@/features/files/fileManager'
 
 const store = usePresetStore()
+const fm = useFileManagerStore()
+
+const fileTitle = ref<string>('')
+const renameError = ref<string | null>(null)
+watch(
+  () => store.activeFile?.name,
+  (v) => { fileTitle.value = v ?? '' },
+  { immediate: true }
+)
+function renamePresetFile() {
+  renameError.value = null
+  const oldName = store.activeFile?.name || ''
+  const nn = (fileTitle.value || '').trim()
+  if (!nn) { renameError.value = '文件名不能为空'; return }
+  if (nn === oldName) return
+  const ok = (store as any).renameActive?.(nn)
+  if (!ok) { renameError.value = '重命名失败：可能与现有文件重名'; return }
+  try { fm.renameFile('presets', oldName, nn) } catch {}
+}
 
 watch(
   () => store.prompts.length,
@@ -395,13 +415,27 @@ function onRegexDragEnd() {
   <section class="space-y-6">
     <!-- 页面标题 -->
     <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <i data-lucide="settings-2" class="w-5 h-5 text-black"></i>
           <h2>预设编辑器</h2>
         </div>
-        <div class="text-xs text-black/60">本页为 UI 演示，保存与联通待后续</div>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="fileTitle"
+            placeholder="文件名.json"
+            class="w-56 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            @keyup.enter="renamePresetFile"
+            @blur="renamePresetFile"
+          />
+          <button
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="renamePresetFile"
+          >重命名</button>
+        </div>
       </div>
+      <p class="mt-2 text-xs text-black/60">本页为 UI 演示，保存与联通待后续</p>
+      <p v-if="renameError" class="text-xs text-red-600 mt-1">* {{ renameError }}</p>
     </div>
 
     <!-- API 配置（默认收起） -->

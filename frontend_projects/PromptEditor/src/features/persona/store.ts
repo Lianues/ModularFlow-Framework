@@ -88,6 +88,21 @@ export const usePersonaStore = defineStore('persona', {
       saveLocal(this)
     },
 
+    /** 清除用户信息页面缓存（内存 + LocalStorage） */
+    clearAll() {
+      this.fileName = null
+      this.doc = { name: '', description: '' }
+      try { localStorage.removeItem('prompt_editor_persona_active') } catch {}
+    },
+
+    /** 重命名当前用户信息文件名（仅本面板与导出名） */
+    renameFile(newName: string) {
+      const nn = String(newName || '').trim()
+      if (!nn) return
+      this.fileName = nn
+      saveLocal(this)
+    },
+
     exportPersona(): { filename: string; json: string } | null {
       const out = clone(this.doc || { name: '', description: '' })
       const filename = (this.fileName?.endsWith('.json') ? this.fileName : `${this.fileName ?? (out.name || 'Persona')}.json`) || 'Persona.json'

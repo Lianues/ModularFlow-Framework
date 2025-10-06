@@ -132,6 +132,28 @@ export const useFileManagerStore = defineStore('fileManager', {
         this.persist()
       }
     },
+
+    /**
+     * 重命名文件库内指定类型文件，并同步镜像到对应面板
+     */
+    renameFile(type: TypeKey, oldName: string, newName: string): boolean {
+      this.load()
+      const bucket = this.buckets[type]
+      if (!bucket) return false
+      const nn = String(newName || '').trim()
+      const on = String(oldName || '').trim()
+      if (!nn || !on) return false
+      const idx = bucket.files.findIndex(f => f.name === on)
+      if (idx < 0) return false
+      if (bucket.files.some((f, i) => i !== idx && f.name === nn)) return false
+      const rec = bucket.files[idx]
+      if (!rec) return false
+      rec.name = nn
+      if (bucket.activeName === on) bucket.activeName = nn
+      this.persist()
+      try { this._mirrorToPanels(type, nn) } catch {}
+      return true
+    },
     _mirrorToPanels(type: TypeKey, name: string) {
       try {
         const bucket = this.buckets[type]

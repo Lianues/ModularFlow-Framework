@@ -164,6 +164,22 @@ export const useHistoryStore = defineStore('history', {
       }
     },
 
+    /** 重命名当前激活文件 */
+    renameActive(newName: string): boolean {
+      const nn = String(newName || '').trim()
+      if (!nn) return false
+      if (!this.activeName) return false
+      const idx = this.files.findIndex(f => f.name === this.activeName)
+      if (idx < 0) return false
+      if (this.files.some((f, i) => i !== idx && f.name === nn)) return false
+      const rec = this.files[idx]
+      if (!rec) return false
+      rec.name = nn
+      this.activeName = nn
+      this.persist()
+      return true
+    },
+
     toggleEnable(name: string) {
       const f = this.files.find((x) => x.name === name)
       if (f) {

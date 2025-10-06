@@ -3,8 +3,10 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { usePresetStore } from '@/features/presets/store'
 import RegexRuleCard from '@/features/regex/components/RegexRuleCard.vue'
 import type { PresetData, PresetFile, PresetSetting, RegexRule } from '@/features/presets/types'
+import { useFileManagerStore } from '@/features/files/fileManager'
 
 const store = usePresetStore()
+const fm = useFileManagerStore()
 
 // 独立面板专用文件名（在 Store 中维护一份仅含 regex_rules 的文件）
 const PANEL_NAME = 'RegexPanel'
@@ -23,14 +25,18 @@ const DEFAULT_SETTING: PresetSetting = {
 
 function ensureRegexPanelActive() {
   if (!store.loaded) store.load()
-  const exists = store.files.find(f => f.name === PANEL_NAME)
-  if (!exists) {
-    const data: PresetData = { setting: DEFAULT_SETTING, regex_rules: [], prompts: [] }
-    const entry: PresetFile = { name: PANEL_NAME, enabled: true, data }
-    store.upsertFile(entry)
-  } else {
-    store.setActive(PANEL_NAME)
+  // 若已有激活文件，直接使用
+  if (store.activeFile && store.activeData) return
+  // 否则尝试选择一个包含 regex_rules 的文件
+  const anyWithRegex = store.files.find(f => Array.isArray((f as any)?.data?.regex_rules))
+  if (anyWithRegex) {
+    store.setActive(anyWithRegex.name)
+    return
   }
+  // 否则创建一个新的承载文件
+  const data: PresetData = { setting: DEFAULT_SETTING, regex_rules: [], prompts: [] }
+  const entry: PresetFile = { name: 'RegexRules', enabled: true, data }
+  store.upsertFile(entry)
 }
 
 onMounted(() => {
@@ -47,9 +53,27 @@ watch(
   { flush: 'post' }
 )
 
+const fileTitle = ref<string>('')
+const renameError = ref<string | null>(null)
+watch(
+  () => store.activeFile?.name,
+  (v) => { fileTitle.value = v ?? '' },
+  { immediate: true }
+)
+function renameRegexFile() {
+  renameError.value = null
+  const oldName = store.activeFile?.name || ''
+  const nn = (fileTitle.value || '').trim()
+  if (!nn) { renameError.value = '文件名不能为空'; return }
+  if (nn === oldName) return
+  const ok = (store as any).renameActive?.(nn)
+  if (!ok) { renameError.value = '重命名失败：可能与现有文件重名'; return }
+  try { fm.renameFile('regex', oldName, nn) } catch {}
+}
+
 // 右上角：新增规则
-const newId = ref<string>('') 
-const newName = ref<string>('') 
+const newId = ref<string>('')
+const newName = ref<string>('')
 const error = ref<string | null>(null)
 
 async function addRule() {
@@ -172,13 +196,27 @@ function onDragEnd() { dragging.value = null; dragOverId.value = null }
   <section class="space-y-6">
     <!-- 标题 -->
     <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <i data-lucide="code" class="w-5 h-5 text-black"></i>
           <h2>正则规则（独立面板）</h2>
         </div>
-        <div class="text-xs text-black/60">导入/导出参考：backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json</div>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="fileTitle"
+            placeholder="文件名.json"
+            class="w-56 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            @keyup.enter="renameRegexFile"
+            @blur="renameRegexFile"
+          />
+          <button
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="renameRegexFile"
+          >重命名</button>
+        </div>
       </div>
+      <p class="mt-2 text-xs text-black/60">导入/导出参考：backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json</p>
+      <p v-if="renameError" class="text-xs text-red-600 mt-1">* {{ renameError }}</p>
     </div>
 
     <!-- 工具栏：导入/导出 + 新增 -->

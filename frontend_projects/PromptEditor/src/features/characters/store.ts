@@ -303,6 +303,21 @@ export const useCharacterStore = defineStore('character', {
       this.doc.regex_rules.splice(0, items.length, ...(next as any))
       saveLocal(this)
     },
+    /** 清除角色卡页面缓存（内存 + LocalStorage） */
+    clearAll() {
+      this.fileName = null
+      this.doc = null
+      try { localStorage.removeItem('prompt_editor_character_active') } catch {}
+    },
+
+    /** 重命名当前角色卡文件名（仅本面板与导出名） */
+    renameFile(newName: string) {
+      const nn = String(newName || '').trim()
+      if (!nn) return
+      this.fileName = nn
+      saveLocal(this)
+    },
+
     exportCharacter(): { filename: string; json: string } | null {
       if (!this.doc) return null
       const out = clone(this.doc)

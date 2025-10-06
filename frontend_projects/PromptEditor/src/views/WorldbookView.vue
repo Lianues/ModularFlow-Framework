@@ -3,8 +3,28 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { usePresetStore } from '@/features/presets/store'
 import type { WorldBookEntry } from '@/features/presets/types'
 import WorldBookCard from '@/features/worldbook/components/WorldBookCard.vue'
+import { useFileManagerStore } from '@/features/files/fileManager'
 
 const store = usePresetStore()
+const fm = useFileManagerStore()
+
+const fileTitle = ref<string>('')
+const renameError = ref<string | null>(null)
+watch(
+  () => store.activeFile?.name,
+  (v) => { fileTitle.value = v ?? '' },
+  { immediate: true }
+)
+function renameWorldbookFile() {
+  renameError.value = null
+  const oldName = store.activeFile?.name || ''
+  const nn = (fileTitle.value || '').trim()
+  if (!nn) { renameError.value = '文件名不能为空'; return }
+  if (nn === oldName) return
+  const ok = (store as any).renameActive?.(nn)
+  if (!ok) { renameError.value = '重命名失败：可能与现有文件重名'; return }
+  try { fm.renameFile('worldbook', oldName, nn) } catch {}
+}
 
 /* 世界书面板：导入/导出复用顶部按钮；使用当前活动文件的 world_books */
 
@@ -116,13 +136,27 @@ function onDragEnd() { dragging.value = null; dragOverId.value = null }
   <section class="space-y-6">
     <!-- 标题 -->
     <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <i data-lucide="book-open" class="w-5 h-5 text-black"></i>
           <h2>世界书（独立面板）</h2>
         </div>
-        <div class="text-xs text-black/60">使用右上角 导入/导出 · 参考：backend_projects/SmartTraven/data/world_books/参考用main_world.json</div>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="fileTitle"
+            placeholder="文件名.json"
+            class="w-56 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            @keyup.enter="renameWorldbookFile"
+            @blur="renameWorldbookFile"
+          />
+          <button
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="renameWorldbookFile"
+          >重命名</button>
+        </div>
       </div>
+      <p class="mt-2 text-xs text-black/60">使用右上角 导入/导出 · 参考：backend_projects/SmartTraven/data/world_books/参考用main_world.json</p>
+      <p v-if="renameError" class="text-xs text-red-600 mt-1">* {{ renameError }}</p>
     </div>
 
     <!-- 工具栏：仅新增（导入/导出请使用右上角按钮） -->

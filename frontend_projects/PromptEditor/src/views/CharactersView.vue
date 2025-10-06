@@ -4,8 +4,27 @@ import { useCharacterStore } from '@/features/characters/store'
 import CharWorldBookCard from '@/features/characters/components/CharWorldBookCard.vue'
 import CharRegexRuleCard from '@/features/characters/components/CharRegexRuleCard.vue'
 import type { WorldBookEntry, RegexRule } from '@/features/presets/types'
+import { useFileManagerStore } from '@/features/files/fileManager'
 
 const store = useCharacterStore()
+const fm = useFileManagerStore()
+
+const fileTitle = ref<string>('Character.json')
+const renameError = ref<string | null>(null)
+watch(
+  () => store.fileName,
+  (v) => { fileTitle.value = v || 'Character.json' },
+  { immediate: true }
+)
+function renameCharacterFile() {
+  renameError.value = null
+  const oldName = store.fileName || 'Character.json'
+  const nn = (fileTitle.value || '').trim()
+  if (!nn) { renameError.value = '文件名不能为空'; return }
+  if (nn === oldName) return
+  ;(store as any).renameFile?.(nn)
+  try { fm.renameFile('characters', oldName, nn) } catch {}
+}
 
 onMounted(() => {
   store.load()
@@ -247,13 +266,23 @@ function addRegexRule() {
   <section class="space-y-6">
     <!-- 顶部卡片：角色卡编辑入口 -->
     <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
-          <i data-lucide="user" class="w-6 h-6 text-black"></i>
+          <i data-lucide="user" class="w-5 h-5 text-black"></i>
           <h2>角色卡（单文件导入/导出）</h2>
         </div>
-        <div class="text-xs text-black/60">
-          当前文件：<span class="font-mono">{{ fileName }}</span>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="fileTitle"
+            placeholder="文件名.json"
+            class="w-56 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            @keyup.enter="renameCharacterFile"
+            @blur="renameCharacterFile"
+          />
+          <button
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="renameCharacterFile"
+          >重命名</button>
         </div>
       </div>
       <p class="mt-2 text-xs text-black/60">

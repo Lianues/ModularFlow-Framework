@@ -48,34 +48,11 @@ const props = defineProps<{
   title?: string
 }>()
 
-// Demo（若未传入，则使用示例数据）
-// 对应 backend_projects/SmartTraven/data/conversations/branch_demo.json
-const demoDoc = computed<BranchDoc>(() => ({
-  schema: { name: 'chat-branches', version: 2 },
-  meta: { id: 'c_demo_branch', title: '示例：分支重试对话（V2）' },
-  root: 'n_root',
-  nodes: {
-    n_root: { pid: null, role: 'system', content: '对话上下文：这是一个分支重试示例。' },
-    n_user1: { pid: 'n_root', role: 'user', content: '你好，请介绍一下分支机制。' },
-    n_ass1: { pid: 'n_user1', role: 'assistant', content: '分支机制允许你在任意楼层（通过修剪）切换分支并生成新的对话会话。' },
-    n_ass2: { pid: 'n_user1', role: 'assistant', content: '另一种解释：你可以回到某层，向左/向右切换已存在或新建分支，旧会话归档，新会话继续。' },
-    n_user2: { pid: 'n_ass1', role: 'user', content: '那怎么导出当前分支为 OpenAI messages 呢？' },
-    n_ass3: { pid: 'n_user2', role: 'assistant', content: '可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。' },
-  },
-  children: {
-    n_root: ['n_user1'],
-    n_user1: ['n_ass1', 'n_ass2'],
-    n_ass1: ['n_user2'],
-    n_user2: ['n_ass3'],
-  },
-  active_path: ['n_root', 'n_user1', 'n_ass1', 'n_user2', 'n_ass3'],
-}))
-
 // 使用 Store 活动文档或 props，回退 demo；并在非 chat-branches 时生成线性树
 const history = useHistoryStore()
 history.load()
 
-const sourceAny = computed<any>(() => (history.activeData ?? (props.branchDoc ?? demoDoc.value)))
+const sourceAny = computed<any>(() => history.activeData)
 
 const messages = computed<{ role: MsgRole; content: string }[]>(() => deriveMessagesFromHistory(sourceAny.value))
 
@@ -313,6 +290,22 @@ onMounted(() => {
   ;(window as any).lucide?.createIcons?.()
 })
 
+import { useFileManagerStore } from '@/features/files/fileManager'
+const fm = useFileManagerStore()
+const hasDoc = computed(() => !!history.activeData)
+
+const fileTitle = ref<string>('')
+watch(() => history.activeName, (v) => { fileTitle.value = v ?? '' }, { immediate: true })
+function renameHistoryFile() {
+  const oldName = history.activeName || ''
+  const nn = (fileTitle.value || '').trim()
+  if (!nn || !oldName || nn === oldName) return
+  const ok = (history as any).renameActive?.(nn)
+  if (ok) {
+    try { fm.renameFile('history', oldName, nn) } catch {}
+  }
+}
+
 // TS 插件模板可见性兼容
 void handleFormat
 void handleSave
@@ -335,15 +328,18 @@ void handleExportBranches
           <i data-lucide="git-branch" class="w-6 h-6 text-black"></i>
           <h2>{{ metaTitle }}</h2>
         </div>
-        <div class="flex items-center gap-2 text-xs text-black/60">
-          <span class="px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">nodes: {{ Object.keys(doc.nodes).length }}</span>
-          <span class="px-2 py-0.5 rounded-4 border border-gray-900 text-black bg-transparent">path: {{ activePath.length }}</span>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="fileTitle"
+            placeholder="文件名.json"
+            class="w-56 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            @keyup.enter="renameHistoryFile"
+            @blur="renameHistoryFile"
+          />
           <button
-            class="ml-2 px-2 h-8 rounded-4 border border-gray-900 text-black bg-white hover:bg-gray-100 transition"
-            @click="handleExportBranches"
-          >
-            导出 chat-branches
-          </button>
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="renameHistoryFile"
+          >重命名</button>
         </div>
       </div>
 
@@ -400,8 +396,13 @@ void handleExportBranches
       </div>
     </div>
 
+    <!-- 空状态提示 -->
+    <div v-if="!hasDoc" class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="text-sm text-black/70">当前无对话 JSON，请使用右上角“新建”或“导入”。</div>
+    </div>
+
     <!-- 本地分支编辑工具栏（前端缓存 json） -->
-    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+    <div v-if="hasDoc" class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
       <div class="flex items-center gap-3 mb-3">
         <i data-lucide="hammer" class="w-4 h-4 text-black"></i>
         <span class="text-sm font-medium text-black">本地分支编辑（前端缓存 json）</span>
@@ -452,7 +453,7 @@ void handleExportBranches
     </div>
 
     <!-- 树视图 -->
-    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+    <div v-if="hasDoc" class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
           <i data-lucide="tree-deciduous" class="w-4 h-4 text-black"></i>
@@ -562,7 +563,7 @@ void handleExportBranches
     </div>
 
     <!-- OpenAI messages 预览 -->
-    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+    <div v-if="hasDoc" class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
       <div class="flex items-center gap-2 mb-2">
         <i data-lucide="messages-square" class="w-4 h-4 text-black"></i>
         <span class="text-sm font-medium text-black">OpenAI 消息视图（按活动路径）</span>

@@ -52,6 +52,124 @@ watch(() => characterStore.doc, () => previewRuntime.schedule(), { deep: true })
 watch(() => personaStore.doc, () => previewRuntime.schedule(), { deep: true })
 watch(() => historyStore.activeData, () => previewRuntime.schedule(), { deep: true })
 
+/* 右上角“新建”对话框与逻辑 */
+const showNewDialog = ref(false)
+const newName = ref<string>('')
+const newError = ref<string | null>(null)
+
+function suggestNewNameForTab(tab: TabKey): string {
+  const now = new Date()
+  const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`
+  switch (tab) {
+    case 'presets': return `Preset_${stamp}.json`
+    case 'worldbook': return `WorldBook_${stamp}.json`
+    case 'regex': return `RegexRules_${stamp}.json`
+    case 'characters': return `Character_${stamp}.json`
+    case 'user': return `Persona_${stamp}.json`
+    case 'history': return `History_${stamp}.json`
+    default: return `New_${stamp}.json`
+  }
+}
+function normalizeJsonName(name: string): string {
+  const base = String(name || '').trim()
+  if (!base) return ''
+  return base.toLowerCase().endsWith('.json') ? base : `${base}.json`
+}
+function openNewDialog() {
+  const mainTab = currentTab.value
+  const currentType = (fileManager as any)?.getCurrentType || 'presets'
+  const targetTab = (mainTab === 'files' ? currentType : mainTab) as TabKey
+  newName.value = suggestNewNameForTab(targetTab)
+  newError.value = null
+  showNewDialog.value = true
+}
+function cancelNew() {
+  showNewDialog.value = false
+}
+function buildBaseDoc(tab: TabKey): any {
+  if (tab === 'presets' || tab === 'worldbook' || tab === 'regex') {
+    // 最小 PresetData 承载
+    return {
+      setting: {
+        temperature: 1, frequency_penalty: 0, presence_penalty: 0,
+        top_p: 1, top_k: 0, max_context: 4095, max_tokens: 300, stream: true
+      },
+      regex_rules: [],
+      prompts: [],
+      world_books: [],
+    }
+  }
+  if (tab === 'characters') {
+    return {
+      name: '', description: '',
+      message: [],
+      world_book: { name: '', entries: [] },
+      regex_rules: [],
+    }
+  }
+  if (tab === 'user') {
+    return { name: '', description: '' }
+  }
+  if (tab === 'history') {
+    return {
+      schema: { name: 'chat-branches', version: 2 },
+      meta: { id: `c_${Date.now().toString(36)}`, title: '' },
+      root: 'n_root',
+      nodes: { n_root: { pid: null, role: 'system', content: '' } },
+      children: { n_root: [] },
+      active_path: ['n_root'],
+    }
+  }
+  return {}
+}
+async function confirmNew() {
+  const mainTab = currentTab.value
+  const currentType = (fileManager as any)?.getCurrentType || 'presets'
+  const targetTab = (mainTab === 'files' ? currentType : mainTab) as TabKey
+
+  const raw = normalizeJsonName(newName.value)
+  if (!raw) {
+    newError.value = '请输入文件名'
+    return
+  }
+  newError.value = null
+
+  const doc = buildBaseDoc(targetTab)
+
+  try {
+    if (targetTab === 'presets') {
+      const entry: any = { name: raw, enabled: true, data: doc }
+      presetStore.upsertFile(entry)
+      fileManager.upsertFile('presets', raw, doc)
+    } else if (targetTab === 'worldbook') {
+      const entry: any = { name: raw, enabled: true, data: doc }
+      presetStore.upsertFile(entry)
+      // world_books 面板直接使用 activeData.world_books
+      presetStore.setWorldBooks([])
+      ;(presetStore as any).renameActive?.(raw)
+      fileManager.upsertFile('worldbook', raw, { name: raw.replace(/\.json$/,''), entries: [] })
+    } else if (targetTab === 'regex') {
+      const entry: any = { name: raw, enabled: true, data: doc }
+      presetStore.upsertFile(entry)
+      presetStore.setRegexRules([])
+      ;(presetStore as any).renameActive?.(raw)
+      fileManager.upsertFile('regex', raw, [])
+    } else if (targetTab === 'characters') {
+      ;(characterStore as any).setCharacter(doc, raw)
+      fileManager.upsertFile('characters', raw, doc)
+    } else if (targetTab === 'user') {
+      ;(personaStore as any).setPersona(doc, raw)
+      fileManager.upsertFile('user', raw, doc)
+    } else if (targetTab === 'history') {
+      historyStore.setDoc(doc, raw)
+      fileManager.upsertFile('history', raw, doc)
+    }
+  } finally {
+    showNewDialog.value = false
+    nextTick(() => (window as any).lucide?.createIcons?.())
+  }
+}
+
 /* 顶部右侧：导入（选择 JSON），导出（下载当前）
    - 预设页：仍按 PresetData 导入/导出
    - 世界书页：仅支持 {entries:[...]} 或 {world_book:{entries:[...]}} 导入/导出 */
@@ -135,6 +253,7 @@ function handleImport() {
           } as any)
         }
         presetStore.setRegexRules(rules as any)
+        try { (presetStore as any).renameActive?.(file.name) } catch {}
       } catch {}
       try { fileManager.upsertFile('regex', file.name, json) } catch {}
       return
@@ -161,6 +280,7 @@ function handleImport() {
         return
       }
       try { presetStore.setWorldBooks(flat as any) } catch {}
+      try { (presetStore as any).renameActive?.(file.name) } catch {}
       try { fileManager.upsertFile('worldbook', file.name, json) } catch {}
       return
     }
@@ -245,10 +365,89 @@ function handleExport() {
     URL.revokeObjectURL(url)
   }
 }
+
+/* 顶部右侧：重置当前页面缓存 JSON
+   - 非“文件库”页：仅重置该页对应的本地缓存
+   - “文件库”页：清除“当前类型”页签里的所有 JSON，并同步清除对应页面缓存 */
+function handleReset() {
+  const tab = currentTab.value
+  try {
+    if (tab === 'files') {
+      // 仅清空“文件库”当前类型
+      const currentType = (fileManager as any)?.getCurrentType || 'presets'
+      fileManager.clearType(currentType)
+
+      // 同步清除对应页面缓存
+      switch (currentType) {
+        case 'presets': {
+          presetStore.clearAll()
+          break
+        }
+        case 'worldbook': {
+          if (presetStore.activeData) {
+            ;(presetStore.activeData as any).world_books = []
+            ;(presetStore as any).persist?.()
+          } else {
+            presetStore.setWorldBooks([] as any)
+          }
+          break
+        }
+        case 'regex': {
+          if (presetStore.activeData) {
+            ;(presetStore.activeData as any).regex_rules = []
+            ;(presetStore as any).persist?.()
+          } else {
+            presetStore.setRegexRules([] as any)
+          }
+          break
+        }
+        case 'characters': {
+          characterStore.clearAll?.()
+          break
+        }
+        case 'user': {
+          personaStore.clearAll?.()
+          break
+        }
+        case 'history': {
+          historyStore.clearAll?.()
+          break
+        }
+      }
+    } else if (tab === 'presets') {
+      presetStore.clearAll()
+    } else if (tab === 'worldbook') {
+      if (presetStore.activeData) {
+        ;(presetStore.activeData as any).world_books = []
+        ;(presetStore as any).persist?.()
+      } else {
+        // 若无活动文件，确保创建最小承载后置空
+        presetStore.setWorldBooks([] as any)
+      }
+    } else if (tab === 'regex') {
+      if (presetStore.activeData) {
+        ;(presetStore.activeData as any).regex_rules = []
+        ;(presetStore as any).persist?.()
+      } else {
+        // 若无活动文件，确保创建最小承载后置空
+        presetStore.setRegexRules([] as any)
+      }
+    } else if (tab === 'characters') {
+      characterStore.clearAll?.()
+    } else if (tab === 'user') {
+      personaStore.clearAll?.()
+    } else if (tab === 'history') {
+      historyStore.clearAll?.()
+    }
+  } finally {
+    // 右侧预览：根据最新数据重新生成
+    previewRuntime.schedule()
+  }
+}
 </script>
 
 <template>
-  <AppShell @import-files="handleImport" @export-file="handleExport">
+  <AppShell @new="openNewDialog" @import-files="handleImport" @export-file="handleExport" @reset="handleReset">
     <!-- 左侧栏插槽：侧边导航 -->
     <template #left>
       <Sidebar v-model="currentTab" />
@@ -297,6 +496,37 @@ function handleExport() {
       <GlobalPromptPreview />
     </template>
   </AppShell>
+
+  <!-- 新建文件对话框 -->
+  <div v-if="showNewDialog" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/30">
+    <div class="bg-white rounded-4 border border-gray-200 w-[90%] max-w-md p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="file-plus-2" class="w-5 h-5 text-black"></i>
+        <h3 class="text-base font-semibold text-black">新建文件</h3>
+      </div>
+      <input
+        v-model="newName"
+        type="text"
+        placeholder="请输入文件名（例如：Preset.json）"
+        class="w-full px-3 py-2 border border-gray-300 rounded-4 focus:outline-none focus:ring-2 focus:ring-gray-800"
+      />
+      <p v-if="newError" class="text-xs text-red-600 mt-2">* {{ newError }}</p>
+      <div class="mt-4 flex justify-end gap-2">
+        <button
+          class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+          @click="cancelNew"
+        >
+          取消
+        </button>
+        <button
+          class="px-3 py-1 rounded-4 bg-black text-white hover:opacity-90 transition-all duration-200 ease-soft"
+          @click="confirmNew"
+        >
+          确认
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>

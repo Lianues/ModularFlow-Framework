@@ -237,6 +237,24 @@ export const usePresetStore = defineStore('preset', {
       }
     },
 
+    /**
+     * 重命名当前激活的预设文件
+     * - newName 需唯一且非空
+     * - 返回是否成功
+     */
+    renameActive(newName: string): boolean {
+      const nn = String(newName || '').trim()
+      if (!nn) return false
+      const file = this.activeFile
+      if (!file) return false
+      if (file.name === nn) return true
+      if (this.files.some(f => f.name === nn)) return false
+      file.name = nn
+      this.activeName = nn
+      this.persist()
+      return true
+    },
+
     toggleEnable(name: string) {
       const f = this.files.find(x => x.name === name)
       if (f) {
@@ -424,7 +442,8 @@ export const usePresetStore = defineStore('preset', {
     exportRegexRules(): { filename: string; json: string } | null {
       const data = this.activeData
       if (!data) return null
-      const filename = 'regex_rules.json'
+      const base = (this.activeFile?.name || 'RegexRules')
+      const filename = base.endsWith('.json') ? base : `${base}.json`
       const json = JSON.stringify(data.regex_rules ?? [], null, 2)
       return { filename, json }
     },
@@ -563,15 +582,17 @@ export const usePresetStore = defineStore('preset', {
     exportWorldBooks(): { filename: string; json: string } | null {
       const data = this.activeData
       if (!data) return null
-      const name = (this.activeFile?.name || 'WorldBook').replace(/\.json$/,'')
+      const baseName = (this.activeFile?.name || 'WorldBook')
+      const filename = baseName.endsWith('.json') ? baseName : `${baseName}.json`
+      const payloadName = baseName.replace(/\.json$/, '')
       const entries = (((data as any).world_books ?? []) as any[]).map(w => {
         const obj: any = { ...(w as any) }
         obj.id = String(obj.id ?? '')
         return obj
       })
-      const payload = { name, entries }
+      const payload = { name: payloadName, entries }
       const json = JSON.stringify(payload, null, 2)
-      return { filename: 'world_book.json', json }
+      return { filename, json }
     },
 
     /**
