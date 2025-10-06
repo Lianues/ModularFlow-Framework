@@ -45,7 +45,6 @@ const nameDraft = ref<string>('')
 const descDraft = ref<string>('')
 
 const hasDoc = computed(() => store.hasDoc)
-const fileName = computed(() => store.fileName || 'Character.json')
 
 watch(
   () => store.name,

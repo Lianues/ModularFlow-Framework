@@ -8,8 +8,6 @@ import { useFileManagerStore } from '@/features/files/fileManager'
 const store = usePresetStore()
 const fm = useFileManagerStore()
 
-// 独立面板专用文件名（在 Store 中维护一份仅含 regex_rules 的文件）
-const PANEL_NAME = 'RegexPanel'
 
 // 默认 Setting（用于占位，便于 Store 通过统一的 PresetData 管理）
 const DEFAULT_SETTING: PresetSetting = {
