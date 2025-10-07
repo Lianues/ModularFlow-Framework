@@ -149,9 +149,31 @@ function onThemeUpdate(t) {
 
         <!-- 全局沙盒独立视图 -->
         <section v-else data-scope="chat-sandbox" class="st-sandbox">
-          <div class="st-sandbox-card card">
-            <h2 class="st-title">全局沙盒（占位）</h2>
-            <p>此页面暂不渲染 iframe，仅为占位示意。</p>
+          <div class="st-sandbox-stage">
+            <div class="st-sandbox-content">
+              <div class="st-sandbox-header">
+                <h2 class="st-sandbox-title">🎬 沙盒舞台预览</h2>
+                <p class="st-sandbox-desc">可在侧栏"外观 → 全屏沙盒设定"中调节舞台尺寸、比例与样式</p>
+              </div>
+              <div class="st-sandbox-body">
+                <div class="st-sandbox-demo-box">
+                  <div class="st-demo-icon">🎯</div>
+                  <div class="st-demo-text">拖拽"舞台最大宽度"滑条<br/>可看到此区域横向缩放</div>
+                </div>
+                <div class="st-sandbox-demo-box">
+                  <div class="st-demo-icon">📐</div>
+                  <div class="st-demo-text">调节"画面宽高比"<br/>可改变舞台的长宽比例</div>
+                </div>
+                <div class="st-sandbox-demo-box">
+                  <div class="st-demo-icon">📏</div>
+                  <div class="st-demo-text">调节"舞台内边距"<br/>可改变内容与边界的距离</div>
+                </div>
+                <div class="st-sandbox-demo-box">
+                  <div class="st-demo-icon">✨</div>
+                  <div class="st-demo-text">调节"舞台圆角"<br/>可看到四角的圆润程度</div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -204,6 +226,12 @@ function onThemeUpdate(t) {
   --st-avatar-size: 56px; /* 角色头像大小 */
   --st-chat-width: 80%; /* 百分比宽度 */
   --st-input-height: 100px; /* 输入框高度 */
+
+  /* Sandbox layout controls */
+  --st-sandbox-max-width: 1100px;  /* 舞台最大宽度 */
+  --st-sandbox-aspect: 16 / 9;     /* 舞台宽高比（CSS aspect-ratio） */
+  --st-sandbox-padding: 16px;      /* 舞台内边距 */
+  --st-sandbox-radius: 18px;       /* 舞台圆角 */
 }
 
 /* 暗色主题 */
@@ -296,7 +324,10 @@ body.st-live-tuning[data-active-slider="badgeFontSize"] [data-scope="settings-vi
 body.st-live-tuning[data-active-slider="floorFontSize"] [data-scope="settings-view"] .st-control[data-slider="floorFontSize"],
 body.st-live-tuning[data-active-slider="avatarSize"] [data-scope="settings-view"] .st-control[data-slider="avatarSize"],
 body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"],
-body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] {
+body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"],
+body.st-live-tuning[data-active-slider="sandboxMaxWidth"] [data-scope="settings-view"] .st-control[data-slider="sandboxMaxWidth"],
+body.st-live-tuning[data-active-slider="sandboxPadding"] [data-scope="settings-view"] .st-control[data-slider="sandboxPadding"],
+body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-view"] .st-control[data-slider="sandboxRadius"] {
   visibility: visible !important;
 }
 </style>
@@ -462,8 +493,6 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   display: flex;
   flex-direction: column;
   gap: 14px;
-  /* Sandbox 可以使用更宽的约束，避免与对话宽度共用 */
-  max-width: 1100px;
   margin: 0 auto;
   width: 100%;
   height: 100%;
@@ -483,11 +512,93 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   z-index: -1;
   pointer-events: none;
 }
+
+/* Sandbox stage: 控制舞台尺寸与比例 */
+.st-sandbox-stage {
+  position: relative;
+  width: 100%;
+  max-width: var(--st-sandbox-max-width);
+  margin: 0 auto;
+  aspect-ratio: var(--st-sandbox-aspect);
+  padding: var(--st-sandbox-padding);
+  border-radius: var(--st-sandbox-radius);
+  /* 舞台可见边界：淡色边框 + 半透明背景 */
+  border: 2px solid rgba(var(--st-primary), 0.25);
+  background: rgba(var(--st-surface), 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+/* Sandbox content layout */
+.st-sandbox-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 1;
+}
+
+.st-sandbox-header {
+  text-align: center;
+  padding: 12px;
+}
+
+.st-sandbox-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: rgb(var(--st-color-text));
+}
+
+.st-sandbox-desc {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(var(--st-color-text), 0.7);
+}
+
+.st-sandbox-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.st-sandbox-demo-box {
+  background: rgba(var(--st-surface), 0.6);
+  border: 1px solid rgba(var(--st-border), 0.6);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.st-sandbox-demo-box:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--st-shadow-sm);
+}
+
+.st-demo-icon {
+  font-size: 28px;
+}
+
+.st-demo-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(var(--st-color-text), 0.8);
+}
+
 /* ModeSwitch styles moved into src/components/common/ModeSwitch.vue */
 /* Threaded chat preview styles moved into src/components/chat/ThreadedChatPreview.vue */
-
-/* Sandbox placeholder */
-.st-sandbox-card { padding: 18px; color: rgba(var(--st-color-text), 0.85); }
 
 /* 子页面展开/收起动画（AppearancePanel 组件在 App 层的过渡） */
 .st-subpage-enter-from { opacity: 0; transform: translateX(-10px) scale(0.98); filter: blur(4px); }

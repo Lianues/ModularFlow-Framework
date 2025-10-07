@@ -38,6 +38,22 @@ const inputHeight = ref(100) // 输入框高度，默认100px
 const tuning = ref(false)
 const activeTuningSlider = ref(null)
 
+/* --- Sandbox layout controls --- */
+const sandboxMaxWidth = ref(1100)      // 舞台最大宽度(px)
+const sandboxMaxWidthLimit = ref(1920) // 舞台最大宽度上限(px)
+const sandboxPadding = ref(16)         // 舞台内边距(px)
+const sandboxRadius = ref(18)          // 舞台圆角(px)
+const sandboxAspectX = ref(16)         // 宽高比：分子
+const sandboxAspectY = ref(9)          // 宽高比：分母
+
+/* 预设比例选项 */
+const aspectPresets = [
+  { label: '16:9', v: [16, 9] },
+  { label: '4:3', v: [4, 3] },
+  { label: '21:9', v: [21, 9] },
+  { label: '1:1', v: [1, 1] },
+]
+
 function readCssVar(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name)?.trim()
   if (!v) return fallback
@@ -48,6 +64,17 @@ function setRootVar(name, value) {
   // 对于宽度使用百分比，其他使用px
   const suffix = name === '--st-chat-width' ? '%' : 'px'
   document.documentElement.style.setProperty(name, typeof value === 'number' ? value + suffix : String(value))
+}
+// 单位为“无”的变量（如透明度等）
+function setRootVarUnitless(name, value) {
+  document.documentElement.style.setProperty(name, String(value))
+}
+// 读取浮点数（允许含 px/% 等，自动 parseFloat）
+function readCssVarFloat(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name)?.trim()
+  if (!v) return fallback
+  const n = parseFloat(v)
+  return Number.isFinite(n) ? n : fallback
 }
 
 /* 背景图片覆盖（使用 CSS 变量，持久化到 localStorage） */
@@ -195,6 +222,76 @@ function onInputHeightNumberInput(e) {
     setRootVar('--st-input-height', inputHeight.value)
   }
 }
+
+/* --- Sandbox handlers --- */
+function onSandboxAspectPreset(e) {
+  const raw = e.target.value
+  if (!raw) return
+  const [ax, ay] = raw.split(',').map(Number)
+  if (ax > 0 && ay > 0) {
+    sandboxAspectX.value = ax
+    sandboxAspectY.value = ay
+    setRootVar('--st-sandbox-aspect', `${ax} / ${ay}`)
+  }
+}
+function onSandboxAspectNumInputX(e) {
+  const v = Number(e.target.value)
+  if (v > 0) {
+    sandboxAspectX.value = v
+    setRootVar('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
+  }
+}
+function onSandboxAspectNumInputY(e) {
+  const v = Number(e.target.value)
+  if (v > 0) {
+    sandboxAspectY.value = v
+    setRootVar('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
+  }
+}
+function onSandboxMaxWidthNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 640 && v <= sandboxMaxWidthLimit.value) {
+    sandboxMaxWidth.value = v
+    setRootVar('--st-sandbox-max-width', sandboxMaxWidth.value)
+  }
+}
+function onSandboxMaxWidthRangeInput(e) {
+  sandboxMaxWidth.value = Number(e.target.value)
+  setRootVar('--st-sandbox-max-width', sandboxMaxWidth.value)
+}
+function onSandboxMaxWidthLimitInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 640 && v <= 3840) {
+    sandboxMaxWidthLimit.value = v
+    // 如果当前宽度超过新上限，调整为新上限
+    if (sandboxMaxWidth.value > v) {
+      sandboxMaxWidth.value = v
+      setRootVar('--st-sandbox-max-width', sandboxMaxWidth.value)
+    }
+  }
+}
+function onSandboxPaddingNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 48) {
+    sandboxPadding.value = v
+    setRootVar('--st-sandbox-padding', sandboxPadding.value)
+  }
+}
+function onSandboxPaddingRangeInput(e) {
+  sandboxPadding.value = Number(e.target.value)
+  setRootVar('--st-sandbox-padding', sandboxPadding.value)
+}
+function onSandboxRadiusNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 32) {
+    sandboxRadius.value = v
+    setRootVar('--st-sandbox-radius', sandboxRadius.value)
+  }
+}
+function onSandboxRadiusRangeInput(e) {
+  sandboxRadius.value = Number(e.target.value)
+  setRootVar('--st-sandbox-radius', sandboxRadius.value)
+}
 onMounted(() => {
   contentFontSize.value = readCssVar('--st-content-font-size', 18)
   nameFontSize.value = readCssVar('--st-name-font-size', 16)
@@ -223,6 +320,24 @@ onMounted(() => {
     if (t) applyBg('threaded', t)
     if (z) applyBg('sandbox', z)
   } catch (_) {}
+
+  // 初始化沙盒布局变量（从 CSS 变量读取）
+  const rs = getComputedStyle(document.documentElement)
+  // 比例
+  const aspRaw = rs.getPropertyValue('--st-sandbox-aspect')?.trim()
+  if (aspRaw && aspRaw.includes('/')) {
+    const parts = aspRaw.split('/')
+    const ax = parseFloat(parts[0])
+    const ay = parseFloat(parts[1])
+    if (Number.isFinite(ax) && Number.isFinite(ay) && ax > 0 && ay > 0) {
+      sandboxAspectX.value = Math.round(ax)
+      sandboxAspectY.value = Math.round(ay)
+    }
+  }
+  // 其他参数
+  sandboxMaxWidth.value = readCssVarFloat('--st-sandbox-max-width', 1100)
+  sandboxPadding.value = readCssVarFloat('--st-sandbox-padding', 16)
+  sandboxRadius.value = readCssVarFloat('--st-sandbox-radius', 18)
 })
 onBeforeUnmount(() => {
   document.body.classList.remove('st-live-tuning')
@@ -497,7 +612,73 @@ onBeforeUnmount(() => {
 
         <div v-else class="st-tab-panel">
           <h3>全屏沙盒外观</h3>
-          <p class="muted">此为占位页面，用于配置"全屏沙盒"的安全与渲染选项。</p>
+          <p class="muted">配置沙盒舞台的尺寸与长宽比，便于后续嵌入画面/预览对齐。</p>
+
+          <!-- 画面宽高比 -->
+          <div class="st-control" data-slider="sandboxAspect">
+            <label class="st-control-label">
+              <span class="label-text">画面宽高比</span>
+              <div class="value-group">
+                <select class="st-number-input" @change="onSandboxAspectPreset">
+                  <option disabled selected value="">预设</option>
+                  <option v-for="p in aspectPresets" :key="p.label" :value="p.v.join(',')">{{ p.label }}</option>
+                </select>
+                <span class="unit">或 自定义</span>
+              </div>
+            </label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="number" class="st-number-input" :value="sandboxAspectX" min="1" max="100" @input="onSandboxAspectNumInputX" />
+              <span>:</span>
+              <input type="number" class="st-number-input" :value="sandboxAspectY" min="1" max="100" @input="onSandboxAspectNumInputY" />
+            </div>
+          </div>
+
+          <!-- 舞台最大宽度 -->
+          <div class="st-control" data-slider="sandboxMaxWidth">
+            <label class="st-control-label">
+              <span class="label-text">舞台最大宽度</span>
+              <div class="value-group">
+                <input type="number" class="st-number-input" :value="sandboxMaxWidth" min="640" :max="sandboxMaxWidthLimit" @input="onSandboxMaxWidthNumberInput" />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input type="range" min="640" :max="sandboxMaxWidthLimit" step="10" :value="sandboxMaxWidth" @pointerdown="onTuningStart('sandboxMaxWidth')" @input="onSandboxMaxWidthRangeInput" />
+            <div class="st-control-hint">
+              <label class="st-control-label">
+                <span class="label-text" style="font-size: 11px; opacity: 0.8;">滑条最大值</span>
+                <div class="value-group">
+                  <input type="number" class="st-number-input" :value="sandboxMaxWidthLimit" min="640" max="3840" @input="onSandboxMaxWidthLimitInput" style="width: 60px;" />
+                  <span class="unit">px</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 内边距 -->
+          <div class="st-control" data-slider="sandboxPadding">
+            <label class="st-control-label">
+              <span class="label-text">舞台内边距</span>
+              <div class="value-group">
+                <input type="number" class="st-number-input" :value="sandboxPadding" min="0" max="48" @input="onSandboxPaddingNumberInput" />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input type="range" min="0" max="48" step="1" :value="sandboxPadding" @pointerdown="onTuningStart('sandboxPadding')" @input="onSandboxPaddingRangeInput" />
+          </div>
+
+          <!-- 圆角 -->
+          <div class="st-control" data-slider="sandboxRadius">
+            <label class="st-control-label">
+              <span class="label-text">舞台圆角</span>
+              <div class="value-group">
+                <input type="number" class="st-number-input" :value="sandboxRadius" min="0" max="32" @input="onSandboxRadiusNumberInput" />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input type="range" min="0" max="32" step="1" :value="sandboxRadius" @pointerdown="onTuningStart('sandboxRadius')" @input="onSandboxRadiusRangeInput" />
+          </div>
+
+          <p class="muted">提示：上述设定实时作用于页面上的"全局沙盒"舞台，并以 CSS 变量方式保存，便于主题或脚本统一接管。</p>
         </div>
       </CustomScrollbar>
     </div>
@@ -620,6 +801,14 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .st-control input[type="range"] { width: 100%; }
+
+.st-control-hint {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: rgba(var(--st-surface-2), 0.5);
+  border-radius: 6px;
+  border: 1px solid rgba(var(--st-border), 0.4);
+}
 
 /* 进出场动画（与 Sidebar 保持同层） */
 .st-settings-enter-from { opacity: 0; transform: translateX(-10px) scale(0.98); filter: blur(4px); }
