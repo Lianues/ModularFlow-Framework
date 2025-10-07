@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 
 /**
  * 简单的自定义滚动条组件
@@ -9,25 +9,40 @@ import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
  */
 
 const props = defineProps({
-  /** 滚动条宽度（px） */
+  /** 滚动条宽度（px，悬浮模式下为静默态宽度） */
   width: {
     type: Number,
     default: 8
   },
-  /** 滚动条轨道颜色（CSS color） */
+  /** 悬浮导轨颜色（保持透明以不占视觉） */
   trackColor: {
     type: String,
     default: 'transparent'
   },
-  /** 滚动条滑块颜色（CSS color） */
+  /** 可选：强制指定滑块颜色（不设置则由 CSS 主题控制） */
   thumbColor: {
     type: String,
     default: ''
   },
-  /** 滚动条滑块hover颜色（CSS color） */
+  /** 可选：滑块 hover 颜色（不设置则由 CSS 主题控制） */
   thumbHoverColor: {
     type: String,
     default: ''
+  },
+  /** 悬浮模式（不占用布局，自动显隐） */
+  overlay: {
+    type: Boolean,
+    default: true
+  },
+  /** 自动隐藏延迟（毫秒） */
+  autoHideDelay: {
+    type: Number,
+    default: 1200
+  },
+  /** 悬浮/交互时的宽度（px） */
+  hoverWidth: {
+    type: Number,
+    default: 12
   }
 })
 
@@ -38,6 +53,29 @@ const scrollTrack = ref(null)
 const thumbHeight = ref(0)
 const thumbTop = ref(0)
 const showScrollbar = ref(false)
+
+const isHovering = ref(false)
+const isVisible = ref(false)
+let hideTimeout = null
+
+const currentWidth = computed(() =>
+  (isHovering.value || isDragging)
+    ? (props.hoverWidth || (props.width + 4))
+    : props.width
+)
+
+function reveal() {
+  if (!props.overlay) return
+  isVisible.value = true
+  scheduleHide()
+}
+function scheduleHide() {
+  if (!props.overlay) return
+  if (hideTimeout) clearTimeout(hideTimeout)
+  hideTimeout = setTimeout(() => {
+    if (!isHovering.value && !isDragging) isVisible.value = false
+  }, props.autoHideDelay)
+}
 
 let isDragging = false
 let startY = 0
@@ -68,16 +106,39 @@ function updateScrollbar() {
   thumbTop.value = (scrollTop / maxScrollTop) * maxThumbTop
 }
 
-// 滚动事件处理
+/* 滚动事件处理 */
 function handleScroll() {
   updateScrollbar()
+  reveal()
 }
+
+// 悬浮边缘自动显隐（距离右边缘 24px 内显示）
+function handleWrapperMouseMove(e) {
+  if (!props.overlay) return
+  const el = e.currentTarget
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const dist = rect.right - e.clientX
+  if (dist <= 24) {
+    reveal()
+  } else {
+    scheduleHide()
+  }
+}
+
+// 全局鼠标移动：保持计时，停止后按延迟隐藏
+function handleGlobalMouseMove() {
+  if (!props.overlay) return
+  if (isVisible.value) scheduleHide()
+}
+
 
 // 鼠标按下滑块
 function handleThumbMouseDown(e) {
   isDragging = true
   startY = e.clientY
   startScrollTop = scrollContainer.value.scrollTop
+  reveal()
   
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', handleMouseUp)
@@ -104,6 +165,7 @@ function handleMouseMove(e) {
 // 鼠标释放
 function handleMouseUp() {
   isDragging = false
+  scheduleHide()
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
 }
@@ -128,6 +190,27 @@ function handleTrackClick(e) {
   container.scrollTop = ratio * maxScrollTop
 }
 
+const trackStyle = computed(() => {
+  return {
+    width: `${currentWidth.value}px`,
+    background: props.trackColor,
+    opacity: props.overlay ? (isVisible.value ? 1 : 0) : 1,
+    transform: props.overlay ? (isVisible.value ? 'translateX(0)' : 'translateX(8px)') : 'translateX(0)',
+    pointerEvents: props.overlay ? (isVisible.value ? 'auto' : 'none') : 'auto'
+  }
+})
+
+const thumbStyle = computed(() => {
+  const style = {
+    height: `${thumbHeight.value}px`,
+    top: `${thumbTop.value}px`,
+  }
+  if (props.thumbColor) style.background = props.thumbColor
+  if (props.thumbHoverColor) style['--thumb-hover-color'] = props.thumbHoverColor
+  return style
+})
+
+
 // 组件挂载
 onMounted(() => {
   nextTick(() => {
@@ -142,6 +225,8 @@ onMounted(() => {
     
     // 监听窗口大小变化
     window.addEventListener('resize', updateScrollbar)
+    // 全局鼠标移动：保持活跃时显示，停止后按延迟隐藏
+    window.addEventListener('mousemove', handleGlobalMouseMove, { passive: true })
 
     // 使用 ResizeObserver 监听容器尺寸变化
     if (window.ResizeObserver && scrollContainer.value) {
@@ -171,6 +256,7 @@ onBeforeUnmount(() => {
     scrollContainer.value.removeEventListener('scroll', handleScroll)
   }
   window.removeEventListener('resize', updateScrollbar)
+  window.removeEventListener('mousemove', handleGlobalMouseMove)
   if (resizeObserver) {
     try { resizeObserver.disconnect() } catch (_) {}
     resizeObserver = null
@@ -186,7 +272,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="custom-scrollbar-wrapper">
+  <div class="custom-scrollbar-wrapper" @mouseenter="isHovering = true; reveal()" @mouseleave="isHovering = false; scheduleHide()" @mousemove="handleWrapperMouseMove">
     <!-- 滚动内容容器 -->
     <div 
       ref="scrollContainer" 
@@ -197,25 +283,17 @@ defineExpose({
     </div>
     
     <!-- 自定义滚动条 -->
-    <div 
+    <div
       v-show="showScrollbar"
       ref="scrollTrack"
       class="scroll-track"
-      :style="{ 
-        width: `${width}px`,
-        background: trackColor 
-      }"
+      :style="trackStyle"
       @click="handleTrackClick"
     >
-      <div 
+      <div
         ref="scrollThumb"
         class="scroll-thumb"
-        :style="{ 
-          height: `${thumbHeight}px`,
-          top: `${thumbTop}px`,
-          background: thumbColor,
-          '--thumb-hover-color': thumbHoverColor
-        }"
+        :style="thumbStyle"
         @mousedown="handleThumbMouseDown"
       />
     </div>
@@ -244,19 +322,22 @@ defineExpose({
   display: none; /* Chrome/Safari/Opera */
 }
 
-/* 当有滚动条时，为内容留出右侧空间 */
+/* 悬浮模式：不占布局空间 */
 .scroll-container.has-scrollbar {
-  padding-right: 8px;
+  padding-right: 0;
 }
 
 .scroll-track {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 2px;
   height: 100%;
   border-radius: 9999px;
   cursor: pointer;
-  transition: background 0.18s ease, opacity 0.18s ease;
+  transition:
+    opacity .35s cubic-bezier(.22,.61,.36,1),
+    transform .35s cubic-bezier(.22,.61,.36,1),
+    width .25s ease;
   z-index: 10;
   opacity: 1;
 }
@@ -279,6 +360,7 @@ defineExpose({
   background: rgba(30, 30, 30, 0.55);
   border-color: rgba(30, 30, 30, 0.45);
   box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.2);
+  transform: scaleX(1.05);
 }
 
 /* 深色主题：浅色滑块 */
@@ -296,6 +378,7 @@ defineExpose({
 
 .scroll-thumb:active {
   cursor: grabbing;
+  transform: scaleX(1.1);
 }
 
 /* 减少动画偏好 */

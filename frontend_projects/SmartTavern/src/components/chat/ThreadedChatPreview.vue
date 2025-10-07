@@ -1,6 +1,5 @@
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue'
-import CustomScrollbar from '@/components/common/CustomScrollbar.vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
@@ -37,10 +36,38 @@ function nameOf(msg) {
 // 输入框逻辑
 const inputText = ref('')
 const messageListRef = ref(null)
+let removeWheel = null
 
 onMounted(() => {
   // 首次挂载后强制更新滚动条（确保容器尺寸已稳定）
   messageListRef.value?.update?.()
+
+  // 在 chat-unified 与 main 区域（包括空白处）使用滚轮也能滚动消息列表
+  const chatUnified = document.querySelector('[data-scope="chat-unified"]')
+  const mainArea = document.querySelector('[data-scope="main"]')
+  const wheelHandler = (e) => {
+    const container = messageListRef.value?.$el?.querySelector('.scroll-container')
+    if (!container) return
+    // 如果事件来源本就在列表容器内，让原生滚动处理
+    if (container.contains(e.target)) return
+    // 位于聊天统一区域或主区域空白时，拦截并转发滚动到消息容器
+    const inChatUnified = chatUnified && chatUnified.contains(e.target)
+    const inMainArea = mainArea && mainArea.contains(e.target)
+    if (inChatUnified || inMainArea) {
+      container.scrollTop += e.deltaY
+      e.preventDefault()
+    }
+  }
+  chatUnified?.addEventListener('wheel', wheelHandler, { passive: false })
+  mainArea?.addEventListener('wheel', wheelHandler, { passive: false })
+  removeWheel = () => {
+    chatUnified?.removeEventListener('wheel', wheelHandler)
+    mainArea?.removeEventListener('wheel', wheelHandler)
+  }
+})
+
+onBeforeUnmount(() => {
+  removeWheel?.()
 })
 
 watch(() => props.messages.length, () => {

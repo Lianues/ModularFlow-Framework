@@ -205,7 +205,7 @@ onBeforeUnmount(() => {
         </button>
       </nav>
 
-      <section class="st-settings-body">
+      <CustomScrollbar class="st-settings-body">
         <div v-if="active === 'home'" class="st-tab-panel">
           <h3>主页设定</h3>
           <p class="muted">此为占位页面，用于配置应用主页相关选项。</p>
@@ -401,9 +401,9 @@ onBeforeUnmount(() => {
 
         <div v-else class="st-tab-panel">
           <h3>全屏沙盒设定</h3>
-          <p class="muted">此为占位页面，用于配置“全屏沙盒”的安全与渲染选项。</p>
+          <p class="muted">此为占位页面，用于配置"全屏沙盒"的安全与渲染选项。</p>
         </div>
-      </section>
+      </CustomScrollbar>
     </div>
   </transition>
 </template>
@@ -480,7 +480,7 @@ onBeforeUnmount(() => {
 /* Body */
 .st-settings-body {
   padding: 12px;
-  overflow: auto;
+  overflow: hidden;
 }
 .st-tab-panel h3 { margin: 0 0 6px; font-weight: 700; }
 .st-tab-panel .muted { color: rgba(var(--st-color-text), 0.75); margin: 0; }

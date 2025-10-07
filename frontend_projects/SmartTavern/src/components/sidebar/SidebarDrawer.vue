@@ -202,9 +202,9 @@ const drawerStyle = computed(() => {
           ◀
         </button>
       </div>
-      <div class="sd-body">
+      <CustomScrollbar class="sd-body">
         <slot />
-      </div>
+      </CustomScrollbar>
     </div>
   </transition>
 
@@ -259,10 +259,10 @@ const drawerStyle = computed(() => {
   box-shadow: var(--st-shadow-sm);
 }
 
-/* 内容 */
+/* 内容容器 */
 .sd-body {
   padding: 10px;
-  overflow: auto;
+  overflow: hidden;
 }
 
 /* Backdrop 背板（点击关闭） */
