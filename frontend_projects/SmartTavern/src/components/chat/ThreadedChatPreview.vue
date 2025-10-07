@@ -1,4 +1,5 @@
 <script setup>
+import { ref, nextTick } from 'vue'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
@@ -30,11 +31,48 @@ function nameOf(msg) {
   // 名称占位规则：优先角色映射；可拓展为从 msg.meta 中读取昵称
   return roleLabel(msg.role)
 }
+
+// 输入框逻辑
+const inputText = ref('')
+const messageListRef = ref(null)
+
+function sendMessage() {
+  const text = inputText.value.trim()
+  if (!text) return
+  
+  // 创建新消息
+  const newMessage = {
+    id: Date.now(), // 简单的ID生成
+    role: 'user',
+    content: text
+  }
+  
+  // 添加到消息列表
+  props.messages.push(newMessage)
+  
+  // 清空输入框
+  inputText.value = ''
+  
+  // 滚动到底部
+  nextTick(() => {
+    if (messageListRef.value) {
+      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+    }
+  })
+}
+
+// 支持Ctrl+Enter发送
+function onKeydown(e) {
+  if (e.key === 'Enter' && e.ctrlKey) {
+    e.preventDefault()
+    sendMessage()
+  }
+}
 </script>
 
 <template>
   <div data-scope="chat-threaded" class="tch-container">
-    <div data-scope="message-list" class="tch-list">
+    <div data-scope="message-list" class="tch-list" ref="messageListRef">
       <article
         v-for="(m, idx) in props.messages"
         :key="m.id"
@@ -42,39 +80,44 @@ function nameOf(msg) {
         :data-role="m.role"
         class="floor-card glass"
       >
-        <header class="floor-header">
-          <div class="avatar role-user" v-if="m.role === 'user'">
-            <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-          </div>
-          <div class="avatar role-assistant" v-else-if="m.role === 'assistant'">
-            <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-          </div>
-          <div class="avatar role-system" v-else>
-            <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-          </div>
-
-          <div class="meta">
-            <div class="name">{{ nameOf(m) }}</div>
+        <div class="floor-layout">
+          <!-- 左侧：头像和徽章 -->
+          <div class="floor-left">
+            <div class="avatar role-user" v-if="m.role === 'user'">
+              <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+            </div>
+            <div class="avatar role-assistant" v-else-if="m.role === 'assistant'">
+              <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+            </div>
+            <div class="avatar role-system" v-else>
+              <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+            </div>
             <div class="role-badge">{{ roleLabel(m.role) }}</div>
           </div>
 
-          <div class="floor-index" :title="'楼层序号'">#{{ idx + 1 }}</div>
-        </header>
-
-        <section data-part="content" class="floor-content">
-          {{ m.content }}
-        </section>
+          <!-- 右侧：消息内容 -->
+          <div class="floor-right">
+            <header class="floor-header">
+              <div class="name">{{ nameOf(m) }}</div>
+              <div class="floor-index" :title="'楼层序号'">#{{ idx + 1 }}</div>
+            </header>
+            <section data-part="content" class="floor-content">
+              {{ m.content }}
+            </section>
+          </div>
+        </div>
       </article>
     </div>
 
     <!-- 输入区（多行文本） -->
     <div class="tch-input-row">
       <textarea
+        v-model="inputText"
         class="tch-input"
-        placeholder="输入消息（演示占位）"
-        disabled
+        placeholder="输入消息... (Ctrl+Enter 发送)"
+        @keydown="onKeydown"
       ></textarea>
-      <button class="tch-send" disabled>发送</button>
+      <button class="tch-send" @click="sendMessage">发送</button>
     </div>
   </div>
 </template>
@@ -103,9 +146,6 @@ function nameOf(msg) {
 
 /* 楼层卡（玻璃拟态） */
 .floor-card {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 10px;
   padding: 14px;
   border-radius: var(--st-radius-lg);
   border: 1px solid rgba(var(--st-border), 0.9);
@@ -122,16 +162,40 @@ function nameOf(msg) {
   background: rgba(var(--st-surface), 0.88);
 }
 
-/* 楼层头部 */
-.floor-header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+/* 楼层布局：左侧头像+徽章，右侧名称+楼层+内容 */
+.floor-layout {
+  display: flex;
+  gap: 14px;
+}
+
+/* 左侧区域 */
+.floor-left {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 右侧区域 */
+.floor-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 楼层头部：名称和楼层号 */
+.floor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
 }
 .avatar {
-  width: 56px;
-  height: 56px;
+  width: var(--st-avatar-size, 56px);
+  height: var(--st-avatar-size, 56px);
   border-radius: 14px;
   display: inline-flex;
   align-items: center;
@@ -142,7 +206,7 @@ function nameOf(msg) {
 }
 .avatar-letter {
   font-weight: 700;
-  font-size: 20px;
+  font-size: calc(var(--st-avatar-size, 56px) * 0.36);
   text-transform: uppercase;
 }
 
@@ -157,37 +221,37 @@ function nameOf(msg) {
   background: linear-gradient(135deg, rgba(251,191,36,0.85), rgba(253,230,138,0.85));
 }
 
-.meta {
-  display: grid;
-  grid-auto-rows: auto;
-  gap: 2px;
-}
 .name {
   font-weight: 700;
   color: rgb(var(--st-color-text));
-  font-size: 18px;
+  font-size: var(--st-name-font-size, 16px);
 }
+
 .role-badge {
-  display: inline-block;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--st-badge-font-size, 11px);
   color: rgb(var(--st-color-text));
   background: rgba(var(--st-primary),0.12);
   border: 1px solid rgba(var(--st-primary),0.32);
   border-radius: 9999px;
-  padding: 4px 10px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .floor-index {
   font-weight: 700;
   color: rgba(var(--st-color-text), 0.7);
   letter-spacing: .3px;
-  font-size: 16px;
+  font-size: var(--st-floor-font-size, 16px);
 }
 
 /* 楼层内容 */
 .floor-content {
   color: rgba(var(--st-color-text), 0.95);
-  font-size: var(--st-chat-font-size, 18px);
+  font-size: var(--st-content-font-size, 18px);
   line-height: 1.75;
   word-break: break-word;
   white-space: pre-wrap;
@@ -227,9 +291,16 @@ function nameOf(msg) {
   background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1));
   color: var(--st-primary-contrast);
   border: none;
-  cursor: not-allowed;
-  opacity: .7;
+  cursor: pointer;
   height: 100%;
   box-sizing: border-box;
+  transition: filter .15s ease, transform .15s ease;
+}
+.tch-send:hover {
+  filter: saturate(1.1) brightness(1.05);
+  transform: translateY(-1px);
+}
+.tch-send:active {
+  transform: translateY(0);
 }
 </style>

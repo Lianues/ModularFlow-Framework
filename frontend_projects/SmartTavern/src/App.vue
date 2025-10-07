@@ -177,7 +177,11 @@ function onThemeUpdate(t) {
   --st-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 
   /* Chat tuning defaults */
-  --st-chat-font-size: 18px;
+  --st-content-font-size: 18px; /* 正文文字大小 */
+  --st-name-font-size: 16px; /* 角色名称文字大小 */
+  --st-badge-font-size: 11px; /* 角色徽章文字大小 */
+  --st-floor-font-size: 16px; /* 楼层号文字大小 */
+  --st-avatar-size: 56px; /* 角色头像大小 */
   --st-chat-width: 80%; /* 百分比宽度 */
   --st-input-height: 100px; /* 输入框高度 */
 }
@@ -266,19 +270,22 @@ body.st-live-tuning [data-scope="settings-view"] .st-control {
 }
 
 /* Show only the active slider and its label/value */
-body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"],
+body.st-live-tuning[data-active-slider] [data-scope="settings-view"] .st-control[data-slider] {
+  visibility: hidden !important;
+}
+body.st-live-tuning[data-active-slider="contentFontSize"] [data-scope="settings-view"] .st-control[data-slider="contentFontSize"],
+body.st-live-tuning[data-active-slider="nameFontSize"] [data-scope="settings-view"] .st-control[data-slider="nameFontSize"],
+body.st-live-tuning[data-active-slider="badgeFontSize"] [data-scope="settings-view"] .st-control[data-slider="badgeFontSize"],
+body.st-live-tuning[data-active-slider="floorFontSize"] [data-scope="settings-view"] .st-control[data-slider="floorFontSize"],
+body.st-live-tuning[data-active-slider="avatarSize"] [data-scope="settings-view"] .st-control[data-slider="avatarSize"],
 body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"],
 body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] {
   visibility: visible !important;
 }
 
 /* Ensure the label text and value group of active slider are visible */
-body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"] .label-text,
-body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"] .value-group,
-body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"] .label-text,
-body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"] .value-group,
-body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] .label-text,
-body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] .value-group {
+body.st-live-tuning[data-active-slider] [data-scope="settings-view"] .st-control .label-text,
+body.st-live-tuning[data-active-slider] [data-scope="settings-view"] .st-control .value-group {
   visibility: visible !important;
 }
 </style>

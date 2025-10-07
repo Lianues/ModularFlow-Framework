@@ -25,12 +25,16 @@ const panelStyle = computed(() => ({
 }))
 function close() { emit('close') }
 
-// --- Threaded chat live tuning (font-size & width & input-height) ---
-const fontSize = ref(18)
+// --- Threaded chat live tuning ---
+const contentFontSize = ref(18) // 正文文字大小
+const nameFontSize = ref(16) // 角色名称文字大小
+const badgeFontSize = ref(11) // 角色徽章文字大小
+const floorFontSize = ref(16) // 楼层号文字大小
+const avatarSize = ref(56) // 角色头像大小
 const chatWidth = ref(80) // 百分比值，默认80%
 const inputHeight = ref(100) // 输入框高度，默认100px
 const tuning = ref(false)
-const activeTuningSlider = ref(null) // 'fontSize' | 'chatWidth' | 'inputHeight' | null
+const activeTuningSlider = ref(null)
 
 function readCssVar(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name)?.trim()
@@ -58,20 +62,76 @@ function onTuningEndOnce() {
   document.body.classList.remove('st-live-tuning')
   document.body.removeAttribute('data-active-slider')
 }
-function onFontSizeInput(e) {
-  fontSize.value = Number(e.target.value)
-  setRootVar('--st-chat-font-size', fontSize.value)
+
+// 正文文字
+function onContentFontSizeInput(e) {
+  contentFontSize.value = Number(e.target.value)
+  setRootVar('--st-content-font-size', contentFontSize.value)
 }
+function onContentFontSizeNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 12 && val <= 32) {
+    contentFontSize.value = val
+    setRootVar('--st-content-font-size', contentFontSize.value)
+  }
+}
+
+// 角色名称
+function onNameFontSizeInput(e) {
+  nameFontSize.value = Number(e.target.value)
+  setRootVar('--st-name-font-size', nameFontSize.value)
+}
+function onNameFontSizeNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 10 && val <= 24) {
+    nameFontSize.value = val
+    setRootVar('--st-name-font-size', nameFontSize.value)
+  }
+}
+
+// 角色徽章
+function onBadgeFontSizeInput(e) {
+  badgeFontSize.value = Number(e.target.value)
+  setRootVar('--st-badge-font-size', badgeFontSize.value)
+}
+function onBadgeFontSizeNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 8 && val <= 16) {
+    badgeFontSize.value = val
+    setRootVar('--st-badge-font-size', badgeFontSize.value)
+  }
+}
+
+// 楼层号
+function onFloorFontSizeInput(e) {
+  floorFontSize.value = Number(e.target.value)
+  setRootVar('--st-floor-font-size', floorFontSize.value)
+}
+function onFloorFontSizeNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 10 && val <= 24) {
+    floorFontSize.value = val
+    setRootVar('--st-floor-font-size', floorFontSize.value)
+  }
+}
+
+// 头像大小
+function onAvatarSizeInput(e) {
+  avatarSize.value = Number(e.target.value)
+  setRootVar('--st-avatar-size', avatarSize.value)
+}
+function onAvatarSizeNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 32 && val <= 80) {
+    avatarSize.value = val
+    setRootVar('--st-avatar-size', avatarSize.value)
+  }
+}
+
+// 宽度
 function onWidthInput(e) {
   chatWidth.value = Number(e.target.value)
   setRootVar('--st-chat-width', chatWidth.value)
-}
-function onFontSizeNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 12 && val <= 32) {
-    fontSize.value = val
-    setRootVar('--st-chat-font-size', fontSize.value)
-  }
 }
 function onWidthNumberInput(e) {
   const val = Number(e.target.value)
@@ -80,6 +140,8 @@ function onWidthNumberInput(e) {
     setRootVar('--st-chat-width', chatWidth.value)
   }
 }
+
+// 输入框高度
 function onInputHeightInput(e) {
   inputHeight.value = Number(e.target.value)
   setRootVar('--st-input-height', inputHeight.value)
@@ -92,13 +154,21 @@ function onInputHeightNumberInput(e) {
   }
 }
 onMounted(() => {
-  fontSize.value = readCssVar('--st-chat-font-size', 18)
+  contentFontSize.value = readCssVar('--st-content-font-size', 18)
+  nameFontSize.value = readCssVar('--st-name-font-size', 16)
+  badgeFontSize.value = readCssVar('--st-badge-font-size', 11)
+  floorFontSize.value = readCssVar('--st-floor-font-size', 16)
+  avatarSize.value = readCssVar('--st-avatar-size', 56)
   // 读取宽度百分比值（去掉%符号）
   const widthVar = getComputedStyle(document.documentElement).getPropertyValue('--st-chat-width')?.trim()
   chatWidth.value = widthVar ? parseInt(widthVar, 10) : 80
   inputHeight.value = readCssVar('--st-input-height', 100)
   // 应用当前值到根变量（确保首次打开即与 UI 同步）
-  setRootVar('--st-chat-font-size', fontSize.value)
+  setRootVar('--st-content-font-size', contentFontSize.value)
+  setRootVar('--st-name-font-size', nameFontSize.value)
+  setRootVar('--st-badge-font-size', badgeFontSize.value)
+  setRootVar('--st-floor-font-size', floorFontSize.value)
+  setRootVar('--st-avatar-size', avatarSize.value)
   setRootVar('--st-chat-width', chatWidth.value)
   setRootVar('--st-input-height', inputHeight.value)
 })
@@ -144,17 +214,17 @@ onBeforeUnmount(() => {
         <div v-else-if="active === 'threaded'" class="st-tab-panel">
           <h3>楼层对话设定</h3>
 
-          <div class="st-control" data-slider="fontSize">
+          <div class="st-control" data-slider="contentFontSize">
             <label class="st-control-label">
-              <span class="label-text">文字大小</span>
+              <span class="label-text">正文文字大小</span>
               <div class="value-group">
                 <input
                   type="number"
                   class="st-number-input"
-                  :value="fontSize"
+                  :value="contentFontSize"
                   min="12"
-                  max="60"
-                  @input="onFontSizeNumberInput"
+                  max="32"
+                  @input="onContentFontSizeNumberInput"
                 />
                 <span class="unit">px</span>
               </div>
@@ -162,11 +232,115 @@ onBeforeUnmount(() => {
             <input
               type="range"
               min="12"
-              max="60"
+              max="32"
               step="1"
-              :value="fontSize"
-              @pointerdown="onTuningStart('fontSize')"
-              @input="onFontSizeInput"
+              :value="contentFontSize"
+              @pointerdown="onTuningStart('contentFontSize')"
+              @input="onContentFontSizeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="nameFontSize">
+            <label class="st-control-label">
+              <span class="label-text">角色名称文字大小</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="nameFontSize"
+                  min="10"
+                  max="24"
+                  @input="onNameFontSizeNumberInput"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="10"
+              max="24"
+              step="1"
+              :value="nameFontSize"
+              @pointerdown="onTuningStart('nameFontSize')"
+              @input="onNameFontSizeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="badgeFontSize">
+            <label class="st-control-label">
+              <span class="label-text">角色徽章文字大小</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="badgeFontSize"
+                  min="8"
+                  max="16"
+                  @input="onBadgeFontSizeNumberInput"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="8"
+              max="16"
+              step="1"
+              :value="badgeFontSize"
+              @pointerdown="onTuningStart('badgeFontSize')"
+              @input="onBadgeFontSizeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="floorFontSize">
+            <label class="st-control-label">
+              <span class="label-text">楼层号文字大小</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="floorFontSize"
+                  min="10"
+                  max="24"
+                  @input="onFloorFontSizeNumberInput"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="10"
+              max="24"
+              step="1"
+              :value="floorFontSize"
+              @pointerdown="onTuningStart('floorFontSize')"
+              @input="onFloorFontSizeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="avatarSize">
+            <label class="st-control-label">
+              <span class="label-text">角色头像大小</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="avatarSize"
+                  min="32"
+                  max="80"
+                  @input="onAvatarSizeNumberInput"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="32"
+              max="80"
+              step="2"
+              :value="avatarSize"
+              @pointerdown="onTuningStart('avatarSize')"
+              @input="onAvatarSizeInput"
             />
           </div>
 
