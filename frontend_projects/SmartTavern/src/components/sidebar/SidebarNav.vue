@@ -7,11 +7,12 @@ const items = [
   { key: 'characters', icon: '🧑‍🚀', title: '角色卡 Characters', desc: '管理角色信息卡' },
   { key: 'persona', icon: '🧠', title: '用户信息 Persona', desc: '配置用户画像与偏好' },
   { key: 'regex', icon: '🧹', title: '正则 Regex Rules', desc: '清洗/后处理规则' },
-  { key: 'themes', icon: '🎨', title: '主题 Themes', desc: '外观与主题（导入 Theme Pack）' },
-  { key: 'app', icon: '⚙️', title: '应用设置 App Settings', desc: '全局开关与权限' },
+  { key: 'themes', icon: '🎨', title: '外观 Appearance', desc: '主题与外观（含原应用设置）' },
+  { key: 'app', icon: '⚙️', title: '应用设置 App Settings', desc: '内容已合并至“外观”' },
 ]
 function onClick(key) {
-  if (key === 'app') emit('openSettings')
+  // “外观”与“应用设置”均打开同一面板（外观面板）
+  if (key === 'app' || key === 'themes') emit('openSettings')
 }
 </script>
 

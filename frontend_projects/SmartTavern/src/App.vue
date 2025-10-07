@@ -6,7 +6,7 @@ import ModeSwitch from '@/components/common/ModeSwitch.vue'
 import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
 import { watch } from 'vue'
 import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
-import SettingsPanel from '@/components/sidebar/SettingsPanel.vue'
+import AppearancePanel from '@/components/sidebar/AppearancePanel.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -96,7 +96,7 @@ function onThemeUpdate(t) {
       </SidebarDrawer>
 
       <!-- 应用设置面板：与侧边栏同层，位于高斯模糊之上 -->
-      <SettingsPanel
+      <AppearancePanel
         v-if="showSidebar && settingsOpen"
         @close="settingsOpen = false"
       />
@@ -179,6 +179,11 @@ function onThemeUpdate(t) {
   --st-surface-bg-size: cover;
   --st-surface-bg-position: center center;
   --st-surface-bg-repeat: no-repeat;
+
+  /* 页面背景图（可被外观面板覆盖） */
+  --st-bg-start: url('/images/HomePage.png');
+  --st-bg-threaded: url('/images/ThreadedChat.png');
+  --st-bg-sandbox: url('/images/SandboxChat.png');
 
   --st-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
   --st-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
@@ -378,6 +383,19 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   align-items: start;
   overflow-y: auto;
   height: 100%;
+  position: relative;
+}
+.st-start::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--st-bg-start);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 0.15;
+  z-index: -1;
+  pointer-events: none;
 }
 @media (max-width: 980px) { .st-start { grid-template-columns: 1fr; } }
 
@@ -416,6 +434,35 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+/* 楼层对话背景 */
+.st-chat-unified:has([data-scope="chat-threaded"])::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--st-bg-threaded);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 0.12;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* 沙盒对话背景 */
+.st-chat-unified:has([data-scope="chat-sandbox"])::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--st-bg-sandbox);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 0.12;
+  z-index: -1;
+  pointer-events: none;
 }
 /* ModeSwitch styles moved into src/components/common/ModeSwitch.vue */
 /* Threaded chat preview styles moved into src/components/chat/ThreadedChatPreview.vue */

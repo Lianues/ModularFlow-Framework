@@ -4,13 +4,15 @@ const props = defineProps({
   anchorLeft: { type: Number, default: 348 }, // 左侧锚定像素（默认=12+320+16）
   width: { type: Number, default: 520 },      // 面板宽度
   zIndex: { type: Number, default: 59 },      // 与 Sidebar 同层（> 背景模糊 58）
-  title: { type: String, default: '应用设置' },
+  // 统一重命名：外观（原“主题/应用设置”合并）
+  title: { type: String, default: '外观 Appearance' },
 })
 const emit = defineEmits(['close'])
 
 const tabs = [
   { key: 'home', label: '主页设定' },
   { key: 'threaded', label: '楼层对话设定' },
+  { key: 'backgrounds', label: '背景图片设定' },
   { key: 'sandbox', label: '全屏沙盒设定' },
 ]
 const active = ref('home')
@@ -47,6 +49,45 @@ function setRootVar(name, value) {
   const suffix = name === '--st-chat-width' ? '%' : 'px'
   document.documentElement.style.setProperty(name, typeof value === 'number' ? value + suffix : String(value))
 }
+
+/* 背景图片覆盖（使用 CSS 变量，持久化到 localStorage） */
+const BG_KEYS = {
+  start: '--st-bg-start',
+  threaded: '--st-bg-threaded',
+  sandbox: '--st-bg-sandbox',
+}
+const LS_KEYS = {
+  start: 'st.bg.start',
+  threaded: 'st.bg.threaded',
+  sandbox: 'st.bg.sandbox',
+}
+
+function applyBg(type, url) {
+  if (!BG_KEYS[type]) return
+  // 将 url 字符串封装为 CSS url(...)
+  const css = `url("${url}")`
+  document.documentElement.style.setProperty(BG_KEYS[type], css)
+  try { localStorage.setItem(LS_KEYS[type], url) } catch (_) {}
+}
+
+function resetBg(type) {
+  if (!BG_KEYS[type]) return
+  document.documentElement.style.removeProperty(BG_KEYS[type])
+  try { localStorage.removeItem(LS_KEYS[type]) } catch (_) {}
+}
+
+function onFileChange(type, e) {
+  const file = e.target?.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const dataUrl = reader.result
+    if (typeof dataUrl === 'string') {
+      applyBg(type, dataUrl)
+    }
+  }
+  reader.readAsDataURL(file)
+}
 function onTuningStart(sliderName) {
   tuning.value = true
   activeTuningSlider.value = sliderName
@@ -63,6 +104,7 @@ function onTuningEndOnce() {
   document.body.removeAttribute('data-active-slider')
 }
 
+// 外观与布局（原应用设置项已迁移至此）
 // 正文文字
 function onContentFontSizeInput(e) {
   contentFontSize.value = Number(e.target.value)
@@ -171,6 +213,16 @@ onMounted(() => {
   setRootVar('--st-avatar-size', avatarSize.value)
   setRootVar('--st-chat-width', chatWidth.value)
   setRootVar('--st-input-height', inputHeight.value)
+
+  // 恢复背景图片自定义（若本地已保存）
+  try {
+    const s = localStorage.getItem(LS_KEYS.start)
+    const t = localStorage.getItem(LS_KEYS.threaded)
+    const z = localStorage.getItem(LS_KEYS.sandbox)
+    if (s) applyBg('start', s)
+    if (t) applyBg('threaded', t)
+    if (z) applyBg('sandbox', z)
+  } catch (_) {}
 })
 onBeforeUnmount(() => {
   document.body.classList.remove('st-live-tuning')
@@ -203,6 +255,7 @@ onBeforeUnmount(() => {
         >
           {{ t.label }}
         </button>
+        <!-- 提示：原“应用设置”内容已合并到本外观面板 -->
       </nav>
 
       <CustomScrollbar class="st-settings-body">
@@ -212,7 +265,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else-if="active === 'threaded'" class="st-tab-panel">
-          <h3>楼层对话设定</h3>
+          <h3>楼层对话外观</h3>
 
           <div class="st-control" data-slider="contentFontSize">
             <label class="st-control-label">
@@ -399,8 +452,51 @@ onBeforeUnmount(() => {
           <p class="muted">拖拽滑条时，页面会自动变透明，仅保留本面板不透明，便于实时查看调整效果。</p>
         </div>
 
+        <div v-else-if="active === 'backgrounds'" class="st-tab-panel">
+          <h3>背景图片设定</h3>
+          <p class="muted">为开始页面、楼层对话页面、沙盒页面设置背景图。可覆盖默认图片并即时预览。</p>
+
+          <div class="bg-grid">
+            <div class="bg-card">
+              <div class="bg-title">开始页面</div>
+              <div class="bg-preview bg-start" />
+              <div class="bg-actions">
+                <label class="bg-upload">
+                  <input type="file" accept="image/*" @change="onFileChange('start', $event)" />
+                  选择图片
+                </label>
+                <button class="st-settings-close" type="button" @click="resetBg('start')">重置默认</button>
+              </div>
+            </div>
+
+            <div class="bg-card">
+              <div class="bg-title">楼层对话页面</div>
+              <div class="bg-preview bg-threaded" />
+              <div class="bg-actions">
+                <label class="bg-upload">
+                  <input type="file" accept="image/*" @change="onFileChange('threaded', $event)" />
+                  选择图片
+                </label>
+                <button class="st-settings-close" type="button" @click="resetBg('threaded')">重置默认</button>
+              </div>
+            </div>
+
+            <div class="bg-card">
+              <div class="bg-title">沙盒页面</div>
+              <div class="bg-preview bg-sandbox" />
+              <div class="bg-actions">
+                <label class="bg-upload">
+                  <input type="file" accept="image/*" @change="onFileChange('sandbox', $event)" />
+                  选择图片
+                </label>
+                <button class="st-settings-close" type="button" @click="resetBg('sandbox')">重置默认</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div v-else class="st-tab-panel">
-          <h3>全屏沙盒设定</h3>
+          <h3>全屏沙盒外观</h3>
           <p class="muted">此为占位页面，用于配置"全屏沙盒"的安全与渲染选项。</p>
         </div>
       </CustomScrollbar>
@@ -530,4 +626,50 @@ onBeforeUnmount(() => {
 .st-settings-leave-to   { opacity: 0; transform: translateX(-12px) scale(0.98); filter: blur(4px); }
 .st-settings-enter-active,
 .st-settings-leave-active { transition: opacity .18s ease, transform .22s cubic-bezier(.22,.61,.36,1), filter .22s ease; }
+
+/* 背景设置预览 */
+.bg-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.bg-card {
+  border: 1px solid rgb(var(--st-border));
+  border-radius: var(--st-radius-md);
+  background: rgb(var(--st-surface));
+  padding: 10px;
+}
+.bg-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: rgb(var(--st-color-text));
+}
+.bg-preview {
+  width: 100%;
+  height: 120px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--st-border), 0.8);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  box-shadow: var(--st-shadow-sm);
+}
+.bg-preview.bg-start { background-image: var(--st-bg-start); }
+.bg-preview.bg-threaded { background-image: var(--st-bg-threaded); }
+.bg-preview.bg-sandbox { background-image: var(--st-bg-sandbox); }
+
+.bg-actions {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.bg-upload {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  background: rgb(var(--st-surface-2));
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.bg-upload input[type="file"] {
+  display: none;
+}
 </style>
