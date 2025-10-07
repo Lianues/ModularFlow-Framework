@@ -1,11 +1,13 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted, watch } from 'vue'
+import CustomScrollbar from '@/components/common/CustomScrollbar.vue'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
  * - 不依赖外部数据，仅美化现有 props.messages（id/role/content）
  * - 使用 Design Tokens，响应式与玻璃拟态风格
  * - data-scope/data-part 保持稳定选择器契约（便于主题包覆盖）
+ * - 使用自定义滚动条替代原生滚动条
  */
 const props = defineProps({
   messages: {
@@ -36,6 +38,16 @@ function nameOf(msg) {
 const inputText = ref('')
 const messageListRef = ref(null)
 
+onMounted(() => {
+  // 首次挂载后强制更新滚动条（确保容器尺寸已稳定）
+  messageListRef.value?.update?.()
+})
+
+watch(() => props.messages.length, () => {
+  // 消息数量变化后，下一拍更新滚动条
+  nextTick(() => messageListRef.value?.update?.())
+})
+
 function sendMessage() {
   const text = inputText.value.trim()
   if (!text) return
@@ -56,8 +68,11 @@ function sendMessage() {
   // 滚动到底部（等待过渡动画更丝滑）
   nextTick(() => {
     setTimeout(() => {
-      if (messageListRef.value) {
-        messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+      if (messageListRef.value?.$el) {
+        const container = messageListRef.value.$el.querySelector('.scroll-container')
+        if (container) {
+          container.scrollTop = container.scrollHeight
+        }
       }
     }, 320)
   })
@@ -74,15 +89,20 @@ function onKeydown(e) {
 
 <template>
   <div data-scope="chat-threaded" class="tch-container">
-    <div data-scope="message-list" class="tch-list" ref="messageListRef">
-      <transition-group name="msg" tag="div" class="tch-list-inner">
-        <article
-          v-for="(m, idx) in props.messages"
-          :key="m.id"
-          data-scope="message-item"
-          :data-role="m.role"
-          class="floor-card glass"
-        >
+    <CustomScrollbar
+      class="tch-list"
+      ref="messageListRef"
+      :width="8"
+    >
+      <div data-scope="message-list" class="tch-list-inner">
+        <transition-group name="msg" tag="div">
+          <article
+            v-for="(m, idx) in props.messages"
+            :key="m.id"
+            data-scope="message-item"
+            :data-role="m.role"
+            class="floor-card glass"
+          >
           <div class="floor-layout">
             <!-- 左侧：头像和徽章 -->
             <div class="floor-left">
@@ -108,10 +128,11 @@ function onKeydown(e) {
                 {{ m.content }}
               </section>
             </div>
-          </div>
-        </article>
-      </transition-group>
-    </div>
+            </div>
+          </article>
+        </transition-group>
+      </div>
+    </CustomScrollbar>
 
     <!-- 输入区（多行文本） -->
     <div class="tch-input-row">
@@ -137,14 +158,10 @@ function onKeydown(e) {
   min-height: 0;
   overflow: hidden;
 }
+
+/* 滚动列表容器（CustomScrollbar占位） */
 .tch-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 6px;
   min-height: 0;
 }
 
@@ -153,6 +170,7 @@ function onKeydown(e) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-right: 4px;
 }
 
 /* 楼层卡（玻璃拟态） */
