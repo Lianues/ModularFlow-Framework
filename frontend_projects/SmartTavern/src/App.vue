@@ -79,10 +79,17 @@ function onThemeUpdate(t) {
 
     <!-- 顶部栏（玻璃拟态） -->
     <header class="st-header glass">
-      <button class="st-brand" @click="view = 'start'">
-        <span class="st-logo">∞</span>
-        SmartTavern
-      </button>
+      <div class="st-left">
+        <button class="st-brand" @click="view = 'start'">
+          <span class="st-logo">∞</span>
+          SmartTavern
+        </button>
+        <ModeSwitch
+          v-if="showSidebar"
+          v-model:modelValue="view"
+          class="st-mode-switch"
+        />
+      </div>
       <div class="st-actions-top">
         <ThemeSwitch :theme="theme" @update:theme="onThemeUpdate" />
       </div>
@@ -92,14 +99,16 @@ function onThemeUpdate(t) {
     <div class="st-body">
       <!-- 侧边栏（仅聊天视图显示） -->
       <SidebarDrawer v-if="showSidebar" v-model="drawerOpen">
-        <SidebarNav @openSettings="settingsOpen = true" />
+        <SidebarNav @openSettings="settingsOpen = !settingsOpen" />
       </SidebarDrawer>
 
       <!-- 应用设置面板：与侧边栏同层，位于高斯模糊之上 -->
-      <AppearancePanel
-        v-if="showSidebar && settingsOpen"
-        @close="settingsOpen = false"
-      />
+      <transition name="st-subpage">
+        <AppearancePanel
+          v-if="showSidebar && settingsOpen"
+          @close="settingsOpen = false"
+        />
+      </transition>
 
       <!-- 主内容 -->
       <main data-scope="main" class="st-main">
@@ -133,15 +142,14 @@ function onThemeUpdate(t) {
           </div>
         </section>
 
-        <!-- 聊天统一视图 -->
-        <section v-else data-scope="chat-unified" class="st-chat-unified">
-          <ModeSwitch v-model:modelValue="view" />
+        <!-- 楼层对话独立视图 -->
+        <section v-else-if="view === 'threaded'" data-scope="chat-threaded" class="st-threaded">
+          <ThreadedChatPreview :messages="messages" />
+        </section>
 
-          <!-- 楼层对话 -->
-          <ThreadedChatPreview v-if="view === 'threaded'" :messages="messages" />
-
-          <!-- 全局沙盒占位 -->
-          <div v-else data-scope="chat-sandbox" class="st-sandbox card">
+        <!-- 全局沙盒独立视图 -->
+        <section v-else data-scope="chat-sandbox" class="st-sandbox">
+          <div class="st-sandbox-card card">
             <h2 class="st-title">全局沙盒（占位）</h2>
             <p>此页面暂不渲染 iframe，仅为占位示意。</p>
           </div>
@@ -353,6 +361,7 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   background: transparent; border: none; color: rgb(var(--st-color-text)); cursor: pointer;
 }
 .st-actions-top { display: flex; align-items: center; gap: 8px; }
+.st-left { display: inline-flex; align-items: center; gap: 12px; }
 
 .st-body {
   display: flex;
@@ -422,12 +431,11 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
 .st-feature-title { margin-top: 8px; font-weight: 600; }
 .st-feature-desc { margin-top: 4px; color: rgba(var(--st-color-text), 0.7); }
 
-/* Chat unified container */
-.st-chat-unified {
+/* Threaded chat container */
+.st-threaded {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  /* Constrain overall chat width (includes ModeSwitch + messages) */
   max-width: var(--st-chat-width, 860px);
   margin: 0 auto;
   width: 100%;
@@ -436,9 +444,7 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   overflow: hidden;
   position: relative;
 }
-
-/* 楼层对话背景 */
-.st-chat-unified:has([data-scope="chat-threaded"])::before {
+.st-threaded::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -451,8 +457,21 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
   pointer-events: none;
 }
 
-/* 沙盒对话背景 */
-.st-chat-unified:has([data-scope="chat-sandbox"])::before {
+/* Sandbox container */
+.st-sandbox {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Sandbox 可以使用更宽的约束，避免与对话宽度共用 */
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+.st-sandbox::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -468,5 +487,11 @@ body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view
 /* Threaded chat preview styles moved into src/components/chat/ThreadedChatPreview.vue */
 
 /* Sandbox placeholder */
-.st-sandbox { padding: 18px; color: rgba(var(--st-color-text), 0.85); }
+.st-sandbox-card { padding: 18px; color: rgba(var(--st-color-text), 0.85); }
+
+/* 子页面展开/收起动画（AppearancePanel 组件在 App 层的过渡） */
+.st-subpage-enter-from { opacity: 0; transform: translateX(-10px) scale(0.98); filter: blur(4px); }
+.st-subpage-leave-to   { opacity: 0; transform: translateX(-12px) scale(0.98); filter: blur(4px); }
+.st-subpage-enter-active,
+.st-subpage-leave-active { transition: opacity .2s ease, transform .24s cubic-bezier(.22,.61,.36,1), filter .24s ease; }
 </style>
