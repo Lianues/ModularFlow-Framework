@@ -269,10 +269,7 @@ body.st-live-tuning [data-scope="settings-view"] .st-control {
   visibility: hidden !important;
 }
 
-/* Show only the active slider and its label/value */
-body.st-live-tuning[data-active-slider] [data-scope="settings-view"] .st-control[data-slider] {
-  visibility: hidden !important;
-}
+/* Show only the active slider (including its label, value, and range input) */
 body.st-live-tuning[data-active-slider="contentFontSize"] [data-scope="settings-view"] .st-control[data-slider="contentFontSize"],
 body.st-live-tuning[data-active-slider="nameFontSize"] [data-scope="settings-view"] .st-control[data-slider="nameFontSize"],
 body.st-live-tuning[data-active-slider="badgeFontSize"] [data-scope="settings-view"] .st-control[data-slider="badgeFontSize"],
@@ -280,12 +277,6 @@ body.st-live-tuning[data-active-slider="floorFontSize"] [data-scope="settings-vi
 body.st-live-tuning[data-active-slider="avatarSize"] [data-scope="settings-view"] .st-control[data-slider="avatarSize"],
 body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"],
 body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] {
-  visibility: visible !important;
-}
-
-/* Ensure the label text and value group of active slider are visible */
-body.st-live-tuning[data-active-slider] [data-scope="settings-view"] .st-control .label-text,
-body.st-live-tuning[data-active-slider] [data-scope="settings-view"] .st-control .value-group {
   visibility: visible !important;
 }
 </style>

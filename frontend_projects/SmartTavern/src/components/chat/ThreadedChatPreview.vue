@@ -53,11 +53,13 @@ function sendMessage() {
   // 清空输入框
   inputText.value = ''
   
-  // 滚动到底部
+  // 滚动到底部（等待过渡动画更丝滑）
   nextTick(() => {
-    if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-    }
+    setTimeout(() => {
+      if (messageListRef.value) {
+        messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+      }
+    }, 320)
   })
 }
 
@@ -73,40 +75,42 @@ function onKeydown(e) {
 <template>
   <div data-scope="chat-threaded" class="tch-container">
     <div data-scope="message-list" class="tch-list" ref="messageListRef">
-      <article
-        v-for="(m, idx) in props.messages"
-        :key="m.id"
-        data-scope="message-item"
-        :data-role="m.role"
-        class="floor-card glass"
-      >
-        <div class="floor-layout">
-          <!-- 左侧：头像和徽章 -->
-          <div class="floor-left">
-            <div class="avatar role-user" v-if="m.role === 'user'">
-              <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+      <transition-group name="msg" tag="div" class="tch-list-inner">
+        <article
+          v-for="(m, idx) in props.messages"
+          :key="m.id"
+          data-scope="message-item"
+          :data-role="m.role"
+          class="floor-card glass"
+        >
+          <div class="floor-layout">
+            <!-- 左侧：头像和徽章 -->
+            <div class="floor-left">
+              <div class="avatar role-user" v-if="m.role === 'user'">
+                <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+              </div>
+              <div class="avatar role-assistant" v-else-if="m.role === 'assistant'">
+                <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+              </div>
+              <div class="avatar role-system" v-else>
+                <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
+              </div>
+              <div class="role-badge">{{ roleLabel(m.role) }}</div>
             </div>
-            <div class="avatar role-assistant" v-else-if="m.role === 'assistant'">
-              <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-            </div>
-            <div class="avatar role-system" v-else>
-              <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-            </div>
-            <div class="role-badge">{{ roleLabel(m.role) }}</div>
-          </div>
 
-          <!-- 右侧：消息内容 -->
-          <div class="floor-right">
-            <header class="floor-header">
-              <div class="name">{{ nameOf(m) }}</div>
-              <div class="floor-index" :title="'楼层序号'">#{{ idx + 1 }}</div>
-            </header>
-            <section data-part="content" class="floor-content">
-              {{ m.content }}
-            </section>
+            <!-- 右侧：消息内容 -->
+            <div class="floor-right">
+              <header class="floor-header">
+                <div class="name">{{ nameOf(m) }}</div>
+                <div class="floor-index" :title="'楼层序号'">#{{ idx + 1 }}</div>
+              </header>
+              <section data-part="content" class="floor-content">
+                {{ m.content }}
+              </section>
+            </div>
           </div>
-        </div>
-      </article>
+        </article>
+      </transition-group>
     </div>
 
     <!-- 输入区（多行文本） -->
@@ -144,6 +148,13 @@ function onKeydown(e) {
   min-height: 0;
 }
 
+/* 内部容器（供过渡动画使用） */
+.tch-list-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* 楼层卡（玻璃拟态） */
 .floor-card {
   padding: 14px;
@@ -154,6 +165,7 @@ function onKeydown(e) {
   -webkit-backdrop-filter: blur(6px);
   box-shadow: var(--st-shadow-md);
   transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+  will-change: transform, opacity, filter;
 }
 .floor-card:hover {
   transform: translateY(-2px);
@@ -302,5 +314,54 @@ function onKeydown(e) {
 }
 .tch-send:active {
   transform: translateY(0);
+}
+
+/* 消息出现/离场与重排过渡（丝滑高质感） */
+.msg-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+  filter: blur(8px) saturate(0.9);
+}
+.msg-enter-to {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+.msg-enter-active {
+  transition:
+    opacity .28s cubic-bezier(.22,.61,.36,1),
+    transform .36s cubic-bezier(.22,.61,.36,1),
+    filter .36s ease;
+}
+.msg-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.985);
+  filter: blur(4px);
+}
+.msg-leave-active {
+  transition:
+    opacity .18s ease,
+    transform .22s ease,
+    filter .22s ease;
+}
+/* 列表重排移动过渡（transition-group v-move） */
+.msg-move {
+  transition: transform .32s cubic-bezier(.22,.61,.36,1);
+  will-change: transform;
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .msg-enter-active,
+  .msg-leave-active,
+  .msg-move {
+    transition: none !important;
+  }
+  .msg-enter-from,
+  .msg-enter-to,
+  .msg-leave-to {
+    filter: none !important;
+    transform: none !important;
+  }
 }
 </style>
