@@ -6,6 +6,7 @@ import ModeSwitch from '@/components/common/ModeSwitch.vue'
 import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
 import { watch } from 'vue'
 import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
+import SettingsPanel from '@/components/sidebar/SettingsPanel.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -20,6 +21,12 @@ import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
 const view = ref('start')
 const showSidebar = computed(() => view.value !== 'start')
 const drawerOpen = ref(false)
+const settingsOpen = ref(false)
+
+// 当侧边栏抽屉关闭时，同步关闭右侧“应用设置”面板，保持同层同生命周期
+watch(drawerOpen, (v) => {
+  if (!v) settingsOpen.value = false
+})
 
 // 楼层对话演示消息（占位）
 const messages = reactive([
@@ -78,8 +85,14 @@ function onThemeUpdate(t) {
     <div class="st-body">
       <!-- 侧边栏（仅聊天视图显示） -->
       <SidebarDrawer v-if="showSidebar" v-model="drawerOpen">
-        <SidebarNav />
+        <SidebarNav @openSettings="settingsOpen = true" />
       </SidebarDrawer>
+
+      <!-- 应用设置面板：与侧边栏同层，位于高斯模糊之上 -->
+      <SettingsPanel
+        v-if="showSidebar && settingsOpen"
+        @close="settingsOpen = false"
+      />
 
       <!-- 主内容 -->
       <main data-scope="main" class="st-main">
@@ -162,6 +175,10 @@ function onThemeUpdate(t) {
 
   --st-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
   --st-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* Chat tuning defaults */
+  --st-chat-font-size: 18px;
+  --st-chat-width: 80%; /* 百分比宽度 */
 }
 
 /* 暗色主题 */
@@ -189,6 +206,52 @@ body[data-app="smarttraven"] {
 }
 
 * { box-sizing: border-box; }
+
+/* Live tuning: hide left sidebar and all text, keep only active slider at exact position */
+body.st-live-tuning .sd-drawer,
+body.st-live-tuning .sd-backdrop { display: none !important; }
+
+/* Hide all text elements but keep layout space to prevent position shift */
+body.st-live-tuning [data-scope="settings-view"] .st-settings-header,
+body.st-live-tuning [data-scope="settings-view"] .st-settings-tabs,
+body.st-live-tuning [data-scope="settings-view"] .muted,
+body.st-live-tuning [data-scope="settings-view"] h3 {
+  visibility: hidden !important;
+}
+
+/* Keep number inputs and units visible during tuning */
+body.st-live-tuning [data-scope="settings-view"] .st-control-label {
+  visibility: hidden !important;
+}
+body.st-live-tuning [data-scope="settings-view"] .value-group {
+  visibility: visible !important;
+}
+
+/* Make panel completely transparent - override glass class */
+body.st-live-tuning [data-scope="settings-view"].glass,
+body.st-live-tuning [data-scope="settings-view"] .glass,
+body.st-live-tuning [data-scope="settings-view"] .st-settings {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+body.st-live-tuning [data-scope="settings-view"] .st-settings-body {
+  background: transparent !important;
+}
+
+/* Hide all sliders by default */
+body.st-live-tuning [data-scope="settings-view"] .st-control {
+  visibility: hidden !important;
+}
+
+/* Show only the active slider */
+body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"],
+body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"] {
+  visibility: visible !important;
+}
 </style>
 
 <!-- 局部样式（scoped） -->
@@ -280,7 +343,15 @@ body[data-app="smarttraven"] {
 .st-feature-desc { margin-top: 4px; color: rgba(var(--st-color-text), 0.7); }
 
 /* Chat unified container */
-.st-chat-unified { display: flex; flex-direction: column; gap: 14px; }
+.st-chat-unified {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Constrain overall chat width (includes ModeSwitch + messages) */
+  max-width: var(--st-chat-width, 860px);
+  margin: 0 auto;
+  width: 100%;
+}
 /* ModeSwitch styles moved into src/components/common/ModeSwitch.vue */
 /* Threaded chat preview styles moved into src/components/chat/ThreadedChatPreview.vue */
 

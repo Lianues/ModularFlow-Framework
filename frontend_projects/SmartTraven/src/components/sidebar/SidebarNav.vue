@@ -1,5 +1,6 @@
 <script setup>
 import PreviewCard from './PreviewCard.vue'
+const emit = defineEmits(['openSettings'])
 const items = [
   { key: 'presets', icon: '🧩', title: '预设 Presets', desc: '管理提示词预设与切换' },
   { key: 'worldbook', icon: '📚', title: '世界书 Worldbook', desc: '设定世界观/术语库' },
@@ -9,6 +10,9 @@ const items = [
   { key: 'themes', icon: '🎨', title: '主题 Themes', desc: '外观与主题（导入 Theme Pack）' },
   { key: 'app', icon: '⚙️', title: '应用设置 App Settings', desc: '全局开关与权限' },
 ]
+function onClick(key) {
+  if (key === 'app') emit('openSettings')
+}
 </script>
 
 <template>
@@ -23,6 +27,7 @@ const items = [
         :icon="it.icon"
         :title="it.title"
         :desc="it.desc"
+        @click="onClick(it.key)"
       />
     </div>
 

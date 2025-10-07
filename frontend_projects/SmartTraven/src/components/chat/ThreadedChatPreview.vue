@@ -178,7 +178,7 @@ function nameOf(msg) {
 /* 楼层内容 */
 .floor-content {
   color: rgba(var(--st-color-text), 0.95);
-  font-size: 18px;
+  font-size: var(--st-chat-font-size, 18px);
   line-height: 1.75;
   word-break: break-word;
   white-space: pre-wrap;

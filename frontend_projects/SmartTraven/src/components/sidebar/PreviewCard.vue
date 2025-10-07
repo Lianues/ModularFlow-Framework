@@ -5,6 +5,7 @@ const props = defineProps({
   desc: { type: String, default: '' },
   part: { type: String, default: '' },
 })
+const emit = defineEmits(['click'])
 </script>
 
 <template>
@@ -13,6 +14,7 @@ const props = defineProps({
     class="st-preview-card"
     :data-part="props.part || undefined"
     :title="props.title"
+    @click="emit('click')"
   >
     <div class="st-preview-head">
       <span class="st-icon">{{ props.icon }}</span>
@@ -38,7 +40,7 @@ const props = defineProps({
   border-radius: var(--st-radius-md);
   border: 1px solid rgb(var(--st-border));
   background: rgb(var(--st-surface-2));
-  cursor: default;
+  cursor: pointer;
   transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
 }
 .st-preview-card:hover {
