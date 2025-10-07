@@ -1,53 +1,25 @@
 <script setup>
-import { ref, reactive, computed, defineComponent, h } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import SidebarNav from '@/components/sidebar/SidebarNav.vue'
+import ThemeSwitch from '@/components/common/ThemeSwitch.vue'
+import ModeSwitch from '@/components/common/ModeSwitch.vue'
+import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
+import { watch } from 'vue'
+import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
 
-// 视图状态：单一路径（/）下的多视图切换
-// start → 开始页（不显示侧边栏）
-// threaded → 对话楼层页（显示侧边栏）
-// sandbox → 全局沙盒占位（显示侧边栏）
+/**
+ * 单一路径（/）下的多视图切换
+ * - start：开始页（不显示侧边栏）
+ * - threaded：对话楼层预览（显示侧边栏）
+ * - sandbox：全局沙盒占位（显示侧边栏）
+ * 解耦策略：
+ * - 将侧边栏的显示与否与视图状态解耦，仅关心布尔：showSidebar
+ * - 侧边栏每个项拆分在 SidebarNav 子组件中，避免臃肿
+ * - 模式切换抽象为 ModeSwitch 组件（后续可独立成文件）
+ */
 const view = ref('start')
 const showSidebar = computed(() => view.value !== 'start')
-
-// 侧边栏：7 个配置入口的占位预览（后续接入设置页）
-const SidebarNav = defineComponent({
-  name: 'SidebarNav',
-  setup() {
-    const items = [
-      { key: 'presets', title: '预设 Presets', desc: '管理提示词预设与切换' },
-      { key: 'worldbook', title: '世界书 Worldbook', desc: '设定世界观/术语库' },
-      { key: 'characters', title: '角色卡 Characters', desc: '管理角色信息卡' },
-      { key: 'persona', title: '用户信息 Persona', desc: '配置用户画像与偏好' },
-      { key: 'regex', title: '正则 Regex Rules', desc: '清洗/后处理规则' },
-      { key: 'themes', title: '主题 Themes', desc: '外观与主题（可导入 Theme Pack）' },
-      { key: 'app', title: '应用设置 App Settings', desc: '全局开关与权限' },
-    ]
-    return () =>
-      h('div', { 'data-scope': 'sidebar-nav', class: 'st-sidebar-nav' }, [
-        h('div', { class: 'st-sidebar-title' }, '配置预览'),
-        h(
-          'div',
-          { class: 'st-preview' },
-          items.map((it) =>
-            h(
-              'button',
-              {
-                type: 'button',
-                class: 'st-preview-card',
-                'data-part': `preview-${it.key}`,
-                title: it.title,
-              },
-              [
-                h('div', { class: 'st-preview-title' }, it.title),
-                h('div', { class: 'st-preview-desc' }, it.desc),
-                h('div', { class: 'st-preview-badge' }, '即将可配置'),
-              ],
-            ),
-          ),
-        ),
-        h('div', { class: 'st-sidebar-hint' }, '在聊天页面右侧展示的配置入口（预览占位）'),
-      ])
-  },
-})
+const drawerOpen = ref(false)
 
 // 楼层对话演示消息（占位）
 const messages = reactive([
@@ -55,76 +27,101 @@ const messages = reactive([
   { id: 2, role: 'user', content: '你好，介绍一下你自己？' },
   { id: 3, role: 'assistant', content: '我是一个对话助手，帮助你完成任务。' },
 ])
-const roleClass = (role) =>
-  role === 'user' ? 'st-bubble-user' : role === 'assistant' ? 'st-bubble-ai' : 'st-bubble-system'
+
+/**
+ * ThemeSwitch：UI 表层的明/暗主题切换（后续可挂接到 settings store）
+ * - 通过 data-theme 属性切换 CSS Variables
+ */
+const theme = ref('system')
+function applyTheme(t) {
+  const root = document.documentElement
+  if (t === 'dark') {
+    root.setAttribute('data-theme', 'dark')
+  } else if (t === 'light') {
+    root.setAttribute('data-theme', 'light')
+  } else {
+    root.removeAttribute('data-theme')
+  }
+}
+onMounted(() => applyTheme(theme.value))
+function onThemeUpdate(t) {
+  theme.value = t
+  applyTheme(t)
+}
+
+/**
+ * ModeSwitch：在聊天页面内部切换（对话楼层 / 全局沙盒占位）
+ */
+// ModeSwitch moved to src/components/common/ModeSwitch.vue
 </script>
 
 <template>
   <div data-scope="app-shell" class="st-app-shell">
-    <header class="st-header">
-      <button class="st-brand" @click="view = 'start'">SmartTraven</button>
-      <div class="st-spacer" />
+    <!-- 背景层（渐变 + 噪点） -->
+    <div class="st-bg">
+      <div class="st-gradient" />
+      <div class="st-noise" />
+    </div>
+
+    <!-- 顶部栏（玻璃拟态） -->
+    <header class="st-header glass">
+      <button class="st-brand" @click="view = 'start'">
+        <span class="st-logo">∞</span>
+        SmartTraven
+      </button>
+      <div class="st-actions-top">
+        <ThemeSwitch :theme="theme" @update:theme="onThemeUpdate" />
+      </div>
     </header>
 
+    <!-- 主体 -->
     <div class="st-body">
-      <!-- 仅在聊天相关视图显示侧边栏；开始页面不显示 -->
-      <aside v-if="showSidebar" data-scope="sidebar" class="st-sidebar">
+      <!-- 侧边栏（仅聊天视图显示） -->
+      <SidebarDrawer v-if="showSidebar" v-model="drawerOpen">
         <SidebarNav />
-      </aside>
+      </SidebarDrawer>
 
+      <!-- 主内容 -->
       <main data-scope="main" class="st-main">
-        <!-- 开始页面 -->
+        <!-- 开始视图（无侧边栏） -->
         <section v-if="view === 'start'" data-scope="start-view" class="st-start">
-          <h1 class="st-title">开始使用 SmartTraven</h1>
-          <p class="st-desc">请选择模式进入聊天：</p>
-          <div class="st-actions">
-            <button class="st-btn" @click="view = 'threaded'">对话楼层</button>
-            <button class="st-btn" @click="view = 'sandbox'">全局沙盒（占位）</button>
+          <div class="st-hero glass">
+            <h1 class="st-title">欢迎使用 SmartTraven</h1>
+            <p class="st-desc">一个可对话、可美化、可扩展的前端应用。</p>
+            <div class="st-cta">
+              <button class="st-btn st-primary" @click="view = 'threaded'">开始聊天（对话楼层）</button>
+              <button class="st-btn" @click="view = 'sandbox'">全局沙盒（占位）</button>
+            </div>
+          </div>
+
+          <div class="st-features">
+            <div class="st-feature card">
+              <div class="st-feature-icon">🎯</div>
+              <div class="st-feature-title">解耦架构</div>
+              <div class="st-feature-desc">表现/逻辑/样式分离，主题与布局可热插拔。</div>
+            </div>
+            <div class="st-feature card">
+              <div class="st-feature-icon">🎨</div>
+              <div class="st-feature-title">主题 2.0</div>
+              <div class="st-feature-desc">单文件主题包 + 受控 JS 扩展，安全且强大。</div>
+            </div>
+            <div class="st-feature card">
+              <div class="st-feature-icon">⚡</div>
+              <div class="st-feature-title">静态发布</div>
+              <div class="st-feature-desc">编译产物可直接部署，运行时加载主题与配置。</div>
+            </div>
           </div>
         </section>
 
-        <!-- 聊天页面：顶部模式切换（单页内切换组件） -->
+        <!-- 聊天统一视图 -->
         <section v-else data-scope="chat-unified" class="st-chat-unified">
-          <div class="st-mode-switch">
-            <button
-              class="st-switch-btn"
-              :class="{ active: view === 'threaded' }"
-              @click="view = 'threaded'"
-            >
-              对话楼层
-            </button>
-            <button
-              class="st-switch-btn"
-              :class="{ active: view === 'sandbox' }"
-              @click="view = 'sandbox'"
-            >
-              全局沙盒（占位）
-            </button>
-          </div>
+          <ModeSwitch v-model:modelValue="view" />
 
           <!-- 楼层对话 -->
-          <div v-if="view === 'threaded'" data-scope="chat-threaded" class="st-chat-threaded">
-            <div data-scope="message-list" class="st-msg-list">
-              <div
-                v-for="m in messages"
-                :key="m.id"
-                data-scope="message-item"
-                :data-role="m.role"
-                class="st-msg-item"
-              >
-                <div data-part="bubble" class="st-bubble" :class="roleClass(m.role)">
-                  {{ m.content }}
-                </div>
-              </div>
-            </div>
-            <div class="st-input-row">
-              <input class="st-input" placeholder="输入消息（演示占位）" disabled />
-              <button class="st-send" disabled>发送</button>
-            </div>
-          </div>
+          <ThreadedChatPreview v-if="view === 'threaded'" :messages="messages" />
 
           <!-- 全局沙盒占位 -->
-          <div v-else data-scope="chat-sandbox" class="st-sandbox">
+          <div v-else data-scope="chat-sandbox" class="st-sandbox card">
             <h2 class="st-title">全局沙盒（占位）</h2>
             <p>此页面暂不渲染 iframe，仅为占位示意。</p>
           </div>
@@ -134,49 +131,159 @@ const roleClass = (role) =>
   </div>
 </template>
 
+<!-- 全局：设计令牌 + 主题（不加 scoped，供全局使用） -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  /* 基础语义令牌（RGB 形式，便于调优） */
+  --st-color-bg: 246 248 253;
+  --st-color-text: 18 24 38;
+  --st-surface: 255 255 255;
+  --st-surface-2: 248 249 255;
+  --st-primary: 88 80 236;
+  --st-primary-contrast: 255 255 255;
+  --st-border: 225 228 236;
+  --st-accent: 14 165 233;
+
+  --st-radius-sm: 10px;
+  --st-radius-md: 14px;
+  --st-radius-lg: 18px;
+
+  --st-shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+  --st-shadow-md: 0 8px 30px rgba(0,0,0,0.06);
+  --st-shadow-lg: 0 12px 45px rgba(0,0,0,0.1);
+
+  /* 背景图 Hook（可被主题覆盖） */
+  --st-surface-bg-image: none;
+  --st-surface-bg-size: cover;
+  --st-surface-bg-position: center center;
+  --st-surface-bg-repeat: no-repeat;
+
+  --st-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+  --st-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] {
+  --st-color-bg: 14 17 22;
+  --st-color-text: 232 236 244;
+  --st-surface: 23 27 36;
+  --st-surface-2: 28 34 45;
+  --st-primary: 129 140 248;
+  --st-primary-contrast: 19 23 32;
+  --st-border: 45 54 70;
+  --st-accent: 94 234 212;
+}
+
+/* 页面背景 */
+body[data-app="smarttraven"] {
+  margin: 0;
+  font-family: var(--st-font-body);
+  color: rgb(var(--st-color-text));
+  background-color: rgb(var(--st-color-bg));
+  background-image: var(--st-surface-bg-image);
+  background-size: var(--st-surface-bg-size);
+  background-position: var(--st-surface-bg-position);
+  background-repeat: var(--st-surface-bg-repeat);
+}
+
+* { box-sizing: border-box; }
+</style>
+
+<!-- 局部样式（scoped） -->
 <style scoped>
-.st-app-shell { display: flex; flex-direction: column; height: 100vh; }
-.st-header { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fafafa; }
-.st-brand { font-weight: 600; color: #111827; text-decoration: none; background: transparent; border: none; cursor: pointer; }
-.st-body { display: flex; flex: 1; min-height: 0; }
-.st-sidebar { width: 280px; border-right: 1px solid #e5e7eb; padding: 12px; background: #ffffff; overflow: auto; }
-.st-main { flex: 1; padding: 16px; overflow: auto; }
+/* 背景层 */
+.st-bg {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+}
+.st-gradient {
+  position: absolute; inset: -10%;
+  background:
+    radial-gradient(800px 500px at 20% 10%, rgba(129,140,248,0.22), transparent 60%),
+    radial-gradient(800px 500px at 80% 10%, rgba(56,189,248,0.18), transparent 60%),
+    radial-gradient(800px 500px at 50% 90%, rgba(52,211,153,0.18), transparent 60%);
+  filter: blur(40px);
+}
+.st-noise {
+  position: absolute; inset: 0; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" opacity="0.045"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+  background-size: cover;
+}
 
-/* Sidebar preview */
-.st-sidebar-nav { display: flex; flex-direction: column; gap: 10px; }
-.st-sidebar-title { font-weight: 600; color: #1f2937; }
-.st-preview { display: grid; grid-template-columns: 1fr; gap: 8px; }
-.st-preview-card { display: block; text-align: left; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #e5e7eb; background: #f9fafb; cursor: default; }
-.st-preview-card:hover { background: #f3f4f6; }
-.st-preview-title { font-size: 14px; font-weight: 600; color: #111827; }
-.st-preview-desc { font-size: 12px; color: #6b7280; margin-top: 2px; }
-.st-preview-badge { display: inline-block; margin-top: 6px; padding: 2px 6px; font-size: 11px; color: #4338ca; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 9999px; }
-.st-sidebar-hint { font-size: 12px; color: #6b7280; }
+/* 玻璃拟态与卡片 */
+.glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border: 1px solid rgba(var(--st-border), 0.7);
+  box-shadow: var(--st-shadow-sm);
+}
+[data-theme="dark"] .glass {
+  background: rgba(26, 31, 43, 0.55);
+}
 
-/* Start view */
-.st-start { display: flex; flex-direction: column; gap: 8px; }
-.st-title { margin: 0 0 4px; font-size: 20px; font-weight: 600; color: #111827; }
-.st-desc { margin: 0 0 6px; color: #4b5563; }
-.st-actions { display: flex; gap: 10px; margin-top: 6px; }
-.st-btn { display: inline-block; padding: 10px 12px; background: #111827; color: #fff; border-radius: 8px; text-decoration: none; border: none; cursor: pointer; }
+.card {
+  background: rgb(var(--st-surface));
+  border: 1px solid rgb(var(--st-border));
+  border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow-md);
+}
 
-/* Chat unified / threaded */
-.st-chat-unified { display: flex; flex-direction: column; gap: 12px; }
-.st-mode-switch { display: flex; gap: 8px; }
-.st-switch-btn { padding: 8px 10px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; color: #374151; cursor: pointer; }
-.st-switch-btn.active { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
+/* 布局 */
+.st-app-shell { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+.st-header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+}
+.st-logo { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1)); color: #fff; margin-right: 10px; font-weight: 700; }
+.st-brand {
+  display: inline-flex; align-items: center;
+  gap: 12px; font-weight: 700; font-size: 16px;
+  background: transparent; border: none; color: rgb(var(--st-color-text)); cursor: pointer;
+}
+.st-actions-top { display: flex; align-items: center; gap: 8px; }
 
-.st-chat-threaded { display: flex; flex-direction: column; gap: 12px; }
-.st-msg-list { display: flex; flex-direction: column; gap: 8px; }
-.st-msg-item { display: flex; }
-.st-bubble { padding: 10px 12px; border-radius: 12px; background: #f3f4f6; }
-.st-bubble-user { background: #dbeafe; margin-left: auto; }
-.st-bubble-ai { background: #e5e7eb; }
-.st-bubble-system { background: #fff7ed; border: 1px solid #fed7aa; }
-.st-input-row { display: flex; gap: 8px; }
-.st-input { flex: 1; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; }
-.st-send { padding: 8px 12px; border-radius: 8px; background: #9ca3af; color: #fff; border: none; }
+.st-body { display: flex; flex: 1; min-height: 0; gap: 16px; padding: 16px; }
+.st-sidebar {
+  width: 320px; padding: 14px; border-radius: var(--st-radius-lg);
+  align-self: stretch; overflow: auto;
+}
+.st-main { flex: 1; min-width: 0; }
+
+/* 开始视图（Hero） */
+.st-start { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .st-start { grid-template-columns: 1fr; } }
+
+.st-hero {
+  padding: 24px; border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow-lg);
+}
+.st-title { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
+.st-desc { margin: 0 0 12px; color: rgba(var(--st-color-text), 0.75); }
+.st-cta { display: flex; gap: 12px; margin-top: 6px; }
+.st-btn {
+  appearance: none; border: 1px solid rgb(var(--st-border)); background: rgb(var(--st-surface));
+  padding: 10px 14px; border-radius: var(--st-radius-md); cursor: pointer; color: rgb(var(--st-color-text));
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.st-btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-md); }
+.st-btn.st-primary { background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1)); color: var(--st-primary-contrast); border-color: transparent; }
+.st-btn.st-primary:hover { filter: saturate(1.05); }
+
+.st-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 980px) { .st-features { grid-template-columns: 1fr; } }
+.st-feature { padding: 18px; border-radius: var(--st-radius-lg); }
+.st-feature-icon { font-size: 20px; }
+.st-feature-title { margin-top: 8px; font-weight: 600; }
+.st-feature-desc { margin-top: 4px; color: rgba(var(--st-color-text), 0.7); }
+
+/* Chat unified container */
+.st-chat-unified { display: flex; flex-direction: column; gap: 14px; }
+/* ModeSwitch styles moved into src/components/common/ModeSwitch.vue */
+/* Threaded chat preview styles moved into src/components/chat/ThreadedChatPreview.vue */
 
 /* Sandbox placeholder */
-.st-sandbox { color: #4b5563; }
+.st-sandbox { padding: 18px; color: rgba(var(--st-color-text), 0.85); }
 </style>
