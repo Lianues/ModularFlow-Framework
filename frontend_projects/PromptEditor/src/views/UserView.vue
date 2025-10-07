@@ -83,7 +83,7 @@ function resetAll() {
           >重命名</button>
         </div>
       </div>
-      <p class="text-xs text-black/60">结构参考：backend_projects/SmartTraven/data/persona/用户2.json</p>
+      <p class="text-xs text-black/60">结构参考：backend_projects/SmartTavern/data/persona/用户2.json</p>
       <p v-if="renameError" class="text-xs text-red-600 mt-1">* {{ renameError }}</p>
     </div>
 

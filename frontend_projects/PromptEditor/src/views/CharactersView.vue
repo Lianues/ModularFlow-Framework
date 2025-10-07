@@ -285,7 +285,7 @@ function addRegexRule() {
         </div>
       </div>
       <p class="mt-2 text-xs text-black/60">
-        使用右上角导入按钮选择单个角色卡 JSON（结构参考：backend_projects/SmartTraven/data/characters/*.json）。导出也在右上角完成。
+        使用右上角导入按钮选择单个角色卡 JSON（结构参考：backend_projects/SmartTavern/data/characters/*.json）。导出也在右上角完成。
       </p>
     </div>
 

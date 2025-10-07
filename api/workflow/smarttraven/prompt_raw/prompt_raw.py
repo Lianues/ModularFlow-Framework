@@ -1,5 +1,5 @@
 """
-SmartTraven Prompt RAW Workflow Registration (prompt_raw.py)
+SmartTavern Prompt RAW Workflow Registration (prompt_raw.py)
 
 职责（封装/注册层，仅声明 API，不包含实现逻辑）:
 - 通过 @core.register_api 暴露工作流 API（斜杠路径 + JSON Schema）
@@ -23,7 +23,7 @@ from .impl import assemble_full as _assemble_full
 
 
 @core.register_api(
-    path="smarttraven/prompt_raw/assemble_full",
+    path="smarttavern/prompt_raw/assemble_full",
     name="提示词装配（RAW：prefix + in-chat）",
     description="聚合 framing 与 in-chat，输入为 JSON 对象/数组（非文件路径），输出完整 messages（含 source）",
     input_schema={
@@ -90,7 +90,7 @@ async def assemble_full(
 if __name__ == "__main__":
     # 本文件为工作流 API 的注册封装层，非独立可执行脚本。
     # 请通过 API 网关运行或使用测试脚本进行验证：
-    #   python api/workflow/smarttraven/prompt_raw/test_prompt_workflow.py
+    #   python api/workflow/smarttavern/prompt_raw/test_prompt_workflow.py
     import json
     print(json.dumps({
         "message": "This file registers the RAW workflow API. Please run the API gateway or the test script instead."

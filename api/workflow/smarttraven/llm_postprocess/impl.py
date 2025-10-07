@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SmartTraven LLM Post-Process Workflow Implementation (impl.py)
+SmartTavern LLM Post-Process Workflow Implementation (impl.py)
 
 目标：
 - 调用通用 LLM API（modules/llm_api/chat），支持 stream=true/false
@@ -57,7 +57,7 @@ def _build_assistant_message(text: str) -> Dict[str, Any]:
         "source": {
             "type": "history.assistant",
             "id": "llm_output",
-            "from": "smarttraven.llm_postprocess",
+            "from": "smarttavern.llm_postprocess",
         },
     }
 
@@ -146,7 +146,7 @@ async def _postprocess_single_view(messages: List[Dict[str, Any]],
                                    rules: Any,
                                    variables: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    调用 workflow/smarttraven/prompt_postprocess/apply（单视图=user_view）
+    调用 workflow/smarttavern/prompt_postprocess/apply（单视图=user_view）
     - 传入 variables（宏初始变量，已由 prompt_postprocess 透传给宏模块）
     """
     payload = {
@@ -157,7 +157,7 @@ async def _postprocess_single_view(messages: List[Dict[str, Any]],
     }
     res = await asyncio.to_thread(
         core.call_api,
-        "smarttraven/prompt_postprocess/apply",
+        "smarttavern/prompt_postprocess/apply",
         payload,
         "POST",
         None,

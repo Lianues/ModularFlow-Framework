@@ -1,9 +1,9 @@
 """
-SmartTraven Prompt Workflow Implementation (impl.py)
+SmartTavern Prompt Workflow Implementation (impl.py)
 
 说明:
 - 仅包含实现逻辑，不做 API 注册
-- 输入为 JSON 对象/数组，参考 backend_projects/SmartTraven/data 的结构，但不读取文件
+- 输入为 JSON 对象/数组，参考 backend_projects/SmartTavern/data 的结构，但不读取文件
 """
 from typing import Any, Dict, List, Optional
 import asyncio
@@ -42,8 +42,8 @@ async def assemble_full(
     """
     执行流程
     1) 组合世界书：world_books_doc + character_doc.world_book.entries（若存在）
-    2) 调用 modules/smarttraven/framing_prompt/assemble（HTTP via core.call_api → 线程池）
-    3) 提取 in-chat 预设并调用 modules/smarttraven/in_chat_constructor/construct（HTTP via core.call_api → 线程池）
+    2) 调用 modules/smarttavern/framing_prompt/assemble（HTTP via core.call_api → 线程池）
+    3) 提取 in-chat 预设并调用 modules/smarttavern/in_chat_constructor/construct（HTTP via core.call_api → 线程池）
     4) 拼接与返回
     """
     # 1) 世界书透传（不做扁平与合并；上游负责准备完整 world_books）
@@ -66,7 +66,7 @@ async def assemble_full(
     }
     inchat_res = await asyncio.to_thread(
         core.call_api,
-        "smarttraven/in_chat_constructor/construct",
+        "smarttavern/in_chat_constructor/construct",
         in_chat_payload,
         method="POST",
         namespace="modules",
@@ -83,7 +83,7 @@ async def assemble_full(
     }
     framing_res = await asyncio.to_thread(
         core.call_api,
-        "smarttraven/framing_prompt/assemble",
+        "smarttavern/framing_prompt/assemble",
         framing_payload,
         method="POST",
         namespace="modules",

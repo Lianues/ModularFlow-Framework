@@ -42,7 +42,7 @@ API 一览
   - totals: { modules: number, workflow: number }
 
 输出字段说明
-- relative_path: string 相对 api/modules 或 api/workflow 的目录，比如 "SmartTraven/in_chat_constructor"
+- relative_path: string 相对 api/modules 或 api/workflow 的目录，比如 "SmartTavern/in_chat_constructor"
 - abs_path: string 绝对路径
 - api_count: number 该目录下注册 API 的数量
 - name: string 目录名（最后一段）
@@ -52,7 +52,7 @@ API 一览
 - 注册函数： [python.delete_api_folder()](api/modules/api_files/api_files.py:192)
 - 输入（JSON）：
   - namespace: "modules" | "workflow"
-  - relative_path: string 相对路径（如 "SmartTraven/in_chat_constructor"）
+  - relative_path: string 相对路径（如 "SmartTavern/in_chat_constructor"）
 - 输出（JSON）：
   - success: boolean
   - message?: string
@@ -105,7 +105,7 @@ res = core.call_api("api_files/list_folders", None, method="GET", namespace="mod
 
 - 删除目录（危险）
 ```python
-payload = {"namespace":"modules","relative_path":"SmartTraven/in_chat_constructor"}
+payload = {"namespace":"modules","relative_path":"SmartTavern/in_chat_constructor"}
 res = core.call_api("api_files/delete_folder", payload, method="POST", namespace="modules")
 ```
 

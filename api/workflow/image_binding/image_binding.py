@@ -37,7 +37,7 @@ import core
 def api_embed_files_to_image(image_path: str, file_paths: List[str], output_path: Optional[str] = None) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path, "file_paths": file_paths, "output_path": output_path}
-        result = core.call_api("smarttraven/image_binding/embed_files_to_image", payload, method="POST", namespace="modules")
+        result = core.call_api("smarttavern/image_binding/embed_files_to_image", payload, method="POST", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"嵌入文件失败: {str(e)}"}
@@ -69,7 +69,7 @@ def api_embed_files_to_image(image_path: str, file_paths: List[str], output_path
 def api_extract_files_from_image(image_path: str, output_dir: Optional[str] = None, filter_types: Optional[List[str]] = None) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path, "output_dir": output_dir, "filter_types": filter_types}
-        result = core.call_api("smarttraven/image_binding/extract_files_from_image", payload, method="POST", namespace="modules")
+        result = core.call_api("smarttavern/image_binding/extract_files_from_image", payload, method="POST", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"提取文件失败: {str(e)}", "files": []}
@@ -97,7 +97,7 @@ def api_extract_files_from_image(image_path: str, output_dir: Optional[str] = No
 def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path}
-        result = core.call_api("smarttraven/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
+        result = core.call_api("smarttavern/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"获取文件信息失败: {str(e)}", "files_info": []}
@@ -125,7 +125,7 @@ def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
 def api_is_image_with_embedded_files(image_path: str) -> Dict[str, Any]:
     try:
         payload = {"image_path": image_path}
-        result = core.call_api("smarttraven/image_binding/is_image_with_embedded_files", payload, method="GET", namespace="modules")
+        result = core.call_api("smarttavern/image_binding/is_image_with_embedded_files", payload, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "has_embedded_files": False, "message": f"检查图片失败: {str(e)}"}
@@ -148,7 +148,7 @@ def api_is_image_with_embedded_files(image_path: str) -> Dict[str, Any]:
 )
 def api_get_file_type_tags() -> Dict[str, Any]:
     try:
-        result = core.call_api("smarttraven/image_binding/get_file_type_tags", None, method="GET", namespace="modules")
+        result = core.call_api("smarttavern/image_binding/get_file_type_tags", None, method="GET", namespace="modules")
         return result if isinstance(result, dict) else {"success": False, "message": "接口返回非字典", "result": result}
     except Exception as e:
         return {"success": False, "message": f"获取文件类型标签失败: {str(e)}"}

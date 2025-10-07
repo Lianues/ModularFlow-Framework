@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SmartTraven LLM Post-Process Workflow Registration (llm_postprocess.py)
+SmartTavern LLM Post-Process Workflow Registration (llm_postprocess.py)
 
 职责（封装/注册层，仅声明 API，不包含实现逻辑）:
 - 通过 @core.register_api 暴露工作流 API（斜杠路径 + JSON Schema）
@@ -11,7 +11,7 @@ SmartTraven LLM Post-Process Workflow Registration (llm_postprocess.py)
 - 调用通用 LLM API（modules/llm_api/chat，支持 stream=true/false）
 - 流式场景：在 SSE 完整结束后聚合文本，再进入后处理
 - 将 LLM 的最终回答追加为一条 assistant 消息
-- 固定以 user_view 调用单视图后处理工作流 smarttraven/prompt_postprocess/apply
+- 固定以 user_view 调用单视图后处理工作流 smarttavern/prompt_postprocess/apply
 - 宏阶段可接收上游传入的 variables（已扩展支持）
 
 输入：
@@ -79,7 +79,7 @@ _llm_config_schema: Dict[str, Any] = {
 
 
 @core.register_api(
-    path="smarttraven/llm_postprocess/apply",
+    path="smarttavern/llm_postprocess/apply",
     name="LLM 调用 + 单视图后处理（user_view）",
     description=(
         "先调用 llm_api/chat（支持 stream），在流式结束后聚合文本，"

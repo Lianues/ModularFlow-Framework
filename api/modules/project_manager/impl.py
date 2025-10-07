@@ -1352,7 +1352,7 @@ def embed_zip_into_image(image, archive):
         # 通过本地客户端调用模块API进行嵌入
         output_path = os.path.join(temp_dir, f"{os.path.splitext(img_name)[0]}_embedded.png")
         result = core.call_api(
-            "smarttraven/image_binding/embed_files_to_image",
+            "smarttavern/image_binding/embed_files_to_image",
             {"image_path": image_path, "file_paths": [archive_path], "output_path": output_path},
             method="POST",
             namespace="modules"
@@ -1408,7 +1408,7 @@ def extract_zip_from_image(image):
 
         # 通过本地客户端调用模块API进行提取
         result = core.call_api(
-            "smarttraven/image_binding/extract_files_from_image",
+            "smarttavern/image_binding/extract_files_from_image",
             {"image_path": image_path, "output_dir": temp_dir},
             method="POST",
             namespace="modules"
@@ -1470,7 +1470,7 @@ def import_project_from_image(image):
 
         # 通过本地客户端调用模块API进行反嵌入提取
         result = core.call_api(
-            "smarttraven/image_binding/extract_files_from_image",
+            "smarttavern/image_binding/extract_files_from_image",
             {"image_path": image_path, "output_dir": temp_dir},
             method="POST",
             namespace="modules"
@@ -1670,7 +1670,7 @@ def import_backend_project_from_image(image):
 
         # 反嵌入提取
         result = core.call_api(
-            "smarttraven/image_binding/extract_files_from_image",
+            "smarttavern/image_binding/extract_files_from_image",
             {"image_path": image_path, "output_dir": temp_dir},
             method="POST",
             namespace="modules"

@@ -132,7 +132,7 @@
 
 - 禁止直接 `import` 其他模块的实现层（impl）；模块间调用必须走“API 封装层（api/modules/*）或工作流层（api/workflow/*）”。
 - 调用示例（工作流转发模块 API）：
-  - `core.call_api("smarttraven/image_binding/get_embedded_files_info", {"image_path": img}, method="GET", namespace="modules")`
+  - `core.call_api("smarttavern/image_binding/get_embedded_files_info", {"image_path": img}, method="GET", namespace="modules")`
     见 [python.api_get_embedded_files_info()](api/workflow/image_binding/image_binding.py:98)
 
 原因：
@@ -208,7 +208,7 @@ resp = core.call_api("project_manager/start_project", {"project_name": "ProjectM
 - 仅在 `api/modules/*` 与 `api/workflow/*` 注册对外 API，统一使用 [python.decorator(core.register_api)](core/__init__.py:22)。
 - 内部实现文件（impl.py）仅用于具体逻辑，不直接对外暴露；统一由封装层暴露 API。
 - 参考：
-  - 模块封装层： [python.image_binding.image_binding.py](api/modules/SmartTraven/image_binding/image_binding.py:1)
+  - 模块封装层： [python.image_binding.image_binding.py](api/modules/SmartTavern/image_binding/image_binding.py:1)
   - 工作流封装层： [python.workflow.image_binding.py](api/workflow/image_binding/image_binding.py:1)
   - 项目管理封装层： [python.project_manager.project_manager.py](api/modules/project_manager/project_manager.py:1)
   - 内部实现（供封装层调用）： [python.project_manager.impl.py](api/modules/project_manager/impl.py:1)

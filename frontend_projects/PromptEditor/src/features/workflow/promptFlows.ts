@@ -19,7 +19,7 @@ export async function runDialogView(rawMessages: PromptRawMessage[]): Promise<{ 
     view: 'user_view',
     variables: {}, // 按要求传入空对象
   }
-  const res = await postWorkflow('smarttraven/prompt_postprocess/apply', body)
+  const res = await postWorkflow('smarttavern/prompt_postprocess/apply', body)
   if (!res || typeof res !== 'object' || !Array.isArray(res.message)) {
     throw new Error('后端返回格式不正确：缺少 message 数组')
   }
@@ -53,7 +53,7 @@ export async function runPreflightView(userView: { message: PromptRawMessage[]; 
     view: 'assistant_view',
     variables: variablesIn,
   }
-  const res = await postWorkflow('smarttraven/prompt_postprocess/apply', body)
+  const res = await postWorkflow('smarttavern/prompt_postprocess/apply', body)
   if (!res || typeof res !== 'object' || !Array.isArray(res.message)) {
     throw new Error('后端返回格式不正确：缺少 message 数组')
   }

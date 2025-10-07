@@ -1,25 +1,25 @@
-# SmartTraven.llm_postprocess 工作流说明
+# SmartTavern.llm_postprocess 工作流说明
 
-位置：api/workflow/smarttraven/llm_postprocess/
+位置：api/workflow/smarttavern/llm_postprocess/
 
 本工作流完成“调用通用 LLM → 聚合模型回答 → 单视图后处理（正则 + 宏）”的一条龙流程，适用于需要在服务端统一消费流式/非流式 LLM 响应、并在最终阶段再做一次性正则与宏处理的场景。
 
 相关代码
-- 注册封装层： [filename](api/workflow/smarttraven/llm_postprocess/llm_postprocess.py)
-- 实现层（核心逻辑）： [filename](api/workflow/smarttraven/llm_postprocess/impl.py)
+- 注册封装层： [filename](api/workflow/smarttavern/llm_postprocess/llm_postprocess.py)
+- 实现层（核心逻辑）： [filename](api/workflow/smarttavern/llm_postprocess/impl.py)
 - 依赖模块/工作流
   - 通用 LLM 调用模块： [filename](api/modules/llm_api/llm_api.py)
-  - 单视图后处理工作流： [filename](api/workflow/smarttraven/prompt_postprocess/prompt_postprocess.py)
+  - 单视图后处理工作流： [filename](api/workflow/smarttavern/prompt_postprocess/prompt_postprocess.py)
 
 API 列表
-- smarttraven/llm_postprocess/apply（LLM 调用 + 单视图后处理）
+- smarttavern/llm_postprocess/apply（LLM 调用 + 单视图后处理）
 
 功能概述
 - 调用通用 LLM API（modules/llm_api/chat），支持 stream=true/false。
   - 当 stream=true：按照 SSE（text/event-stream）协议逐帧接收，在流完全结束后聚合完整文本。
   - 当 stream=false：一次性 JSON 返回完整文本。
 - 将 LLM 最终回答组装为一条 assistant 消息（附带 source.type="history.assistant"），追加到原始 messages 尾部，便于后续正则按 targets 命中。
-- 固定以 user_view 调用单视图后处理工作流 smarttraven/prompt_postprocess/apply，流水线为：
+- 固定以 user_view 调用单视图后处理工作流 smarttavern/prompt_postprocess/apply，流水线为：
   - 宏前正则（before_macro）
   - 宏处理（始终执行，仅替换 content）；支持传入 variables 作为宏初始变量
   - 宏后正则（after_macro）
@@ -49,14 +49,14 @@ API 列表
 2) 组装消息
    - 将最终 assistant 文本构造成一条消息（带 source.type="history.assistant"），追加到 llm.messages 尾部，形成 messages_for_postprocess
 3) 单视图后处理（user_view）
-   - POST /api/workflow/smarttraven/prompt_postprocess/apply
+   - POST /api/workflow/smarttavern/prompt_postprocess/apply
    - 入参：{messages: messages_for_postprocess, rules, view:"user_view", variables}
 4) 返回
    - 直接返回 prompt_postprocess 的输出结构 {"message":[...], "variables":{initial, final}}
 
 请求示例（非流式）
 ```bash
-curl -X POST "http://localhost:8050/api/workflow/smarttraven/llm_postprocess/apply" \
+curl -X POST "http://localhost:8050/api/workflow/smarttavern/llm_postprocess/apply" \
   -H "Content-Type: application/json" \
   -d '{
     "llm": {
@@ -94,7 +94,7 @@ curl -X POST "http://localhost:8050/api/workflow/smarttraven/llm_postprocess/app
   "message": [
     {"role":"system","content":"你是个有帮助的助手"},
     {"role":"user","content":"请使用变量：夜晚的海风与路灯"},
-    {"role":"assistant","content":"……（LLM 回答，经宏/正则处理后）……","source":{"type":"history.assistant","id":"llm_output","from":"smarttraven.llm_postprocess"}}
+    {"role":"assistant","content":"……（LLM 回答，经宏/正则处理后）……","source":{"type":"history.assistant","id":"llm_output","from":"smarttavern.llm_postprocess"}}
   ],
   "variables": {
     "initial": {"topic":"夜晚的海风与路灯"},
@@ -112,7 +112,7 @@ curl -X POST "http://localhost:8050/api/workflow/smarttraven/llm_postprocess/app
 
 与其他模块关系
 - llm_api/chat：统一 LLM 能力，支持多厂商与 SSE；路径 /api/modules/llm_api/chat
-- prompt_postprocess/apply：单视图正则+宏流水线；路径 /api/workflow/smarttraven/prompt_postprocess/apply
+- prompt_postprocess/apply：单视图正则+宏流水线；路径 /api/workflow/smarttavern/prompt_postprocess/apply
 - regex_replace/macro：分别提供正则与宏能力；本工作流通过 prompt_postprocess 进行编排调用
 
 边界与错误处理

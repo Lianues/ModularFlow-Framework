@@ -11,7 +11,7 @@
 - API 网关模块（核心）：[core/api_gateway.py](core/api_gateway.py)
 - Web 服务器模块：[api/modules/web_server/web_server.py](api/modules/web_server/web_server.py)
 - 项目管理器主模块：[api/modules/project_manager/impl.py](api/modules/project_manager/impl.py)
-- 图片绑定模块：[api/modules/SmartTraven/image_binding/impl.py](api/modules/SmartTraven/image_binding/impl.py)
+- 图片绑定模块：[api/modules/SmartTavern/image_binding/impl.py](api/modules/SmartTavern/image_binding/impl.py)
 - 项目管理前端（静态站点）：[frontend_projects/ProjectManager/index.html](frontend_projects/ProjectManager/index.html)、[frontend_projects/ProjectManager/js/api.js](frontend_projects/ProjectManager/js/api.js)、[frontend_projects/ProjectManager/js/main.js](frontend_projects/ProjectManager/js/main.js)
 
 示例 Next.js 项目（可由管理面板管理并示范导入/导出流程）：
@@ -67,10 +67,10 @@ UI 风格规范：
 - [project_manager.import_project()](api/modules/project_manager/impl.py:884)
 
 图片绑定实现要点：
-- 嵌入： [api/modules/SmartTraven/image_binding/impl.py](api/modules/SmartTraven/image_binding/impl.py)
-- 提取： [api/modules/SmartTraven/image_binding/impl.py](api/modules/SmartTraven/image_binding/impl.py)
-- 嵌入检测： [api/modules/SmartTraven/image_binding/impl.py](api/modules/SmartTraven/image_binding/impl.py)
-- 取消大小限制变量（已设为无限）：[api/modules/SmartTraven/image_binding/variables.py](api/modules/SmartTraven/image_binding/variables.py)
+- 嵌入： [api/modules/SmartTavern/image_binding/impl.py](api/modules/SmartTavern/image_binding/impl.py)
+- 提取： [api/modules/SmartTavern/image_binding/impl.py](api/modules/SmartTavern/image_binding/impl.py)
+- 嵌入检测： [api/modules/SmartTavern/image_binding/impl.py](api/modules/SmartTavern/image_binding/impl.py)
+- 取消大小限制变量（已设为无限）：[api/modules/SmartTavern/image_binding/variables.py](api/modules/SmartTavern/image_binding/variables.py)
 
 ---
 
@@ -87,8 +87,8 @@ UI 风格规范：
   - API 封装：[frontend_projects/ProjectManager/js/api.js](frontend_projects/ProjectManager/js/api.js)
 - 示例 Next.js 项目：[frontend_projects/manosaba_ai/](frontend_projects/manosaba_ai)
 - 图片绑定模块：
-  - 实现：[api/modules/SmartTraven/image_binding/impl.py](api/modules/SmartTraven/image_binding/impl.py)
-  - 变量（包含 PNG 块名与大小限制设置）：[api/modules/SmartTraven/image_binding/variables.py](api/modules/SmartTraven/image_binding/variables.py)
+  - 实现：[api/modules/SmartTavern/image_binding/impl.py](api/modules/SmartTavern/image_binding/impl.py)
+  - 变量（包含 PNG 块名与大小限制设置）：[api/modules/SmartTavern/image_binding/variables.py](api/modules/SmartTavern/image_binding/variables.py)
 - 导出文件目录（图片提取默认输出）：exports/
 
 ---
@@ -196,7 +196,7 @@ API 文档（Swagger UI）地址：
    - 选择前端项目压缩包（.zip）与一张 PNG 图片（.png）
    - 提交后生成“嵌入后的 PNG”，浏览器自动下载
    - 背后调用：[project_manager.embed_zip_into_image()](api/modules/project_manager/impl.py:1201)
-   - 注意：已取消大小上限（[MAX_FILE_SIZE](api/modules/SmartTraven/image_binding/variables.py:18) 为无限），但请注意文件体积
+   - 注意：已取消大小上限（[MAX_FILE_SIZE](api/modules/SmartTavern/image_binding/variables.py:18) 为无限），但请注意文件体积
 
 2) 从图片导入项目（自动反嵌入）
    - 打开管理面板，点击“从图片导入”，选择嵌入了 zip 的 PNG
@@ -211,7 +211,7 @@ API 文档（Swagger UI）地址：
    - 背后调用：[project_manager.import_project()](api/modules/project_manager/impl.py:884)
 
 4) 手动提取图片内文件（仅查看/提取）
-   - 背后实现： [api/modules/SmartTraven/image_binding/impl.py](api/modules/SmartTraven/image_binding/impl.py)
+   - 背后实现： [api/modules/SmartTavern/image_binding/impl.py](api/modules/SmartTavern/image_binding/impl.py)
    - API 函数： [project_manager.extract_zip_from_image()](api/modules/project_manager/impl.py:1268)
 
 打包 zip 提示：
@@ -341,13 +341,13 @@ npm run dev
 
 ### 示例：模块级 API（image_binding）
 
-在 [python.image_binding.py](api/modules/SmartTraven/image_binding/image_binding.py:1) 内注册模块对外 API，示例（节选）：
+在 [python.image_binding.py](api/modules/SmartTavern/image_binding/image_binding.py:1) 内注册模块对外 API，示例（节选）：
 
 ```python
 @register_api(
     name="嵌入文件到图片",
     description="将文件嵌入到PNG图片中",
-    path="smarttraven/image_binding/embed_files_to_image",
+    path="smarttavern/image_binding/embed_files_to_image",
     input_schema={
         "type": "object",
         "properties": {
@@ -373,7 +373,7 @@ def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Op
 ```
 
 对外路由为：
-- POST /api/modules/smarttraven/image_binding/embed_files_to_image
+- POST /api/modules/smarttavern/image_binding/embed_files_to_image
 
 ### 示例：工作流级 API（转发模块 API）
 
@@ -401,7 +401,7 @@ def embed_files_to_image(image_path: str, file_paths: List[str], output_path: Op
 )
 def api_get_embedded_files_info(image_path: str) -> Dict[str, Any]:
     payload = {"image_path": image_path}
-    return call_api("smarttraven/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
+    return call_api("smarttavern/image_binding/get_embedded_files_info", payload, method="GET", namespace="modules")
 ```
 
 对外路由为：
@@ -509,7 +509,7 @@ for i, api in enumerate(result.get("apis", [])[:5], start=1):
 2) 模块之间互相调用必须走 API 接口
 - 严禁直接 `import` 其他模块的实现（impl）；必须通过统一 API 封装层或工作流层发起调用。
 - 调用示例（工作流转发模块 API）：
-  `core.call_api("smarttraven/image_binding/get_embedded_files_info", {"image_path": img}, method="GET", namespace="modules")` 见 [python.api_get_embedded_files_info()](api/workflow/image_binding/image_binding.py:98)
+  `core.call_api("smarttavern/image_binding/get_embedded_files_info", {"image_path": img}, method="GET", namespace="modules")` 见 [python.api_get_embedded_files_info()](api/workflow/image_binding/image_binding.py:98)
 
 3) 本地客户端（SDK）说明
 - SDK 提供统一 HTTP 调用，适配 modules/workflow 两个命名空间：
@@ -534,7 +534,7 @@ for i, api in enumerate(result.get("apis", [])[:5], start=1):
 - api/modules/* 与 api/workflow/* 是唯一对外暴露层，统一使用 [python.decorator(core.register_api)](core/__init__.py:22)。
 - 内部实现文件（impl.py）仅用于具体逻辑，不再直接对外注册函数；统一由封装层暴露 API。
 - 示例：
-  - 模块封装层： [python.image_binding.image_binding.py](api/modules/SmartTraven/image_binding/image_binding.py:1)
+  - 模块封装层： [python.image_binding.image_binding.py](api/modules/SmartTavern/image_binding/image_binding.py:1)
   - 工作流封装层： [python.workflow.image_binding.py](api/workflow/image_binding/image_binding.py:1)
   - 项目管理封装层： [python.project_manager.project_manager.py](api/modules/project_manager/project_manager.py:1)
   - 内部实现（供封装层调用）： [python.project_manager.impl.py](api/modules/project_manager/impl.py:1)

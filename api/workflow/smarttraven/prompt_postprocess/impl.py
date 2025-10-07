@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SmartTraven Prompt Post-Process Workflow Implementation (impl.py)
+SmartTavern Prompt Post-Process Workflow Implementation (impl.py)
 
 职责（单视图）：
 - 基于一份 canonical 原始 messages，仅针对入参 view 执行：
   before_macro → macro → after_macro
-- 正则调用统一使用 modules/smarttraven/regex_replace 单视图 API（apply_messages）
-- 宏调用统一使用 modules/smarttraven/macro/process（仅替换 content，保留 source）
+- 正则调用统一使用 modules/smarttavern/regex_replace 单视图 API（apply_messages）
+- 宏调用统一使用 modules/smarttavern/macro/process（仅替换 content，保留 source）
 - 输出：{"message":[...], "variables": {initial, final}}
 """
 
@@ -55,7 +55,7 @@ async def _regex_apply_messages(
 ) -> List[Dict[str, Any]]:
     """
     单视图正则处理（messages）
-    - 调用 modules/smarttraven/regex_replace/apply_messages
+    - 调用 modules/smarttavern/regex_replace/apply_messages
     - 返回处理后的 messages；失败时返回原 messages
     """
     _dbg(f"regex.call.{view}.{placement}.in_first", _first_content(messages))
@@ -68,7 +68,7 @@ async def _regex_apply_messages(
     try:
         res = await asyncio.to_thread(
             core.call_api,
-            "smarttraven/regex_replace/apply_messages",
+            "smarttavern/regex_replace/apply_messages",
             payload,
             "POST",
             None,
@@ -88,7 +88,7 @@ async def _macro_process_messages(
     variables: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
-    调用 modules/smarttraven/macro/process
+    调用 modules/smarttavern/macro/process
     - 返回 (messages, variables)；失败时返回 (原 messages, {})
     """
     payload = {
@@ -98,7 +98,7 @@ async def _macro_process_messages(
     try:
         res = await asyncio.to_thread(
             core.call_api,
-            "smarttraven/macro/process",
+            "smarttavern/macro/process",
             payload,
             "POST",
             None,

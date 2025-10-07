@@ -2,7 +2,7 @@
 
 位置：api/workflow/image_binding/
 
-本工作流提供对 SmartTraven.image_binding 模块的一组“转发式”API封装，遵循斜杠路径与 JSON Schema 规范。它不直接实现业务逻辑，而是将请求适配并转发至模块层 API（smarttraven/image_binding/*），统一对外暴露工作流命名空间的调用入口。
+本工作流提供对 SmartTavern.image_binding 模块的一组“转发式”API封装，遵循斜杠路径与 JSON Schema 规范。它不直接实现业务逻辑，而是将请求适配并转发至模块层 API（smarttavern/image_binding/*），统一对外暴露工作流命名空间的调用入口。
 
 相关代码
 - 工作流封装（注册层）：[python.image_binding.image_binding.py](api/workflow/image_binding/image_binding.py:1)
@@ -15,13 +15,13 @@
 - 空模块初始化文件：[filename](api/workflow/image_binding/__init__.py)
 
 依赖的模块 API（被动转发目标）
-- 模块文档参见：[filename](api/modules/SmartTraven/image_binding/README.md)
+- 模块文档参见：[filename](api/modules/SmartTavern/image_binding/README.md)
 - 目标 API 路径（modules 命名空间）：
-  - smarttraven/image_binding/embed_files_to_image
-  - smarttraven/image_binding/extract_files_from_image
-  - smarttraven/image_binding/get_embedded_files_info
-  - smarttraven/image_binding/is_image_with_embedded_files
-  - smarttraven/image_binding/get_file_type_tags
+  - smarttavern/image_binding/embed_files_to_image
+  - smarttavern/image_binding/extract_files_from_image
+  - smarttavern/image_binding/get_embedded_files_info
+  - smarttavern/image_binding/is_image_with_embedded_files
+  - smarttavern/image_binding/get_file_type_tags
 
 API 列表（workflow 命名空间）
 
@@ -97,8 +97,8 @@ res = core.call_api(
   {
     "image_path": "assets/cover.png",
     "file_paths": [
-      "backend_projects/SmartTraven/data/world_books/参考用main_world.json",
-      "backend_projects/SmartTraven/data/presets/Default.json"
+      "backend_projects/SmartTavern/data/world_books/参考用main_world.json",
+      "backend_projects/SmartTavern/data/presets/Default.json"
     ],
     "output_path": "assets/cover_embedded.png"
   },
@@ -115,9 +115,9 @@ res = core.call_api(
   {
     "image_path": "shared/SmartTavern/测试图片.png",
     "test_files": [
-      "backend_projects/SmartTraven/data/world_books/参考用main_world.json",
-      "backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json",
-      "backend_projects/SmartTraven/data/presets/Default.json"
+      "backend_projects/SmartTavern/data/world_books/参考用main_world.json",
+      "backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json",
+      "backend_projects/SmartTavern/data/presets/Default.json"
     ]
   },
   method="POST",
@@ -134,4 +134,4 @@ res = core.call_api(
 
 参考
 - 工作流封装： [python.image_binding.image_binding.py](api/workflow/image_binding/image_binding.py:1)
-- 模块实现文档： [filename](api/modules/SmartTraven/image_binding/README.md)
+- 模块实现文档： [filename](api/modules/SmartTavern/image_binding/README.md)

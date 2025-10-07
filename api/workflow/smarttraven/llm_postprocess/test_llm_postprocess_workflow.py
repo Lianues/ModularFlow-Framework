@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Test: smarttraven/llm_postprocess/apply with mocked LLM and downstream
+Test: smarttavern/llm_postprocess/apply with mocked LLM and downstream
 - 不启动API网关；通过 monkeypatch core.call_api 来伪造：
   • modules/llm_api/chat → 返回非流式JSON或流式SSE文本
-  • workflow/smarttraven/prompt_postprocess/apply → 直接在测试里做最小模拟（变量替换 + 简单去标签），检验：
+  • workflow/smarttavern/prompt_postprocess/apply → 直接在测试里做最小模拟（变量替换 + 简单去标签），检验：
       - view 固定为 user_view
       - variables 透传
       - LLM assistant 消息已被追加
 运行:
-  python -u api/workflow/smarttraven/llm_postprocess/test_llm_postprocess_workflow.py
+  python -u api/workflow/smarttavern/llm_postprocess/test_llm_postprocess_workflow.py
 """
 import asyncio
 import json
@@ -24,7 +24,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import core  # noqa: E402
-from api.workflow.smarttraven.llm_postprocess.impl import apply as llm_apply
+from api.workflow.smarttavern.llm_postprocess.impl import apply as llm_apply
 
 
 def _strip_xml(text: str) -> str:
@@ -102,7 +102,7 @@ def _make_fake_call_api(streaming: bool, variables_expected: Optional[Dict[str, 
             )
             return sse
 
-        if name == "smarttraven/prompt_postprocess/apply":
+        if name == "smarttavern/prompt_postprocess/apply":
             # 断言 variables 已透传
             if variables_expected is not None:
                 v = (payload or {}).get("variables") or {}

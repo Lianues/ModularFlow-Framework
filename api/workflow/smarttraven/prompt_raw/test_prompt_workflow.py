@@ -36,9 +36,9 @@ def main():
     _ensure_gateway()
 
     # 准备 data/ 下的示例文档（按工作流契约直接传文档 JSON，而非文件路径）
-    presets_doc = _read_json("backend_projects/SmartTraven/data/presets/Default.json")
-    world_books_doc = _read_json("backend_projects/SmartTraven/data/world_books/参考用main_world.json")
-    conversation_doc = _read_json("backend_projects/SmartTraven/data/conversations/111.json")
+    presets_doc = _read_json("backend_projects/SmartTavern/data/presets/Default.json")
+    world_books_doc = _read_json("backend_projects/SmartTavern/data/world_books/参考用main_world.json")
+    conversation_doc = _read_json("backend_projects/SmartTavern/data/conversations/111.json")
 
     payload = {
         "presets": presets_doc,
@@ -48,7 +48,7 @@ def main():
 
     # 调用工作流 API（命名空间 workflow）
     used_fallback = False
-    res = core.call_api("smarttraven/prompt_raw/assemble_full", payload, method="POST", namespace="workflow")
+    res = core.call_api("smarttavern/prompt_raw/assemble_full", payload, method="POST", namespace="workflow")
     if not isinstance(res, dict) or "messages" not in res:
         used_fallback = True
         # 回退方案：手动按“framing → in-chat”组装，避免工作流聚合层异常导致测试失败
@@ -63,8 +63,8 @@ def main():
             "presets_in_chat": _split_inchat(presets_doc),
             "world_books": world_books_doc
         }
-        ic = core.call_api("smarttraven/in_chat_constructor/construct", inchat_payload, method="POST", namespace="modules")
-        fr = core.call_api("smarttraven/framing_prompt/assemble", {
+        ic = core.call_api("smarttavern/in_chat_constructor/construct", inchat_payload, method="POST", namespace="modules")
+        fr = core.call_api("smarttavern/framing_prompt/assemble", {
             "history": {"messages": (ic.get("messages", []) if isinstance(ic, dict) else [])},
             "world_books": world_books_doc,
             "presets_doc": presets_doc

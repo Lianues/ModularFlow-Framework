@@ -1,1 +1,1 @@
-# Package initializer for smarttraven.prompt_postprocess workflow
+# Package initializer for smarttavern.prompt_postprocess workflow

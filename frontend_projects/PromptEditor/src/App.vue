@@ -223,7 +223,7 @@ function handleImport() {
 
     // 重要：不进行文件类型检查。严格按 targetTab 分流导入与入库。
 
-    // 角色卡（SmartTraven 角色卡结构）
+    // 角色卡（SmartTavern 角色卡结构）
     if (targetTab === 'characters') {
       try {
         characterStore.setCharacter(json, file.name)

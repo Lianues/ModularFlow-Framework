@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SmartTraven Prompt Post-Process Workflow Registration (prompt_postprocess.py)
+SmartTavern Prompt Post-Process Workflow Registration (prompt_postprocess.py)
 
 职责（封装/注册层，仅声明 API，不包含实现逻辑）:
 - 通过 @core.register_api 暴露工作流 API（斜杠路径 + JSON Schema）
@@ -23,7 +23,7 @@ from .impl import apply as _apply
 
 
 @core.register_api(
-    path="smarttraven/prompt_postprocess/apply",
+    path="smarttavern/prompt_postprocess/apply",
     name="提示词后处理（单视图：正则 + 宏）",
     description=(
         "根据入参 view，仅对该视图执行流水线："

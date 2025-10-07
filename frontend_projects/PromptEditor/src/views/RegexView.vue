@@ -92,7 +92,7 @@ async function addRule() {
   ;(window as any).lucide?.createIcons?.()
 }
 
-// 导入/导出（数组 JSON，参考 backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json）
+// 导入/导出（数组 JSON，参考 backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json）
 const fileInput = ref<HTMLInputElement | null>(null)
 
 function triggerImport() {
@@ -107,7 +107,7 @@ async function onImportChange(e: Event) {
     const text = await file.text()
     const json = JSON.parse(text)
     if (!Array.isArray(json)) {
-      error.value = '文件内容应为数组（参考 backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json）'
+      error.value = '文件内容应为数组（参考 backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json）'
       input.value = ''
       return
     }
@@ -213,7 +213,7 @@ function onDragEnd() { dragging.value = null; dragOverId.value = null }
           >重命名</button>
         </div>
       </div>
-      <p class="mt-2 text-xs text-black/60">导入/导出参考：backend_projects/SmartTraven/data/regex_rules/remove_xml_tags.json</p>
+      <p class="mt-2 text-xs text-black/60">导入/导出参考：backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json</p>
       <p v-if="renameError" class="text-xs text-red-600 mt-1">* {{ renameError }}</p>
     </div>
 

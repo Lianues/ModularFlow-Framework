@@ -1,0 +1,420 @@
+<script setup>
+import { ref, reactive, computed, onMounted } from 'vue'
+import SidebarNav from '@/components/sidebar/SidebarNav.vue'
+import ThemeSwitch from '@/components/common/ThemeSwitch.vue'
+import ModeSwitch from '@/components/common/ModeSwitch.vue'
+import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
+import { watch } from 'vue'
+import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
+import SettingsPanel from '@/components/sidebar/SettingsPanel.vue'
+
+/**
+ * 单一路径（/）下的多视图切换
+ * - start：开始页（不显示侧边栏）
+ * - threaded：对话楼层预览（显示侧边栏）
+ * - sandbox：全局沙盒占位（显示侧边栏）
+ * 解耦策略：
+ * - 将侧边栏的显示与否与视图状态解耦，仅关心布尔：showSidebar
+ * - 侧边栏每个项拆分在 SidebarNav 子组件中，避免臃肿
+ * - 模式切换抽象为 ModeSwitch 组件（后续可独立成文件）
+ */
+const view = ref('start')
+const showSidebar = computed(() => view.value !== 'start')
+const drawerOpen = ref(false)
+const settingsOpen = ref(false)
+
+// 当侧边栏抽屉关闭时，同步关闭右侧“应用设置”面板，保持同层同生命周期
+watch(drawerOpen, (v) => {
+  if (!v) settingsOpen.value = false
+})
+
+// 楼层对话演示消息（占位）
+const messages = reactive([
+  { id: 1, role: 'system', content: '欢迎来到 SmartTavern。' },
+  { id: 2, role: 'user', content: '你好，介绍一下你自己？' },
+  { id: 3, role: 'assistant', content: '我是一个对话助手，帮助你完成任务。' },
+])
+
+/**
+ * ThemeSwitch：UI 表层的明/暗主题切换（后续可挂接到 settings store）
+ * - 通过 data-theme 属性切换 CSS Variables
+ */
+const theme = ref('system')
+function applyTheme(t) {
+  const root = document.documentElement
+  if (t === 'dark') {
+    root.setAttribute('data-theme', 'dark')
+  } else if (t === 'light') {
+    root.setAttribute('data-theme', 'light')
+  } else {
+    root.removeAttribute('data-theme')
+  }
+}
+onMounted(() => applyTheme(theme.value))
+function onThemeUpdate(t) {
+  theme.value = t
+  applyTheme(t)
+}
+
+/**
+ * ModeSwitch：在聊天页面内部切换（对话楼层 / 全局沙盒占位）
+ */
+// ModeSwitch moved to src/components/common/ModeSwitch.vue
+</script>
+
+<template>
+  <div data-scope="app-shell" class="st-app-shell">
+    <!-- 背景层（渐变 + 噪点） -->
+    <div class="st-bg">
+      <div class="st-gradient" />
+      <div class="st-noise" />
+    </div>
+
+    <!-- 顶部栏（玻璃拟态） -->
+    <header class="st-header glass">
+      <button class="st-brand" @click="view = 'start'">
+        <span class="st-logo">∞</span>
+        SmartTavern
+      </button>
+      <div class="st-actions-top">
+        <ThemeSwitch :theme="theme" @update:theme="onThemeUpdate" />
+      </div>
+    </header>
+
+    <!-- 主体 -->
+    <div class="st-body">
+      <!-- 侧边栏（仅聊天视图显示） -->
+      <SidebarDrawer v-if="showSidebar" v-model="drawerOpen">
+        <SidebarNav @openSettings="settingsOpen = true" />
+      </SidebarDrawer>
+
+      <!-- 应用设置面板：与侧边栏同层，位于高斯模糊之上 -->
+      <SettingsPanel
+        v-if="showSidebar && settingsOpen"
+        @close="settingsOpen = false"
+      />
+
+      <!-- 主内容 -->
+      <main data-scope="main" class="st-main">
+        <!-- 开始视图（无侧边栏） -->
+        <section v-if="view === 'start'" data-scope="start-view" class="st-start">
+          <div class="st-hero glass">
+            <h1 class="st-title">欢迎使用 SmartTavern</h1>
+            <p class="st-desc">一个可对话、可美化、可扩展的前端应用。</p>
+            <div class="st-cta">
+              <button class="st-btn st-primary" @click="view = 'threaded'">开始聊天（对话楼层）</button>
+              <button class="st-btn" @click="view = 'sandbox'">全局沙盒（占位）</button>
+            </div>
+          </div>
+
+          <div class="st-features">
+            <div class="st-feature card">
+              <div class="st-feature-icon">🎯</div>
+              <div class="st-feature-title">解耦架构</div>
+              <div class="st-feature-desc">表现/逻辑/样式分离，主题与布局可热插拔。</div>
+            </div>
+            <div class="st-feature card">
+              <div class="st-feature-icon">🎨</div>
+              <div class="st-feature-title">主题 2.0</div>
+              <div class="st-feature-desc">单文件主题包 + 受控 JS 扩展，安全且强大。</div>
+            </div>
+            <div class="st-feature card">
+              <div class="st-feature-icon">⚡</div>
+              <div class="st-feature-title">静态发布</div>
+              <div class="st-feature-desc">编译产物可直接部署，运行时加载主题与配置。</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 聊天统一视图 -->
+        <section v-else data-scope="chat-unified" class="st-chat-unified">
+          <ModeSwitch v-model:modelValue="view" />
+
+          <!-- 楼层对话 -->
+          <ThreadedChatPreview v-if="view === 'threaded'" :messages="messages" />
+
+          <!-- 全局沙盒占位 -->
+          <div v-else data-scope="chat-sandbox" class="st-sandbox card">
+            <h2 class="st-title">全局沙盒（占位）</h2>
+            <p>此页面暂不渲染 iframe，仅为占位示意。</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</template>
+
+<!-- 全局：设计令牌 + 主题（不加 scoped，供全局使用） -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  /* 基础语义令牌（RGB 形式，便于调优） */
+  --st-color-bg: 246 248 253;
+  --st-color-text: 18 24 38;
+  --st-surface: 255 255 255;
+  --st-surface-2: 248 249 255;
+  --st-primary: 88 80 236;
+  --st-primary-contrast: 255 255 255;
+  --st-border: 225 228 236;
+  --st-accent: 14 165 233;
+
+  --st-radius-sm: 10px;
+  --st-radius-md: 14px;
+  --st-radius-lg: 18px;
+
+  --st-shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+  --st-shadow-md: 0 8px 30px rgba(0,0,0,0.06);
+  --st-shadow-lg: 0 12px 45px rgba(0,0,0,0.1);
+
+  /* 背景图 Hook（可被主题覆盖） */
+  --st-surface-bg-image: none;
+  --st-surface-bg-size: cover;
+  --st-surface-bg-position: center center;
+  --st-surface-bg-repeat: no-repeat;
+
+  --st-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+  --st-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* Chat tuning defaults */
+  --st-chat-font-size: 18px;
+  --st-chat-width: 80%; /* 百分比宽度 */
+  --st-input-height: 100px; /* 输入框高度 */
+}
+
+/* 暗色主题 */
+[data-theme="dark"] {
+  --st-color-bg: 14 17 22;
+  --st-color-text: 232 236 244;
+  --st-surface: 23 27 36;
+  --st-surface-2: 28 34 45;
+  --st-primary: 129 140 248;
+  --st-primary-contrast: 19 23 32;
+  --st-border: 45 54 70;
+  --st-accent: 94 234 212;
+}
+
+/* 页面背景 */
+body[data-app="smarttavern"] {
+  margin: 0;
+  font-family: var(--st-font-body);
+  color: rgb(var(--st-color-text));
+  background-color: rgb(var(--st-color-bg));
+  background-image: var(--st-surface-bg-image);
+  background-size: var(--st-surface-bg-size);
+  background-position: var(--st-surface-bg-position);
+  background-repeat: var(--st-surface-bg-repeat);
+}
+
+* { box-sizing: border-box; }
+
+/* Live tuning: elegantly minimize left sidebar (animated) */
+/* Prepare transitions on drawer/backdrop for smooth state changes */
+.sd-drawer,
+.sd-backdrop {
+  transition: opacity .28s cubic-bezier(.4, .14, .3, 1),
+              transform .32s cubic-bezier(.22,.61,.36,1),
+              filter .32s ease,
+              box-shadow .28s ease,
+              backdrop-filter .32s ease;
+  will-change: opacity, transform, filter;
+}
+
+/* During live tuning, fade/blur/slide the drawer out instead of hard hiding */
+body.st-live-tuning .sd-backdrop {
+  opacity: 0;
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  pointer-events: none;
+}
+
+body.st-live-tuning .sd-drawer {
+  opacity: 0;
+  transform: translateX(-18px) scale(0.985);
+  filter: blur(8px) saturate(60%);
+  box-shadow: none;
+  pointer-events: none;
+}
+
+/* Hide all text elements but keep layout space to prevent position shift */
+body.st-live-tuning [data-scope="settings-view"] .st-settings-header,
+body.st-live-tuning [data-scope="settings-view"] .st-settings-tabs,
+body.st-live-tuning [data-scope="settings-view"] .muted,
+body.st-live-tuning [data-scope="settings-view"] h3 {
+  visibility: hidden !important;
+}
+
+
+/* Make panel completely transparent - override glass class */
+body.st-live-tuning [data-scope="settings-view"].glass,
+body.st-live-tuning [data-scope="settings-view"] .glass,
+body.st-live-tuning [data-scope="settings-view"] .st-settings {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+body.st-live-tuning [data-scope="settings-view"] .st-settings-body {
+  background: transparent !important;
+}
+
+/* Hide all sliders and their labels by default */
+body.st-live-tuning [data-scope="settings-view"] .st-control {
+  visibility: hidden !important;
+}
+
+/* Show only the active slider and its label/value */
+body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"],
+body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"],
+body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] {
+  visibility: visible !important;
+}
+
+/* Ensure the label text and value group of active slider are visible */
+body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"] .label-text,
+body.st-live-tuning[data-active-slider="fontSize"] [data-scope="settings-view"] .st-control[data-slider="fontSize"] .value-group,
+body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"] .label-text,
+body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"] .st-control[data-slider="chatWidth"] .value-group,
+body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] .label-text,
+body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"] .value-group {
+  visibility: visible !important;
+}
+</style>
+
+<!-- 局部样式（scoped） -->
+<style scoped>
+/* 背景层 */
+.st-bg {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+}
+.st-gradient {
+  position: absolute; inset: -10%;
+  background:
+    radial-gradient(800px 500px at 20% 10%, rgba(129,140,248,0.22), transparent 60%),
+    radial-gradient(800px 500px at 80% 10%, rgba(56,189,248,0.18), transparent 60%),
+    radial-gradient(800px 500px at 50% 90%, rgba(52,211,153,0.18), transparent 60%);
+  filter: blur(40px);
+}
+.st-noise {
+  position: absolute; inset: 0; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" opacity="0.045"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+  background-size: cover;
+}
+
+/* 玻璃拟态与卡片 */
+.glass {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border: 1px solid rgba(var(--st-border), 0.7);
+  box-shadow: var(--st-shadow-sm);
+}
+[data-theme="dark"] .glass {
+  background: rgba(26, 31, 43, 0.55);
+}
+
+.card {
+  background: rgb(var(--st-surface));
+  border: 1px solid rgb(var(--st-border));
+  border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow-md);
+}
+
+/* 布局 */
+.st-app-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.st-header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+}
+.st-logo { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1)); color: #fff; margin-right: 10px; font-weight: 700; }
+.st-brand {
+  display: inline-flex; align-items: center;
+  gap: 12px; font-weight: 700; font-size: 16px;
+  background: transparent; border: none; color: rgb(var(--st-color-text)); cursor: pointer;
+}
+.st-actions-top { display: flex; align-items: center; gap: 8px; }
+
+.st-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+  padding: 16px;
+  overflow: hidden;
+}
+.st-sidebar {
+  width: 320px; padding: 14px; border-radius: var(--st-radius-lg);
+  align-self: stretch; overflow: auto;
+}
+.st-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 开始视图（Hero） */
+.st-start {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+  align-items: start;
+  overflow-y: auto;
+  height: 100%;
+}
+@media (max-width: 980px) { .st-start { grid-template-columns: 1fr; } }
+
+.st-hero {
+  padding: 24px; border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow-lg);
+}
+.st-title { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
+.st-desc { margin: 0 0 12px; color: rgba(var(--st-color-text), 0.75); }
+.st-cta { display: flex; gap: 12px; margin-top: 6px; }
+.st-btn {
+  appearance: none; border: 1px solid rgb(var(--st-border)); background: rgb(var(--st-surface));
+  padding: 10px 14px; border-radius: var(--st-radius-md); cursor: pointer; color: rgb(var(--st-color-text));
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.st-btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-md); }
+.st-btn.st-primary { background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1)); color: var(--st-primary-contrast); border-color: transparent; }
+.st-btn.st-primary:hover { filter: saturate(1.05); }
+
+.st-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 980px) { .st-features { grid-template-columns: 1fr; } }
+.st-feature { padding: 18px; border-radius: var(--st-radius-lg); }
+.st-feature-icon { font-size: 20px; }
+.st-feature-title { margin-top: 8px; font-weight: 600; }
+.st-feature-desc { margin-top: 4px; color: rgba(var(--st-color-text), 0.7); }
+
+/* Chat unified container */
+.st-chat-unified {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Constrain overall chat width (includes ModeSwitch + messages) */
+  max-width: var(--st-chat-width, 860px);
+  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+/* ModeSwitch styles moved into src/components/common/ModeSwitch.vue */
+/* Threaded chat preview styles moved into src/components/chat/ThreadedChatPreview.vue */
+
+/* Sandbox placeholder */
+.st-sandbox { padding: 18px; color: rgba(var(--st-color-text), 0.85); }
+</style>

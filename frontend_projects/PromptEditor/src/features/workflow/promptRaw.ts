@@ -34,11 +34,11 @@ export function buildPromptRawPayload(ctx: EditorContext): Record<string, any> {
 
 /**
  * 直接调用 RAW 工作流
- * - path: /api/workflow/smarttraven/prompt_raw/assemble_full
+ * - path: /api/workflow/smarttavern/prompt_raw/assemble_full
  */
 export async function callPromptRaw(payload: Record<string, any>): Promise<PromptRawResult> {
   await ensureApiClientReady()
-  const res = await postWorkflow('smarttraven/prompt_raw/assemble_full', payload)
+  const res = await postWorkflow('smarttavern/prompt_raw/assemble_full', payload)
   // 结构保障
   if (!res || typeof res !== 'object' || !Array.isArray(res.messages)) {
     throw new Error('后端返回格式不正确：缺少 messages 数组')

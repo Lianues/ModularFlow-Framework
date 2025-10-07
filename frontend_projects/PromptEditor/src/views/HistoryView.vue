@@ -8,10 +8,10 @@ import { useHistoryStore, deriveMessagesFromHistory } from '@/features/history/s
  * - 否则从 messages 推导为线性分支树
  *
  * 参考：
- * - [python.chat_branches.export](api/modules/SmartTraven/chat_branches/chat_branches.py:237)
- * - [python.chat_branches.branch_table](api/modules/SmartTraven/chat_branches/chat_branches.py:222)
- * - [python.chat_branches.get_path](api/modules/SmartTraven/chat_branches/chat_branches.py:61)
- * - [python.chat_branches.openai_messages](api/modules/SmartTraven/chat_branches/chat_branches.py:207)
+ * - [python.chat_branches.export](api/modules/SmartTavern/chat_branches/chat_branches.py:237)
+ * - [python.chat_branches.branch_table](api/modules/SmartTavern/chat_branches/chat_branches.py:222)
+ * - [python.chat_branches.get_path](api/modules/SmartTavern/chat_branches/chat_branches.py:61)
+ * - [python.chat_branches.openai_messages](api/modules/SmartTavern/chat_branches/chat_branches.py:207)
  */
 
 type MsgRole = 'system' | 'user' | 'assistant'

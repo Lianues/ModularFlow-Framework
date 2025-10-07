@@ -155,7 +155,7 @@ function onDragEnd() { dragging.value = null; dragOverId.value = null }
           >重命名</button>
         </div>
       </div>
-      <p class="mt-2 text-xs text-black/60">使用右上角 导入/导出 · 参考：backend_projects/SmartTraven/data/world_books/参考用main_world.json</p>
+      <p class="mt-2 text-xs text-black/60">使用右上角 导入/导出 · 参考：backend_projects/SmartTavern/data/world_books/参考用main_world.json</p>
       <p v-if="renameError" class="text-xs text-red-600 mt-1">* {{ renameError }}</p>
     </div>
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-测试：smarttraven/prompt_postprocess/apply 工作流（单视图）
+测试：smarttavern/prompt_postprocess/apply 工作流（单视图）
 - 验证单视图流水线：before_macro → macro → after_macro
 - 覆盖 user_view 与 assistant_view 两个视图
 """
@@ -87,7 +87,7 @@ def test_postprocess_user_view_pipeline():
         "rules": rules,
         "view": "user_view",
     }
-    res = core.call_api("smarttraven/prompt_postprocess/apply", payload, method="POST", namespace="workflow")
+    res = core.call_api("smarttavern/prompt_postprocess/apply", payload, method="POST", namespace="workflow")
     assert isinstance(res, dict), "返回应为字典"
     assert "message" in res and "variables" in res
     out = res["message"]
@@ -118,7 +118,7 @@ def test_postprocess_assistant_view_pipeline():
         "rules": rules,
         "view": "assistant_view",
     }
-    res = core.call_api("smarttraven/prompt_postprocess/apply", payload, method="POST", namespace="workflow")
+    res = core.call_api("smarttavern/prompt_postprocess/apply", payload, method="POST", namespace="workflow")
     assert isinstance(res, dict)
     assert "message" in res and "variables" in res
     out = res["message"]
@@ -151,7 +151,7 @@ def test_postprocess_macro_integration_simple():
         "rules": rules,
         "view": "user_view",
     }
-    res = core.call_api("smarttraven/prompt_postprocess/apply", payload, method="POST", namespace="workflow")
+    res = core.call_api("smarttavern/prompt_postprocess/apply", payload, method="POST", namespace="workflow")
     assert isinstance(res, dict)
     assert "message" in res and "variables" in res
     out = res["message"]
