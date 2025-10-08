@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import CustomScrollbar from '@/components/common/CustomScrollbar.vue'
+import './tailwind.css'
 
 const app = createApp(App)
 

@@ -13,6 +13,8 @@ import WorldbookPanel from '@/components/sidebar/WorldbookPanel.vue'
 import CharactersPanel from '@/components/sidebar/CharactersPanel.vue'
 import PersonaPanel from '@/components/sidebar/PersonaPanel.vue'
 import RegexPanel from '@/components/sidebar/RegexPanel.vue'
+import ContentViewModal from '@/components/common/ContentViewModal.vue'
+import PresetDetailView from '@/components/content/PresetDetailView.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -34,6 +36,26 @@ const worldbookOpen = ref(false)
 const charactersOpen = ref(false)
 const personaOpen = ref(false)
 const regexOpen = ref(false)
+
+// 内容查看模态框
+const viewModalOpen = ref(false)
+const viewModalTitle = ref('')
+const viewModalType = ref('') // 'preset', 'regex', 'worldbook', etc.
+const viewModalData = ref(null)
+
+function openViewModal(type, title, data) {
+  viewModalType.value = type
+  viewModalTitle.value = title
+  viewModalData.value = data
+  viewModalOpen.value = true
+}
+
+function closeViewModal() {
+  viewModalOpen.value = false
+  viewModalType.value = ''
+  viewModalTitle.value = ''
+  viewModalData.value = null
+}
 
 // 当侧边栏抽屉关闭时，同步关闭右侧“应用设置”面板，保持同层同生命周期
 watch(drawerOpen, (v) => {
@@ -151,6 +173,7 @@ function onThemeUpdate(t) {
         <PresetsPanel
           v-if="showSidebar && presetsOpen"
           @close="presetsOpen = false"
+          @view="(key) => openViewModal('preset', '预设详情 - ' + key, null)"
         />
       </transition>
 
@@ -183,6 +206,7 @@ function onThemeUpdate(t) {
         <RegexPanel
           v-if="showSidebar && regexOpen"
           @close="regexOpen = false"
+          @view="(key) => openViewModal('regex', '正则规则详情 - ' + key, null)"
         />
       </transition>
 
@@ -254,6 +278,27 @@ function onThemeUpdate(t) {
         </section>
       </main>
     </div>
+
+    <!-- 内容查看模态框 -->
+    <ContentViewModal
+      v-model:show="viewModalOpen"
+      :title="viewModalTitle"
+      @close="closeViewModal"
+    >
+      <PresetDetailView
+        v-if="viewModalType === 'preset'"
+      />
+      <div v-else-if="viewModalType === 'regex'" class="modal-placeholder">
+        <div class="placeholder-icon">🧹</div>
+        <div class="placeholder-text">正则规则详细视图</div>
+        <div class="placeholder-desc">此视图待后续开发</div>
+      </div>
+      <div v-else class="modal-placeholder">
+        <div class="placeholder-icon">📋</div>
+        <div class="placeholder-text">内容查看</div>
+        <div class="placeholder-desc">视图类型：{{ viewModalType }}</div>
+      </div>
+    </ContentViewModal>
   </div>
 </template>
 
@@ -681,4 +726,31 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
 .st-subpage-leave-to   { opacity: 0; transform: translateX(-12px) scale(0.98); filter: blur(4px); }
 .st-subpage-enter-active,
 .st-subpage-leave-active { transition: opacity .2s ease, transform .24s cubic-bezier(.22,.61,.36,1), filter .24s ease; }
+
+/* 模态框占位符样式 */
+.modal-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.placeholder-icon {
+  font-size: 64px;
+  opacity: 0.6;
+}
+
+.placeholder-text {
+  font-size: 20px;
+  font-weight: 600;
+  color: rgb(var(--st-color-text));
+}
+
+.placeholder-desc {
+  font-size: 14px;
+  color: rgba(var(--st-color-text), 0.65);
+}
 </style>
