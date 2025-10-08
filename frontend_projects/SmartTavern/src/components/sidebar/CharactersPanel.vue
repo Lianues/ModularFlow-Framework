@@ -1,7 +1,5 @@
 <script setup>
 import { ref, computed } from 'vue'
-import ViewerModal from '@/components/common/ViewerModal.vue'
-import ClonedCharacterView from '@/components/viewer/ClonedCharacterView.vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 348 },
@@ -34,18 +32,9 @@ const characters = ref([
   { key:'char-6', icon:'🤖', name:'占位角色 F', desc:'角色设定与对话风格' },
 ])
 
-// 查看弹窗状态（与预设/世界书一致）
-const showViewer = ref(false)
-const viewKey = ref(null)
-const currentChar = computed(() => characters.value.find(c => c.key === viewKey.value) || null)
-
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
-function onView(k){
-  viewKey.value = k
-  showViewer.value = true
-  emit('view', k)
-}
+function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 </script>
 
@@ -94,13 +83,6 @@ function onDelete(k){ emit('delete', k) }
         </div>
       </CustomScrollbar>
     </div>
-
-  <ViewerModal
-    v-model="showViewer"
-    :title="currentChar ? ('角色：' + currentChar.name) : '角色详情'"
-  >
-    <ClonedCharacterView />
-  </ViewerModal>
 </template>
 
 <style scoped>

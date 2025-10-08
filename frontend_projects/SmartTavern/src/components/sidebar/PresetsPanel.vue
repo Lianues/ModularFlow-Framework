@@ -1,7 +1,5 @@
 <script setup>
 import { ref, computed } from 'vue'
-import ViewerModal from '@/components/common/ViewerModal.vue'
-import ClonedPresetView from '@/components/viewer/ClonedPresetView.vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 348 }, // 左侧锚定像素（与外观面板一致：12+320+16）
@@ -34,17 +32,9 @@ const presets = ref([
   { key:'preset-6', icon:'⚙️', name:'占位预设 F', desc:'预设说明文字' },
 ])
 
-const showViewer = ref(false)
-const viewKey = ref(null)
-const currentPreset = computed(() => presets.value.find(p => p.key === viewKey.value) || null)
-
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
-function onView(k){
-  viewKey.value = k
-  showViewer.value = true
-  emit('view', k)
-}
+function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 </script>
 
@@ -93,13 +83,6 @@ function onDelete(k){ emit('delete', k) }
         </div>
       </CustomScrollbar>
     </div>
-
-  <ViewerModal
-    v-model="showViewer"
-    :title="currentPreset ? ('预设：' + currentPreset.name) : '预设详情'"
-  >
-    <ClonedPresetView />
-  </ViewerModal>
 </template>
 
 <style scoped>

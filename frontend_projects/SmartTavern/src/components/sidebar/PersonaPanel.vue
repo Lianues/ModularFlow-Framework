@@ -1,7 +1,5 @@
 <script setup>
 import { ref, computed } from 'vue'
-import ViewerModal from '@/components/common/ViewerModal.vue'
-import ClonedPersonaView from '@/components/viewer/ClonedPersonaView.vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 348 },
@@ -32,17 +30,9 @@ const personas = ref([
   { key:'persona-4', icon:'💼', name:'占位用户 D', desc:'用户偏好与画像' },
 ])
 
-const showViewer = ref(false)
-const viewKey = ref(null)
-const currentPersona = computed(() => personas.value.find(p => p.key === viewKey.value) || null)
-
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
-function onView(k){
-  viewKey.value = k
-  showViewer.value = true
-  emit('view', k)
-}
+function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 </script>
 
@@ -91,12 +81,6 @@ function onDelete(k){ emit('delete', k) }
         </div>
       </CustomScrollbar>
     </div>
-  <ViewerModal
-    v-model="showViewer"
-    :title="currentPersona ? ('用户：' + currentPersona.name) : '用户信息'"
-  >
-    <ClonedPersonaView />
-  </ViewerModal>
 </template>
 
 <style scoped>

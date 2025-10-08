@@ -1,7 +1,5 @@
 <script setup>
 import { ref, computed } from 'vue'
-import ViewerModal from '@/components/common/ViewerModal.vue'
-import ClonedRegexView from '@/components/viewer/ClonedRegexView.vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 348 },
@@ -33,17 +31,9 @@ const regexRules = ref([
   { key:'regex-5', icon:'📝', name:'占位正则 E', desc:'文本后处理规则' },
 ])
 
-const showViewer = ref(false)
-const viewKey = ref(null)
-const currentRule = computed(() => regexRules.value.find(r => r.key === viewKey.value) || null)
-
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
-function onView(k){
-  viewKey.value = k
-  showViewer.value = true
-  emit('view', k)
-}
+function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 </script>
 
@@ -92,13 +82,6 @@ function onDelete(k){ emit('delete', k) }
         </div>
       </CustomScrollbar>
     </div>
-
-  <ViewerModal
-    v-model="showViewer"
-    :title="currentRule ? ('正则规则：' + currentRule.name) : '正则规则详情'"
-  >
-    <ClonedRegexView />
-  </ViewerModal>
 </template>
 
 <style scoped>
