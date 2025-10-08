@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "meta": {
+    "about": "本文件用于维护 PromptEditor 相关页面在 SmartTavern 内的迁移配置（先支持 预设/正则）。后续可继续扩展 世界书/角色卡/用户信息。",
+    "notes": [
+      "本 JSON 仅作为 UI 迁移阶段的数据驱动来源，不绑定后端。",
+      "迁移完成后，可将对应的 Store/后端数据写入渲染组件，由本配置决定布局与文案。"
+    ]
+  },
+  "presets": {
+    "title": "预设编辑器",
+    "icon": "🎛️",
+    "fileLabel": "预设文件",
+    "header": {
+      "renameEnabled": true,
+      "renameButtonText": "重命名",
+      "subtitle": "本页为 UI 迁移演示，保存与联通待后续"
+    },
+    "apiPanel": {
+      "title": "API 配置",
+      "defaultOpen": false,
+      "switches": [
+        { "key": "apiEnabled", "label": "启用 API 配置", "default": true },
+        { "key": "enableTemperature", "label": "启用 Temperature", "default": true },
+        { "key": "enableTopP", "label": "启用 Top P", "default": true },
+        { "key": "enableTopK", "label": "启用 Top K", "default": true },
+        { "key": "enableMaxContext", "label": "启用 Max Context", "default": true },
+        { "key": "enableMaxTokens", "label": "启用 Max Tokens", "default": true },
+        { "key": "enableStream", "label": "启用 Stream", "default": true },
+        { "key": "enableFrequencyPenalty", "label": "启用 Frequency Penalty", "default": true },
+        { "key": "enablePresencePenalty", "label": "启用 Presence Penalty", "default": true }
+      ],
+      "fields": [
+        { "key": "temperature", "type": "number", "min": 0, "max": 2, "step": 0.01, "default": 1.0 },
+        { "key": "topP", "type": "number", "min": 0, "max": 1, "step": 0.01, "default": 1.0 },
+        { "key": "topK", "type": "number", "min": 0, "max": 9999, "step": 1, "default": 0 },
+        { "key": "maxContext", "type": "number", "min": 1, "max": 100000, "step": 1, "default": 4095 },
+        { "key": "maxTokens", "type": "number", "min": 1, "max": 100000, "step": 1, "default": 300 },
+        { "key": "stream", "type": "boolean", "default": true },
+        { "key": "frequencyPenalty", "type": "number", "min": 0, "max": 2, "step": 0.01, "default": 0 },
+        { "key": "presencePenalty", "type": "number", "min": 0, "max": 2, "step": 0.01, "default": 0 }
+      ]
+    },
+    "sections": [
+      {
+        "key": "prompts",
+        "title": "提示词编辑",
+        "defaultOpen": true,
+        "groups": [
+          {
+            "key": "relative",
+            "title": "Relative 条目",
+            "defaultOpen": true,
+            "newButtons": [
+              { "key": "addSpecial", "label": "添加特殊", "type": "action" }
+            ],
+            "specialSelect": {
+              "placeholder": "选择一次性组件",
+              "options": [
+                { "id": "sys-intro", "name": "系统介绍" },
+                { "id": "safety-guard", "name": "安全守卫" },
+                { "id": "style-enforcer", "name": "风格约束" }
+              ]
+            },
+            "customInputs": [
+              { "key": "newRelId", "placeholder": "id", "width": 128 },
+              { "key": "newRelName", "placeholder": "名称", "width": 160 },
+              { "key": "submit", "label": "添加", "type": "action" }
+            ]
+          },
+          {
+            "key": "inChat",
+            "title": "In-Chat 条目",
+            "defaultOpen": true,
+            "customInputs": [
+              { "key": "newChatId", "placeholder": "id", "width": 128 },
+              { "key": "newChatName", "placeholder": "名称", "width": 160 },
+              { "key": "submit", "label": "添加", "type": "action" }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "regex",
+        "title": "正则编辑",
+        "defaultOpen": true,
+        "customInputs": [
+          { "key": "newRegexId", "placeholder": "id", "width": 128 },
+          { "key": "newRegexName", "placeholder": "名称", "width": 160 },
+          { "key": "submit", "label": "添加", "type": "action" }
+        ]
+      }
+    ],
+    "preview": {
+      "sections": [
+        {
+          "title": "合成后的提示词预览",
+          "content": "这里展示组合后的提示词上下文（仅 JSON 驱动示例）。"
+        },
+        {
+          "title": "合成参数（示例）",
+          "content": "temperature=1, top_p=1, stream=true ..."
+        }
+      ]
+    }
+  },
+  "regex": {
+    "title": "正则规则（独立面板）",
+    "icon": "🧹",
+    "fileLabel": "正则文件",
+    "header": {
+      "renameEnabled": true,
+      "renameButtonText": "重命名",
+      "subtitle": "导入/导出参考：backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json"
+    },
+    "toolbar": {
+      "statsLabel": "规则数量：",
+      "actions": [
+        { "key": "import", "label": "导入" },
+        { "key": "export", "label": "导出" }
+      ],
+      "newRuleInputs": [
+        { "key": "newId", "placeholder": "id", "width": 128 },
+        { "key": "newName", "placeholder": "名称", "width": 160 },
+        { "key": "submit", "label": "添加", "type": "action" }
+      ]
+    },
+    "list": {
+      "title": "正则编辑",
+      "icon": "sliders",
+      "hint": "列表支持拖拽排序（握把 + 黑线插入预览）"
+    },
+    "preview": {
+      "before": "原始内容：<note>Keep & Clean</note> —— 将通过示例规则移除标签、整理缩进（仅 JSON 驱动示例）。",
+      "after": "结果内容：Keep & Clean —— 示例清洗结果（仅 JSON 驱动示例）。"
+    },
+    "examples": [
+      { "id": "remove_xml", "name": "移除 XML 标签", "desc": "清洗掉文本内的 XML/HTML 标签" },
+      { "id": "trim_trailing_ws", "name": "移除尾随空白", "desc": "删除每行末尾多余空白" },
+      { "id": "normalize_indent", "name": "规范缩进", "desc": "将不一致的缩进替换为统一风格" }
+    ]
+  }
+}

@@ -1,18 +1,23 @@
 <script setup>
 import PreviewCard from './PreviewCard.vue'
-const emit = defineEmits(['openSettings'])
+const emit = defineEmits(['openAppearance','openAppSettings','openPresets','openWorldbook','openCharacters','openPersona','openRegex'])
 const items = [
   { key: 'presets', icon: '🧩', title: '预设 Presets', desc: '管理提示词预设与切换' },
   { key: 'worldbook', icon: '📚', title: '世界书 Worldbook', desc: '设定世界观/术语库' },
   { key: 'characters', icon: '🧑‍🚀', title: '角色卡 Characters', desc: '管理角色信息卡' },
   { key: 'persona', icon: '🧠', title: '用户信息 Persona', desc: '配置用户画像与偏好' },
   { key: 'regex', icon: '🧹', title: '正则 Regex Rules', desc: '清洗/后处理规则' },
-  { key: 'themes', icon: '🎨', title: '外观 Appearance', desc: '主题与外观（含原应用设置）' },
-  { key: 'app', icon: '⚙️', title: '应用设置 App Settings', desc: '内容已合并至“外观”' },
+  { key: 'themes', icon: '🎨', title: '外观 Appearance', desc: '主题与外观设定' },
+  { key: 'app', icon: '⚙️', title: '应用设置 App Settings', desc: '全局应用行为与高级选项' },
 ]
 function onClick(key) {
-  // “外观”与“应用设置”均打开同一面板（外观面板）
-  if (key === 'app' || key === 'themes') emit('openSettings')
+  if (key === 'themes') emit('openAppearance')
+  else if (key === 'app') emit('openAppSettings')
+  else if (key === 'presets') emit('openPresets')
+  else if (key === 'worldbook') emit('openWorldbook')
+  else if (key === 'characters') emit('openCharacters')
+  else if (key === 'persona') emit('openPersona')
+  else if (key === 'regex') emit('openRegex')
 }
 </script>
 

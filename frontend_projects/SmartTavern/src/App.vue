@@ -7,6 +7,12 @@ import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
 import { watch } from 'vue'
 import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
 import AppearancePanel from '@/components/sidebar/AppearancePanel.vue'
+import AppSettingsPanel from '@/components/sidebar/AppSettingsPanel.vue'
+import PresetsPanel from '@/components/sidebar/PresetsPanel.vue'
+import WorldbookPanel from '@/components/sidebar/WorldbookPanel.vue'
+import CharactersPanel from '@/components/sidebar/CharactersPanel.vue'
+import PersonaPanel from '@/components/sidebar/PersonaPanel.vue'
+import RegexPanel from '@/components/sidebar/RegexPanel.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -21,11 +27,25 @@ import AppearancePanel from '@/components/sidebar/AppearancePanel.vue'
 const view = ref('start')
 const showSidebar = computed(() => view.value !== 'start')
 const drawerOpen = ref(false)
-const settingsOpen = ref(false)
+const appearanceOpen = ref(false)
+const appSettingsOpen = ref(false)
+const presetsOpen = ref(false)
+const worldbookOpen = ref(false)
+const charactersOpen = ref(false)
+const personaOpen = ref(false)
+const regexOpen = ref(false)
 
 // 当侧边栏抽屉关闭时，同步关闭右侧“应用设置”面板，保持同层同生命周期
 watch(drawerOpen, (v) => {
-  if (!v) settingsOpen.value = false
+  if (!v) {
+    appearanceOpen.value = false
+    appSettingsOpen.value = false
+    presetsOpen.value = false
+    worldbookOpen.value = false
+    charactersOpen.value = false
+    personaOpen.value = false
+    regexOpen.value = false
+  }
 })
 
 // 楼层对话演示消息（占位）
@@ -99,14 +119,70 @@ function onThemeUpdate(t) {
     <div class="st-body">
       <!-- 侧边栏（仅聊天视图显示） -->
       <SidebarDrawer v-if="showSidebar" v-model="drawerOpen">
-        <SidebarNav @openSettings="settingsOpen = !settingsOpen" />
+        <SidebarNav
+          @openAppearance="(appearanceOpen = !appearanceOpen, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
+          @openAppSettings="(appSettingsOpen = !appSettingsOpen, appearanceOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
+          @openPresets="(presetsOpen = !presetsOpen, appearanceOpen = false, appSettingsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
+          @openWorldbook="(worldbookOpen = !worldbookOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
+          @openCharacters="(charactersOpen = !charactersOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, personaOpen = false, regexOpen = false)"
+          @openPersona="(personaOpen = !personaOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, regexOpen = false)"
+          @openRegex="(regexOpen = !regexOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false)"
+        />
       </SidebarDrawer>
 
-      <!-- 应用设置面板：与侧边栏同层，位于高斯模糊之上 -->
+      <!-- 外观面板：与侧边栏同层，位于高斯模糊之上 -->
       <transition name="st-subpage">
         <AppearancePanel
-          v-if="showSidebar && settingsOpen"
-          @close="settingsOpen = false"
+          v-if="showSidebar && appearanceOpen"
+          @close="appearanceOpen = false"
+        />
+      </transition>
+
+      <!-- 应用设置面板：独立于外观面板 -->
+      <transition name="st-subpage">
+        <AppSettingsPanel
+          v-if="showSidebar && appSettingsOpen"
+          @close="appSettingsOpen = false"
+        />
+      </transition>
+
+      <!-- 预设面板：模仿外观面板的弹出与定位（同层/同位置/同过渡） -->
+      <transition name="st-subpage">
+        <PresetsPanel
+          v-if="showSidebar && presetsOpen"
+          @close="presetsOpen = false"
+        />
+      </transition>
+
+      <!-- 世界书面板：同层/同位置/同过渡 -->
+      <transition name="st-subpage">
+        <WorldbookPanel
+          v-if="showSidebar && worldbookOpen"
+          @close="worldbookOpen = false"
+        />
+      </transition>
+
+      <!-- 角色卡面板：同层/同位置/同过渡 -->
+      <transition name="st-subpage">
+        <CharactersPanel
+          v-if="showSidebar && charactersOpen"
+          @close="charactersOpen = false"
+        />
+      </transition>
+
+      <!-- 用户信息面板：同层/同位置/同过渡 -->
+      <transition name="st-subpage">
+        <PersonaPanel
+          v-if="showSidebar && personaOpen"
+          @close="personaOpen = false"
+        />
+      </transition>
+
+      <!-- 正则面板：同层/同位置/同过渡 -->
+      <transition name="st-subpage">
+        <RegexPanel
+          v-if="showSidebar && regexOpen"
+          @close="regexOpen = false"
         />
       </transition>
 
