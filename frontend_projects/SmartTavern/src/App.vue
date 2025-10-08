@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import SidebarNav from '@/components/sidebar/SidebarNav.vue'
 import ThemeSwitch from '@/components/common/ThemeSwitch.vue'
 import ModeSwitch from '@/components/common/ModeSwitch.vue'
@@ -103,10 +103,47 @@ function applyTheme(t) {
     root.removeAttribute('data-theme')
   }
 }
-onMounted(() => applyTheme(theme.value))
+
+// 动态注入 UI 库（Lucide 图标、Flowbite JS），并初始化图标
+async function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve()
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = (e) => reject(e)
+    document.head.appendChild(s)
+  })
+}
+async function ensureUIAssets() {
+  try {
+    await loadScript('https://unpkg.com/lucide@latest/dist/umd/lucide.min.js')
+  } catch (_) {}
+  try {
+    await loadScript('https://cdn.jsdelivr.net/npm/flowbite@2.0.0/dist/flowbite.min.js')
+  } catch (_) {}
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons()
+  }
+}
+function refreshIcons() {
+  nextTick(() => {
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons()
+    }
+  })
+}
+
+onMounted(() => {
+  applyTheme(theme.value)
+  ensureUIAssets()
+})
+
 function onThemeUpdate(t) {
   theme.value = t
   applyTheme(t)
+  refreshIcons()
 }
 
 /**
@@ -331,9 +368,9 @@ function onThemeUpdate(t) {
   --st-border: 225 228 236;
   --st-accent: 14 165 233;
 
-  --st-radius-sm: 10px;
-  --st-radius-md: 14px;
-  --st-radius-lg: 18px;
+  --st-radius-sm: 2px;
+  --st-radius-md: 3px;
+  --st-radius-lg: 4px;
 
   --st-shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
   --st-shadow-md: 0 8px 30px rgba(0,0,0,0.06);

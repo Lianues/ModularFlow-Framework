@@ -5,11 +5,7 @@ export default {
     "./src/**/*.{vue,js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {
-      borderRadius: {
-        '4': '10px',
-      },
-    },
+    extend: {},
   },
   plugins: [],
 }

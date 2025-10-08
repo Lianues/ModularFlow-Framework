@@ -1,14 +1,15 @@
 <script setup>
+import { onMounted, onUpdated } from 'vue'
 import PreviewCard from './PreviewCard.vue'
 const emit = defineEmits(['openAppearance','openAppSettings','openPresets','openWorldbook','openCharacters','openPersona','openRegex'])
 const items = [
-  { key: 'presets', icon: '🧩', title: '预设 Presets', desc: '管理提示词预设与切换' },
-  { key: 'worldbook', icon: '📚', title: '世界书 Worldbook', desc: '设定世界观/术语库' },
-  { key: 'characters', icon: '🧑‍🚀', title: '角色卡 Characters', desc: '管理角色信息卡' },
-  { key: 'persona', icon: '🧠', title: '用户信息 Persona', desc: '配置用户画像与偏好' },
-  { key: 'regex', icon: '🧹', title: '正则 Regex Rules', desc: '清洗/后处理规则' },
-  { key: 'themes', icon: '🎨', title: '外观 Appearance', desc: '主题与外观设定' },
-  { key: 'app', icon: '⚙️', title: '应用设置 App Settings', desc: '全局应用行为与高级选项' },
+  { key: 'presets', icon: 'puzzle', title: '预设 Presets', desc: '管理提示词预设与切换' },
+  { key: 'worldbook', icon: 'book-open', title: '世界书 Worldbook', desc: '设定世界观/术语库' },
+  { key: 'characters', icon: 'users', title: '角色卡 Characters', desc: '管理角色信息卡' },
+  { key: 'persona', icon: 'user-cog', title: '用户信息 Persona', desc: '配置用户画像与偏好' },
+  { key: 'regex', icon: 'scan-text', title: '正则 Regex Rules', desc: '清洗/后处理规则' },
+  { key: 'themes', icon: 'palette', title: '外观 Appearance', desc: '主题与外观设定' },
+  { key: 'app', icon: 'settings', title: '应用设置 App Settings', desc: '全局应用行为与高级选项' },
 ]
 function onClick(key) {
   if (key === 'themes') emit('openAppearance')
@@ -19,6 +20,8 @@ function onClick(key) {
   else if (key === 'persona') emit('openPersona')
   else if (key === 'regex') emit('openRegex')
 }
+onMounted(() => window.lucide?.createIcons?.())
+onUpdated(() => window.lucide?.createIcons?.())
 </script>
 
 <template>

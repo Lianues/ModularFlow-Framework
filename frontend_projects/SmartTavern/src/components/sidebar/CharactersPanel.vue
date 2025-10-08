@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 348 },
@@ -36,6 +36,9 @@ function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
 function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
+/** 图标渲染：lucide 名称优先，否则回退 emoji */
+const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
+onMounted(() => window.lucide?.createIcons?.())
 </script>
 
 <template>
@@ -46,7 +49,7 @@ function onDelete(k){ emit('delete', k) }
   >
       <header class="ch-header">
         <div class="ch-title">
-          <span class="ch-icon">🧑‍🚀</span>
+          <span class="ch-icon"><i data-lucide="users"></i></span>
           {{ props.title }}
         </div>
         <button class="ch-close" type="button" title="关闭" @click="close">✕</button>
@@ -60,7 +63,10 @@ function onDelete(k){ emit('delete', k) }
             class="ch-card"
           >
             <div class="ch-main">
-              <div class="ch-avatar">{{ it.icon }}</div>
+              <div class="ch-avatar">
+                <i v-if="isLucide(it.icon)" :data-lucide="it.icon"></i>
+                <span v-else>{{ it.icon }}</span>
+              </div>
               <div class="ch-texts">
                 <div class="ch-name">{{ it.name }}</div>
                 <div class="ch-desc">{{ it.desc }}</div>
@@ -113,15 +119,15 @@ function onDelete(k){ emit('delete', k) }
   font-weight: 700;
   color: rgb(var(--st-color-text));
 }
-.ch-icon { font-size: 18px; }
+.ch-icon i { width: 18px; height: 18px; display: inline-block; }
 .ch-close {
   appearance: none;
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgb(var(--st-surface-2));
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 6px 8px;
   cursor: pointer;
-  transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1), background .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1);
 }
 .ch-close:hover {
   background: rgb(var(--st-surface));
@@ -137,20 +143,20 @@ function onDelete(k){ emit('delete', k) }
 .ch-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* Card */
 .ch-card {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 10px;
+  gap: 12px;
   align-items: stretch;
   border: 1px solid rgb(var(--st-border));
   border-radius: var(--st-radius-md);
   background: rgb(var(--st-surface));
   padding: 12px;
-  transition: background .12s ease, border-color .12s ease, transform .12s ease, box-shadow .12s ease;
+  transition: background .2s cubic-bezier(.22,.61,.36,1), border-color .2s cubic-bezier(.22,.61,.36,1), transform .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1);
 }
 .ch-card:hover {
   transform: translateY(-1px);
@@ -161,13 +167,13 @@ function onDelete(k){ emit('delete', k) }
 .ch-main {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 .ch-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -200,7 +206,7 @@ function onDelete(k){ emit('delete', k) }
 .ch-actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
 }
 .ch-btn {
@@ -209,12 +215,17 @@ function onDelete(k){ emit('delete', k) }
   background: rgb(var(--st-surface));
   color: rgb(var(--st-color-text));
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
-  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1), background .2s cubic-bezier(.22,.61,.36,1), border-color .2s cubic-bezier(.22,.61,.36,1);
   min-width: 64px;
   text-align: center;
+}
+.ch-btn:focus-visible,
+.ch-close:focus-visible {
+  outline: 2px solid rgba(var(--st-primary), 0.6);
+  outline-offset: 2px;
 }
 .ch-btn:hover {
   transform: translateY(-1px);

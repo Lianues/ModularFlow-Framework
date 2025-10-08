@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 348 },
@@ -22,6 +22,7 @@ const panelStyle = computed(() => ({
 }))
 
 function close(){ emit('close') }
+onMounted(() => window.lucide?.createIcons?.())
 </script>
 
 <template>
@@ -32,7 +33,7 @@ function close(){ emit('close') }
   >
       <header class="as-header">
         <div class="as-title">
-          <span class="as-icon">⚙️</span>
+          <span class="as-icon"><i data-lucide="settings"></i></span>
           {{ props.title }}
         </div>
         <button class="as-close" type="button" title="关闭" @click="close">✕</button>
@@ -113,15 +114,15 @@ function close(){ emit('close') }
   font-weight: 700;
   color: rgb(var(--st-color-text));
 }
-.as-icon { font-size: 18px; }
+.as-icon i { width: 18px; height: 18px; display: inline-block; }
 .as-close {
   appearance: none;
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgb(var(--st-surface-2));
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 6px 8px;
   cursor: pointer;
-  transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1), background .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1);
 }
 .as-close:hover {
   background: rgb(var(--st-surface));

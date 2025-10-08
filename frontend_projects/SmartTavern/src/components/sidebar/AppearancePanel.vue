@@ -10,10 +10,10 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const tabs = [
-  { key: 'home', label: '主页设定' },
-  { key: 'threaded', label: '楼层对话设定' },
-  { key: 'backgrounds', label: '背景图片设定' },
-  { key: 'sandbox', label: '全屏沙盒设定' },
+  { key: 'home', label: '主页', icon: 'home' },
+  { key: 'threaded', label: '楼层对话', icon: 'message-square' },
+  { key: 'backgrounds', label: '背景图片', icon: 'image' },
+  { key: 'sandbox', label: '全屏沙盒', icon: 'monitor' },
 ]
 const active = ref('home')
 
@@ -342,6 +342,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.body.classList.remove('st-live-tuning')
 })
+onMounted(() => window.lucide?.createIcons?.())
 </script>
 
 <template>
@@ -353,29 +354,44 @@ onBeforeUnmount(() => {
     >
       <header class="st-settings-header">
         <div class="st-settings-title">
-          <span class="st-settings-icon">⚙️</span>
+          <span class="st-settings-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 data-lucide="palette" class="lucide lucide-palette">
+              <path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"></path>
+              <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+              <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+              <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+              <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+            </svg>
+          </span>
           {{ props.title }}
         </div>
         <button class="st-settings-close" type="button" title="关闭" @click="close">✕</button>
       </header>
 
-      <nav class="st-settings-tabs">
+      <nav class="st-settings-tabs" role="tablist" aria-label="外观页签">
         <button
           v-for="t in tabs"
           :key="t.key"
           type="button"
           class="st-tab"
           :class="{ active: active === t.key }"
+          role="tab"
+          :aria-selected="active === t.key"
+          :tabindex="active === t.key ? 0 : -1"
           @click="active = t.key"
         >
-          {{ t.label }}
+          <i v-if="t.icon" :data-lucide="t.icon"></i>
+          <span class="st-tab-label">{{ t.label }}</span>
         </button>
         <!-- 提示：原“应用设置”内容已合并到本外观面板 -->
       </nav>
 
       <CustomScrollbar class="st-settings-body">
         <div v-if="active === 'home'" class="st-tab-panel">
-          <h3>主页设定</h3>
+          <h3>主页</h3>
           <p class="muted">此为占位页面，用于配置应用主页相关选项。</p>
         </div>
 
@@ -568,7 +584,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else-if="active === 'backgrounds'" class="st-tab-panel">
-          <h3>背景图片设定</h3>
+          <h3>背景图片</h3>
           <p class="muted">为开始页面、楼层对话页面、沙盒页面设置背景图。可覆盖默认图片并即时预览。</p>
 
           <div class="bg-grid">
@@ -685,6 +701,134 @@ onBeforeUnmount(() => {
   </transition>
 </template>
 
+<style>
+/* Global range slider styles for AppearancePanel (non-scoped for pseudo-element support) */
+/* Scope limited to [data-scope="settings-view"] */
+
+/* Base range input reset */
+[data-scope="settings-view"] .st-control input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+}
+
+/* LIGHT THEME: Premium black rail with gradient depth */
+[data-scope="settings-view"] .st-control input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px !important;
+  border-radius: 9999px !important;
+  background: linear-gradient(180deg, rgba(0,0,0,0.68), rgba(0,0,0,0.82)) !important;
+  border: 1px solid rgba(0,0,0,0.92) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0,0,0,0.25),
+    0 1px 0 rgba(255,255,255,0.15) !important;
+}
+[data-scope="settings-view"] .st-control input[type="range"]::-moz-range-track {
+  height: 8px !important;
+  border-radius: 9999px !important;
+  background: linear-gradient(180deg, rgba(0,0,0,0.68), rgba(0,0,0,0.82)) !important;
+  border: 1px solid rgba(0,0,0,0.92) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0,0,0,0.25),
+    0 1px 0 rgba(255,255,255,0.15) !important;
+}
+
+/* LIGHT THEME: Premium white thumb with refined shadow */
+[data-scope="settings-view"] .st-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #ffffff, #f8f9fa) !important;
+  border: 1px solid rgba(0,0,0,0.12) !important;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.9),
+    0 2px 4px rgba(0,0,0,0.20),
+    0 4px 8px rgba(0,0,0,0.10) !important;
+  margin-top: -6px;
+  cursor: pointer;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1),
+              box-shadow .2s cubic-bezier(.22,.61,.36,1);
+}
+[data-scope="settings-view"] .st-control input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #ffffff, #f8f9fa) !important;
+  border: 1px solid rgba(0,0,0,0.12) !important;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.9),
+    0 2px 4px rgba(0,0,0,0.20),
+    0 4px 8px rgba(0,0,0,0.10) !important;
+  cursor: pointer;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1),
+              box-shadow .2s cubic-bezier(.22,.61,.36,1);
+}
+
+/* DARK THEME: Premium white rail with gradient depth */
+[data-theme="dark"] [data-scope="settings-view"] .st-control input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.85)) !important;
+  border: 1px solid rgba(255,255,255,0.95) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.20),
+    0 1px 0 rgba(0,0,0,0.15) !important;
+}
+[data-theme="dark"] [data-scope="settings-view"] .st-control input[type="range"]::-moz-range-track {
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.85)) !important;
+  border: 1px solid rgba(255,255,255,0.95) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.20),
+    0 1px 0 rgba(0,0,0,0.15) !important;
+}
+
+/* DARK THEME: Premium black thumb with refined shadow */
+[data-theme="dark"] [data-scope="settings-view"] .st-control input[type="range"]::-webkit-slider-thumb {
+  background: linear-gradient(180deg, #1a1a1a, #0a0a0a) !important;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.85),
+    0 2px 4px rgba(255,255,255,0.15),
+    0 4px 8px rgba(0,0,0,0.40) !important;
+}
+[data-theme="dark"] [data-scope="settings-view"] .st-control input[type="range"]::-moz-range-thumb {
+  background: linear-gradient(180deg, #1a1a1a, #0a0a0a) !important;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.85),
+    0 2px 4px rgba(255,255,255,0.15),
+    0 4px 8px rgba(0,0,0,0.40) !important;
+}
+
+/* Hover state: Light theme - elevate with enhanced glow */
+[data-scope="settings-view"] .st-control input[type="range"]:hover::-webkit-slider-thumb,
+[data-scope="settings-view"] .st-control input[type="range"]:hover::-moz-range-thumb {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.95),
+    0 4px 8px rgba(0,0,0,0.25),
+    0 6px 12px rgba(0,0,0,0.15),
+    0 0 0 4px rgba(var(--st-primary),0.15) !important;
+}
+
+/* Hover state: Dark theme - elevate with enhanced glow */
+[data-theme="dark"] [data-scope="settings-view"] .st-control input[type="range"]:hover::-webkit-slider-thumb,
+[data-theme="dark"] [data-scope="settings-view"] .st-control input[type="range"]:hover::-moz-range-thumb {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.90),
+    0 4px 8px rgba(255,255,255,0.20),
+    0 6px 12px rgba(0,0,0,0.50),
+    0 0 0 4px rgba(var(--st-accent),0.20) !important;
+}
+
+/* Active/dragging state */
+[data-scope="settings-view"] .st-control input[type="range"]:active::-webkit-slider-thumb,
+[data-scope="settings-view"] .st-control input[type="range"]:active::-moz-range-thumb {
+  transform: scale(1.05);
+}
+</style>
+
 <style scoped>
 .st-settings {
   display: grid;
@@ -713,15 +857,16 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: rgb(var(--st-color-text));
 }
-.st-settings-icon { font-size: 18px; }
+.st-settings-icon i,
+.st-settings-icon svg { width: 24px; height: 24px; display: inline-block; }
 .st-settings-close {
   appearance: none;
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgb(var(--st-surface-2));
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 6px 8px;
   cursor: pointer;
-  transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1), background .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1);
 }
 .st-settings-close:hover {
   background: rgb(var(--st-surface));
@@ -736,9 +881,15 @@ onBeforeUnmount(() => {
   padding: 8px 10px;
   border-bottom: 1px solid rgba(var(--st-border), 0.85);
   background: rgba(var(--st-surface), 0.65);
+  border-top-left-radius: var(--st-radius-lg);
+  border-top-right-radius: var(--st-radius-lg);
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.02);
 }
 .st-tab {
-  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
   border-radius: 9999px;
   border: 1px solid rgb(var(--st-border));
   background: rgb(var(--st-surface));
@@ -746,12 +897,23 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+  transition: background .2s cubic-bezier(.22,.61,.36,1),
+              border-color .2s cubic-bezier(.22,.61,.36,1),
+              transform .2s cubic-bezier(.22,.61,.36,1),
+              box-shadow .2s cubic-bezier(.22,.61,.36,1);
+}
+.st-tab i { width: 14px; height: 14px; display: inline-block; }
+.st-tab-label { font-weight: 600; letter-spacing: 0.2px; }
+.st-tab:focus-visible {
+  outline: 2px solid rgba(var(--st-primary), 0.6);
+  outline-offset: 2px;
 }
 .st-tab:hover { transform: translateY(-1px); }
 .st-tab.active {
   background: rgba(var(--st-primary), 0.14);
-  border-color: rgba(var(--st-primary), 0.4);
+  border-color: rgba(var(--st-primary), 0.45);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  transform: translateY(-1px);
 }
 
 /* Body */
@@ -766,8 +928,12 @@ onBeforeUnmount(() => {
 .st-control {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
-  margin: 10px 0 14px;
+  gap: 8px;
+  margin: 12px 0 16px;
+  background: rgba(var(--st-surface-2), 0.5);
+  border: 1px solid rgba(var(--st-border), 0.6);
+  border-radius: 6px;
+  padding: 10px;
 }
 .st-control-label {
   display: flex;
@@ -796,17 +962,20 @@ onBeforeUnmount(() => {
   text-align: right;
   font-size: 12px;
 }
+.st-number-input:focus-visible {
+  outline: 2px solid rgba(var(--st-primary), 0.6);
+  outline-offset: 2px;
+}
 .unit {
   opacity: .7;
   font-size: 12px;
 }
-.st-control input[type="range"] { width: 100%; }
 
 .st-control-hint {
   margin-top: 4px;
   padding: 6px 8px;
   background: rgba(var(--st-surface-2), 0.5);
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(var(--st-border), 0.4);
 }
 
@@ -836,7 +1005,7 @@ onBeforeUnmount(() => {
 .bg-preview {
   width: 100%;
   height: 120px;
-  border-radius: 10px;
+  border-radius: var(--st-radius-md);
   border: 1px solid rgba(var(--st-border), 0.8);
   background-size: cover;
   background-position: center center;
@@ -854,9 +1023,22 @@ onBeforeUnmount(() => {
   display: inline-flex; align-items: center; gap: 6px;
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgb(var(--st-surface-2));
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 6px 10px;
   cursor: pointer;
+  transition: background .2s cubic-bezier(.22,.61,.36,1),
+              border-color .2s cubic-bezier(.22,.61,.36,1),
+              transform .2s cubic-bezier(.22,.61,.36,1),
+              box-shadow .2s cubic-bezier(.22,.61,.36,1);
+}
+.bg-upload:hover {
+  background: rgb(var(--st-surface));
+  transform: translateY(-1px);
+  box-shadow: var(--st-shadow-sm);
+}
+.bg-upload:focus-within {
+  outline: 2px solid rgba(var(--st-primary), 0.6);
+  outline-offset: 2px;
 }
 .bg-upload input[type="file"] {
   display: none;

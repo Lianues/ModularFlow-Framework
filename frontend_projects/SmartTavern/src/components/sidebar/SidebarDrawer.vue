@@ -1,6 +1,6 @@
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 
 /**
  * SidebarDrawer
@@ -25,6 +25,12 @@ const emit = defineEmits(['update:modelValue'])
 const open = ref(props.modelValue)
 watch(() => props.modelValue, (v) => (open.value = v))
 watch(open, (v) => emit('update:modelValue', v))
+// 重新渲染 Lucide 图标（FAB 在 open=false 时新插入）
+watch(open, () => {
+  nextTick(() => {
+    if (window?.lucide?.createIcons) window.lucide.createIcons()
+  })
+})
 
 // 浮标位置（以页面可视区域为边界）
 const margin = 12
@@ -151,6 +157,7 @@ function onResize() {
 onMounted(() => {
   loadPos()
   window.addEventListener('resize', onResize)
+  window.lucide?.createIcons?.()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
@@ -199,7 +206,7 @@ const drawerStyle = computed(() => {
       <div class="sd-header">
         <div class="sd-title">设置</div>
         <button class="sd-close" type="button" @click="open = false" title="收起">
-          ◀
+          <i data-lucide="chevron-left"></i>
         </button>
       </div>
       <CustomScrollbar class="sd-body">
@@ -217,7 +224,17 @@ const drawerStyle = computed(() => {
     title="展开侧边栏"
     @pointerdown.prevent="onPointerDown"
   >
-    <span class="sd-fab-icon">☰</span>
+    <span class="sd-fab-icon">
+      <!-- inline lucide: menu -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+           viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           class="lucide lucide-menu">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </span>
   </button>
 </template>
 
@@ -248,7 +265,7 @@ const drawerStyle = computed(() => {
   appearance: none;
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgb(var(--st-surface-2));
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 6px 8px;
   cursor: pointer;
   transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
@@ -280,7 +297,7 @@ const drawerStyle = computed(() => {
   border: 1px solid rgba(var(--st-border), 0.9);
   background: linear-gradient(135deg, rgba(var(--st-primary),0.14), rgba(var(--st-accent),0.14));
   color: rgb(var(--st-color-text));
-  border-radius: 12px;
+  border-radius: 4px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.2);
   display: inline-flex;
   align-items: center;
@@ -305,10 +322,10 @@ const drawerStyle = computed(() => {
 }
 
 /* dock 定制（可按需要扩展外观差异） */
-.sd-fab.dock-left { border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
-.sd-fab.dock-right { border-top-right-radius: 10px; border-bottom-right-radius: 10px; }
-.sd-fab.dock-top { border-top-left-radius: 10px; border-top-right-radius: 10px; }
-.sd-fab.dock-bottom { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+.sd-fab.dock-left { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.sd-fab.dock-right { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+.sd-fab.dock-top { border-top-left-radius: 4px; border-top-right-radius: 4px; }
+.sd-fab.dock-bottom { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
 
 /* Backdrop 动画 */
 .sd-backdrop-enter-from, .sd-backdrop-leave-to { opacity: 0; }

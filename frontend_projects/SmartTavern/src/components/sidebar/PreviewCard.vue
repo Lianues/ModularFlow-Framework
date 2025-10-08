@@ -1,4 +1,5 @@
 <script setup>
+import { computed, onMounted, onUpdated } from 'vue'
 const props = defineProps({
   icon: { type: String, default: '✨' },
   title: { type: String, required: true },
@@ -6,6 +7,10 @@ const props = defineProps({
   part: { type: String, default: '' },
 })
 const emit = defineEmits(['click'])
+
+const isLucide = computed(() => /^[a-z\-]+$/.test(props.icon))
+onMounted(() => window.lucide?.createIcons?.())
+onUpdated(() => window.lucide?.createIcons?.())
 </script>
 
 <template>
@@ -17,7 +22,10 @@ const emit = defineEmits(['click'])
     @click="emit('click')"
   >
     <div class="st-preview-head">
-      <span class="st-icon">{{ props.icon }}</span>
+      <span class="st-icon">
+        <i v-if="isLucide" :data-lucide="props.icon"></i>
+        <span v-else>{{ props.icon }}</span>
+      </span>
       <div class="st-preview-title">{{ props.title }}</div>
     </div>
     <div v-if="props.desc" class="st-preview-desc">
@@ -54,8 +62,8 @@ const emit = defineEmits(['click'])
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px; height: 30px;
-  border-radius: 10px;
+  width: 32px; height: 32px;
+  border-radius: var(--st-radius-md);
   background: rgba(var(--st-primary), 0.14);
 }
 .st-preview-title {
