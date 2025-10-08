@@ -217,6 +217,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   removeWheel?.()
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
+  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
 })
 
 watch(() => props.messages.length, () => {
@@ -238,10 +240,15 @@ function sendMessage() {
     content: text
   }
   
+  // 若等待中则直接返回（不允许再次发送）
+  if (pendingMessageId?.value) return
+
   // 添加到消息列表
   props.messages.push(newMessage)
   // 为新消息生成色条调色板（若有头像则尝试提取主色）
   ensurePaletteFor(newMessage)
+  // 启动 10 秒等待占位
+  startPendingFor(newMessage.id)
   
   // 清空输入框
   inputText.value = ''
@@ -277,6 +284,11 @@ function sendMessage() {
 
 // 输入行为：Enter 发送，Shift+Enter 换行（遵循 UI 规范）
 function onKeydown(e) {
+  if (pendingMessageId?.value) {
+    // 等待中不允许再次发送（允许输入编辑）
+    if (e.key === 'Enter' && !e.shiftKey) e.preventDefault()
+    return
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
@@ -290,6 +302,51 @@ function startEdit(msg) {
 }
 function regenerateMessage(msg) {
   console.log('请求重新生成：', msg.id)
+}
+
+/* 发送后等待占位：10 秒等待动画 + 禁止再次发送，支持手动停止 */
+const pendingMessageId = ref(null)
+const pendingSeconds = ref(0)
+let pendingTimer = null
+let pendingInterval = null
+
+function startPendingFor(id) {
+  // 先清理旧等待
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
+  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+  
+  pendingMessageId.value = id
+  pendingSeconds.value = 0
+  refreshIcons()
+  
+  // 每100ms更新一次正数计时显示（从0递增至10）
+  const startTime = Date.now()
+  const duration = 10000
+  pendingInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime
+    const current = Math.min(10, Math.floor(elapsed / 1000))
+    pendingSeconds.value = current
+    if (current >= 10) {
+      clearInterval(pendingInterval)
+      pendingInterval = null
+    }
+  }, 100)
+  
+  // 10秒后自动完成
+  pendingTimer = setTimeout(() => {
+    if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+    pendingMessageId.value = null
+    pendingTimer = null
+    refreshIcons()
+  }, 10000)
+}
+
+function cancelPending() {
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
+  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+  pendingMessageId.value = null
+  pendingSeconds.value = 0
+  refreshIcons()
 }
 </script>
 
@@ -330,8 +387,15 @@ function regenerateMessage(msg) {
             <div class="floor-right">
               <header class="floor-header">
                 <div class="name">{{ nameOf(m) }}</div>
-                <!-- 三点菜单按钮 -->
-                <div class="menu-wrapper">
+                <!-- 右侧区：等待chip + 更多操作按钮 -->
+                <div class="header-right">
+                  <!-- 等待占位动画：右对齐，更多操作按钮左侧 -->
+                  <div v-if="pendingMessageId === m.id" class="pending-chip" aria-live="polite">
+                    <span class="chip-spinner" aria-hidden="true"></span>
+                    <span class="chip-text">等待中...{{ pendingSeconds }}s</span>
+                  </div>
+                  <!-- 三点菜单按钮 -->
+                  <div class="menu-wrapper">
                   <button
                     class="menu-btn"
                     @click.stop="toggleMenu(m.id)"
@@ -359,6 +423,7 @@ function regenerateMessage(msg) {
                       </button>
                     </div>
                   </transition>
+                  </div>
                 </div>
               </header>
               <section data-part="content" class="floor-content">
@@ -403,6 +468,8 @@ function regenerateMessage(msg) {
               </div>
             </div>
             </div>
+
+
           </article>
         </transition-group>
       </div>
@@ -429,14 +496,14 @@ function regenerateMessage(msg) {
       <div class="tch-tools-right">
         <button
           class="tch-send"
-          :disabled="!inputText.trim()"
-          @click="sendMessage"
-          title="发送 (Enter)"
-          aria-label="发送"
+          :disabled="pendingMessageId ? false : !inputText.trim()"
+          @click="pendingMessageId ? cancelPending() : sendMessage()"
+          :title="pendingMessageId ? '停止等待' : '发送 (Enter)'"
+          :aria-label="pendingMessageId ? '停止等待' : '发送'"
           data-tooltip-target="tt-send"
         >
-          <i data-lucide="send" class="icon-16" aria-hidden="true"></i>
-          <span class="tch-send-text">发送</span>
+          <i :data-lucide="pendingMessageId ? 'square' : 'send'" class="icon-16" aria-hidden="true"></i>
+          <span class="tch-send-text">{{ pendingMessageId ? '停止' : '发送' }}</span>
         </button>
         <div id="tt-send" role="tooltip" class="absolute z-10 invisible inline-block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 tooltip">
           发送
@@ -582,6 +649,11 @@ function regenerateMessage(msg) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0; /* chip 的 margin-right 会提供间隔 */
 }
 .avatar {
   width: var(--st-avatar-size, 56px);
@@ -977,6 +1049,9 @@ function regenerateMessage(msg) {
   box-sizing: border-box;
   transition: filter .18s cubic-bezier(.22,.61,.36,1), transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s cubic-bezier(.22,.61,.36,1);
 }
+.tch-send[aria-label="停止等待"] {
+  background: linear-gradient(135deg, rgba(220,38,38,1), rgba(244,63,94,1));
+}
 .tch-send:hover:enabled {
   filter: saturate(1.08) brightness(1.04);
   transform: translateY(-1px);
@@ -1028,6 +1103,74 @@ function regenerateMessage(msg) {
 .msg-move {
   transition: transform .32s cubic-bezier(.22,.61,.36,1);
   will-change: transform;
+}
+
+/* 等待占位动画（右上角 chip，位于更多操作按钮左侧） */
+.pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: 9999px;
+  background: rgba(var(--st-surface), 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(var(--st-color-text), 0.9);
+  box-shadow: var(--st-shadow-sm);
+  margin-right: 8px; /* 与更多菜单按钮分隔 */
+}
+.chip-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: st-spin 0.9s linear infinite;
+  opacity: 0.9;
+}
+.chip-text {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* 等待占位动画（右下角） */
+.pending-indicator {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: 9999px;
+  background: rgba(var(--st-surface), 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--st-shadow-sm);
+  z-index: 3;
+}
+
+.fb-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: st-spin 0.9s linear infinite;
+  opacity: 0.9;
+}
+
+.pending-text {
+  font-size: 12px;
+  color: rgba(var(--st-color-text), 0.85);
+}
+
+@keyframes st-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 减少动画偏好 */
