@@ -1,0 +1,465 @@
+<script setup>
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import WorldBookCard from './cards/WorldBookCard.vue'
+
+const props = defineProps({
+  worldbookData: { type: Object, default: null }
+})
+
+// 初始演示数据
+const initialWorldbookData = {
+  name: '演示世界书 - 完整示例',
+  world_books: [
+    {
+      id: 'location_1',
+      name: '赛博城市设定',
+      enabled: true,
+      content: '赛博城市是一个高科技都市，到处是霓虹灯和全息投影。这里是故事的主要发生地，充满了各种高科技设施和赛博朋克元素。',
+      mode: 'always',
+      position: 'before_char',
+      order: 100,
+      depth: 0,
+      keys: []
+    },
+    {
+      id: 'tech_1',
+      name: '神经接口技术',
+      enabled: true,
+      content: '神经接口是一种直接连接大脑和计算机的技术，允许用户通过思维控制设备。这项技术在这个世界中非常普及。',
+      mode: 'conditional',
+      position: 'system',
+      order: 200,
+      depth: 2,
+      keys: ['神经接口', '脑机接口', '思维控制']
+    },
+    {
+      id: 'faction_1',
+      name: '科技公司 - 诺瓦集团',
+      enabled: true,
+      content: '诺瓦集团是城市中最大的科技公司，控制着大部分高科技产业。他们的总部是一座高达200层的摩天大楼。',
+      mode: 'conditional',
+      position: 'after_char',
+      order: 150,
+      depth: 1,
+      keys: ['诺瓦', '诺瓦集团', 'Nova']
+    }
+  ]
+}
+
+// 当前编辑的数据（内存中）
+const currentData = ref(JSON.parse(JSON.stringify(props.worldbookData || initialWorldbookData)))
+
+// 新增条目
+const newId = ref('')
+const newName = ref('')
+const addError = ref(null)
+
+async function addEntry() {
+  addError.value = null
+  const id = newId.value.trim()
+  const name = newName.value.trim()
+  if (!id) {
+    addError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    addError.value = '请填写 名称'
+    return
+  }
+  const list = currentData.value.world_books || []
+  if (list.some(e => e.id === id)) {
+    addError.value = 'id 已存在'
+    return
+  }
+  const entry = {
+    id,
+    name,
+    enabled: true,
+    content: '',
+    mode: 'always',
+    position: 'before_char',
+    order: 100,
+    depth: 0,
+    keys: [],
+  }
+  if (!currentData.value.world_books) currentData.value.world_books = []
+  currentData.value.world_books.push(entry)
+  newId.value = ''
+  newName.value = ''
+  await nextTick()
+  window.lucide?.createIcons?.()
+}
+
+// 条目更新和删除
+function onEntryUpdate(updated) {
+  const list = currentData.value.world_books || []
+  // 如果 ID 改变了，需要找到原 ID
+  const oldId = updated._oldId || updated.id
+  const idx = list.findIndex(w => w.id === oldId)
+  if (idx >= 0) {
+    const { _oldId, ...cleanData } = updated
+    list[idx] = cleanData
+  }
+}
+
+function onEntryDelete(id) {
+  currentData.value.world_books = (currentData.value.world_books || []).filter(w => w.id !== id)
+}
+
+// 拖拽排序
+const dragging = ref(null)
+const dragOverId = ref(null)
+const dragOverBefore = ref(true)
+
+// 拖拽时自动滚动
+let autoScrollInterval = null
+
+function startAutoScroll(ev) {
+  const scrollContainer = ev.target.closest('.modal-scroll')?.querySelector('.scroll-container')
+  if (!scrollContainer) return
+  const rect = scrollContainer.getBoundingClientRect()
+  const mouseY = ev.clientY
+  const edgeSize = 80
+  const distanceFromTop = mouseY - rect.top
+  const distanceFromBottom = rect.bottom - mouseY
+  if (autoScrollInterval) {
+    clearInterval(autoScrollInterval)
+    autoScrollInterval = null
+  }
+  if (distanceFromTop < edgeSize && distanceFromTop > 0) {
+    const speed = Math.max(2, (edgeSize - distanceFromTop) / 4)
+    autoScrollInterval = setInterval(() => {
+      scrollContainer.scrollTop -= speed
+    }, 16)
+  } else if (distanceFromBottom < edgeSize && distanceFromBottom > 0) {
+    const speed = Math.max(2, (edgeSize - distanceFromBottom) / 4)
+    autoScrollInterval = setInterval(() => {
+      scrollContainer.scrollTop += speed
+    }, 16)
+  }
+}
+
+function stopAutoScroll() {
+  if (autoScrollInterval) {
+    clearInterval(autoScrollInterval)
+    autoScrollInterval = null
+  }
+}
+
+function onDragStart(id, ev) {
+  dragging.value = id
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer.effectAllowed = 'move'
+    const canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
+  } catch {}
+}
+
+function onDragOver(overId, ev) {
+  if (!dragging.value) return
+  ev.preventDefault()
+  startAutoScroll(ev)
+  try {
+    const el = ev.currentTarget
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverBefore.value = ev.clientY < mid
+    }
+  } catch {}
+  dragOverId.value = overId
+}
+
+function onDrop(overId, ev) {
+  if (!dragging.value) return
+  ev.preventDefault()
+  const dId = dragging.value
+  const list = [...(currentData.value.world_books || [])]
+  let ids = list.map(i => i.id)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    ids.push(dId)
+  }
+  currentData.value.world_books = ids.map(id => list.find(w => w.id === id)).filter(Boolean)
+  dragging.value = null
+  dragOverId.value = null
+  window.lucide?.createIcons?.()
+}
+
+function onDropEnd(ev) {
+  onDrop(null, ev)
+}
+
+function onDragEnd() {
+  dragging.value = null
+  dragOverId.value = null
+}
+
+// 初始化 Lucide 图标
+onMounted(() => {
+  window.lucide?.createIcons?.()
+})
+
+watch(() => currentData.value.world_books, async () => {
+  await nextTick()
+  window.lucide?.createIcons?.()
+}, { flush: 'post' })
+</script>
+
+<template>
+  <section class="space-y-6">
+    <!-- 页面标题 -->
+    <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="book-open" class="w-5 h-5 text-black"></i>
+          <h2 class="text-lg font-bold text-black">{{ currentData.name || '世界书详情' }}</h2>
+        </div>
+        <div class="px-3 py-1 rounded-4 bg-gray-100 border border-gray-300 text-black text-sm">
+          编辑模式
+        </div>
+      </div>
+      <p class="mt-2 text-xs text-black/60">此页面支持完整编辑、新增、删除和拖拽排序功能</p>
+    </div>
+
+    <!-- 工具栏：新增 -->
+    <div class="bg-white rounded-4 border border-gray-200 p-4 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-sm text-black/70">
+          条目数量：{{ (currentData.world_books || []).length }}
+        </div>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="newId"
+            placeholder="id"
+            class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-xs focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+          <input
+            v-model="newName"
+            placeholder="名称"
+            class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-xs focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+          <button
+            class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-xs hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="addEntry"
+          >
+            添加
+          </button>
+        </div>
+      </div>
+      <p v-if="addError" class="text-xs text-red-600 mt-2">* {{ addError }}</p>
+    </div>
+
+    <!-- 条目区域容器 -->
+    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="settings-2" class="w-4 h-4 text-black"></i>
+        <h3 class="text-base font-semibold text-black">世界书编辑</h3>
+      </div>
+
+      <!-- 列表（可拖拽排序） -->
+      <div class="space-y-2">
+        <div
+          v-for="w in (currentData.world_books || [])"
+          :key="w.id"
+          class="flex items-stretch gap-2 group draglist-item"
+          :class="{
+            'dragging-item': dragging && dragging === w.id,
+            'drag-over-top': dragging && dragOverId === w.id && dragOverBefore,
+            'drag-over-bottom': dragging && dragOverId === w.id && !dragOverBefore
+          }"
+          @dragover.prevent="onDragOver(w.id, $event)"
+          @drop.prevent="onDrop(w.id, $event)"
+        >
+          <div
+            class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+            draggable="true"
+            @dragstart="onDragStart(w.id, $event)"
+            @dragend="onDragEnd"
+            title="拖拽排序"
+          >
+            <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+          </div>
+          <div class="flex-1">
+            <WorldBookCard 
+              :entry="w" 
+              @update="onEntryUpdate"
+              @delete="onEntryDelete"
+            />
+          </div>
+        </div>
+
+        <div
+          class="h-3 draglist-end"
+          :class="{ 'drag-over-end': dragging && dragOverId === null }"
+          @dragover.prevent="onDragOver(null, $event)"
+          @drop.prevent="onDropEnd($event)"
+        />
+      </div>
+
+      <div v-if="(currentData.world_books || []).length === 0" class="text-center py-8 text-black/50 text-sm">
+        暂无世界书条目，请在右上角输入后点击添加
+      </div>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.rounded-4 {
+  border-radius: 10px;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.hover\:shadow-elevate:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.ease-soft {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 拖拽相关样式 */
+.cursor-grab {
+  cursor: grab;
+}
+
+.cursor-grab:active {
+  cursor: grabbing;
+}
+
+.icon-grip::before {
+  content: '⋮⋮';
+  display: inline-block;
+  line-height: 1;
+  font-weight: 700;
+  color: #111;
+}
+
+[data-theme="dark"] .icon-grip::before {
+  color: rgb(232, 236, 244);
+}
+
+.draglist-item {
+  position: relative;
+}
+
+.drag-over-top::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .drag-over-top::before {
+  background: rgb(232, 236, 244);
+}
+
+.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .drag-over-bottom::after {
+  background: rgb(232, 236, 244);
+}
+
+.dragging-item {
+  transform: scale(0.98);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  opacity: 0.92;
+  z-index: 1;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.draglist-end {
+  position: relative;
+}
+
+.drag-over-end::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .drag-over-end::after {
+  background: rgb(232, 236, 244);
+}
+
+/* 深色主题适配 */
+[data-theme="dark"] .bg-white {
+  background-color: rgb(23, 27, 36) !important;
+}
+
+[data-theme="dark"] .bg-gray-100 {
+  background-color: rgb(33, 39, 52) !important;
+}
+
+[data-theme="dark"] .text-black {
+  color: rgb(232, 236, 244) !important;
+}
+
+[data-theme="dark"] .text-black\/50 {
+  color: rgba(232, 236, 244, 0.5) !important;
+}
+
+[data-theme="dark"] .text-black\/60 {
+  color: rgba(232, 236, 244, 0.6) !important;
+}
+
+[data-theme="dark"] .text-black\/70 {
+  color: rgba(232, 236, 244, 0.7) !important;
+}
+
+[data-theme="dark"] .border-gray-200 {
+  border-color: rgb(45, 54, 70) !important;
+}
+
+[data-theme="dark"] .border-gray-300 {
+  border-color: rgb(55, 64, 80) !important;
+}
+
+[data-theme="dark"] .border-gray-800 {
+  border-color: rgb(200, 205, 215) !important;
+}
+
+[data-theme="dark"] .border-gray-900 {
+  border-color: rgb(200, 205, 215) !important;
+}
+
+[data-theme="dark"] .hover\:bg-gray-100:hover {
+  background-color: rgb(33, 39, 52) !important;
+}
+
+[data-theme="dark"] .text-red-600 {
+  color: rgb(248, 113, 113) !important;
+}
+</style>

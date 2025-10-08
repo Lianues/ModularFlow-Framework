@@ -1,12 +1,53 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import PresetPromptCard from './cards/PresetPromptCard.vue'
+import RegexRuleCard from './cards/RegexRuleCard.vue'
 
 const props = defineProps({
   presetData: { type: Object, default: null }
 })
 
-// 演示用的占位数据（与 PromptEditor 格式一致）
-const demoPresetData = ref({
+// 特殊 Relative 模板（一次性组件）
+const SPECIAL_RELATIVE_TEMPLATES = [
+  {
+    identifier: 'charBefore',
+    name: 'char Before',
+    enabled: null,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'personaDescription',
+    name: 'Persona Description',
+    enabled: false,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'charDescription',
+    name: 'Char Description',
+    enabled: true,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'charAfter',
+    name: 'char After',
+    enabled: true,
+    role: 'system',
+    position: 'relative',
+  },
+  {
+    identifier: 'chatHistory',
+    name: 'Chat History',
+    enabled: true,
+    role: 'system',
+    position: 'relative',
+  },
+]
+
+// 初始演示数据
+const initialPresetData = {
   name: '演示预设 - 完整示例',
   api_config: {
     enabled: true,
@@ -26,7 +67,7 @@ const demoPresetData = ref({
       enabled: true,
       role: 'system',
       position: 'relative',
-      content: '你是一个友好的AI助手，请用简洁明了的方式回答问题。这是一个比较长的内容示例，用来展示多行文本的显示效果。'
+      content: '你是一个友好的AI助手，请用简洁明了的方式回答问题。'
     },
     {
       identifier: 'char_personality',
@@ -34,23 +75,7 @@ const demoPresetData = ref({
       enabled: true,
       role: 'system',
       position: 'relative',
-      content: '保持礼貌、专业的态度。始终以用户的需求为中心，提供准确、有用的信息。'
-    },
-    {
-      identifier: 'char_background',
-      name: '角色背景',
-      enabled: false,
-      role: 'system',
-      position: 'relative',
-      content: '这是一个未启用的提示词示例，用于展示禁用状态的显示效果。'
-    },
-    {
-      identifier: 'world_info',
-      name: '世界观设定',
-      enabled: null,
-      role: 'system',
-      position: 'relative',
-      content: '这是一个未设置启用状态的提示词，展示 null 状态。'
+      content: '保持礼貌、专业的态度。'
     },
     {
       identifier: 'inchat_greeting',
@@ -60,27 +85,7 @@ const demoPresetData = ref({
       position: 'in-chat',
       depth: 0,
       order: 0,
-      content: '你好！我是AI助手，很高兴为你服务。请问有什么我可以帮助你的吗？'
-    },
-    {
-      identifier: 'inchat_example_1',
-      name: '对话示例1',
-      enabled: true,
-      role: 'user',
-      position: 'in-chat',
-      depth: 2,
-      order: 1,
-      content: '这是一个用户对话示例，用于展示 in-chat 提示词。'
-    },
-    {
-      identifier: 'inchat_example_2',
-      name: '对话示例2',
-      enabled: true,
-      role: 'system',
-      position: 'in-chat',
-      depth: 3,
-      order: 2,
-      content: '这是另一个 in-chat 示例，展示不同的 depth 和 order 参数。'
+      content: '你好！我是AI助手。'
     }
   ],
   regex_rules: [
@@ -102,103 +107,416 @@ const demoPresetData = ref({
       replace_regex: ' ',
       targets: ['output', 'input'],
       placement: 'after_macro',
-      views: ['chat']
-    },
-    {
-      id: 'format_quotes',
-      name: '格式化引号',
-      enabled: false,
-      find_regex: '"([^"]+)"',
-      replace_regex: '「$1」',
-      targets: ['output'],
-      placement: 'before_display',
-      views: []
-    },
-    {
-      id: 'remove_markdown',
-      name: '移除 Markdown 标记',
-      enabled: true,
-      find_regex: '\\*\\*(.+?)\\*\\*|\\*(.+?)\\*|__(.+?)__|_(.+?)_',
-      replace_regex: '$1$2$3$4',
-      targets: ['output'],
-      placement: 'after_macro',
-      views: ['preview']
+      views: ['user_view']
     }
   ]
-})
+}
 
-const activeData = computed(() => props.presetData || demoPresetData.value)
+// 当前编辑的数据（内存中）
+const currentData = ref(JSON.parse(JSON.stringify(props.presetData || initialPresetData)))
 
-// 预设设置的简化模型（本地占位状态）
-const temperature = computed(() => activeData.value.api_config?.temperature ?? 1.0)
-const maxTokens = computed(() => activeData.value.api_config?.max_tokens ?? 300)
-const stream = computed(() => activeData.value.api_config?.stream ?? true)
-const topP = computed(() => activeData.value.api_config?.top_p ?? 1.0)
-const frequencyPenalty = computed(() => activeData.value.api_config?.frequency_penalty ?? 0)
-const presencePenalty = computed(() => activeData.value.api_config?.presence_penalty ?? 0)
-const topK = computed(() => activeData.value.api_config?.top_k ?? 0)
-const maxContext = computed(() => activeData.value.api_config?.max_context ?? 4095)
-
-/* 面板收起/展开（默认全部展开） */
+// API 配置
 const apiOpen = ref(true)
 const promptsOpen = ref(true)
 const regexOpen = ref(true)
 const relativeOpen = ref(true)
 const inChatOpen = ref(true)
 
-// LLM API 配置启用与参数开关（仅前端显示，不联通后端）
-const apiEnabled = computed(() => activeData.value.api_config?.enabled ?? true)
-const enableTemperature = ref(true)
-const enableTopP = ref(true)
-const enableTopK = ref(true)
-const enableMaxContext = ref(true)
-const enableMaxTokens = ref(true)
-const enableStream = ref(true)
-const enableFrequencyPenalty = ref(true)
-const enablePresencePenalty = ref(true)
-
-// 提示词列表
+// 计算属性
 const relativePrompts = computed(() => 
-  (activeData.value.prompts || []).filter(p => p.position === 'relative')
+  (currentData.value.prompts || []).filter(p => p.position === 'relative')
 )
 const inChatPrompts = computed(() => 
-  (activeData.value.prompts || []).filter(p => p.position === 'in-chat')
+  (currentData.value.prompts || []).filter(p => p.position === 'in-chat')
 )
 
-/* 初始化 Lucide 图标（组件挂载后） */
+// 新增 Relative：特殊组件选择
+const specialSelect = ref('')
+const newRelId = ref('')
+const newRelName = ref('')
+const relError = ref(null)
+
+const availableSpecials = computed(() =>
+  SPECIAL_RELATIVE_TEMPLATES.filter(t => 
+    !(currentData.value.prompts || []).some(p => p.identifier === t.identifier)
+  )
+)
+
+const reservedIdSet = new Set(SPECIAL_RELATIVE_TEMPLATES.map(t => t.identifier))
+const reservedNameSet = new Set(SPECIAL_RELATIVE_TEMPLATES.map(t => t.name))
+
+async function addSelectedSpecial() {
+  relError.value = null
+  const sel = specialSelect.value
+  if (!sel) return
+  const tpl = SPECIAL_RELATIVE_TEMPLATES.find(t => t.identifier === sel)
+  if (!tpl) return
+  if ((currentData.value.prompts || []).some(p => p.identifier === tpl.identifier)) {
+    relError.value = '该一次性组件已存在'
+    return
+  }
+  const item = { ...tpl }
+  currentData.value.prompts.push(item)
+  specialSelect.value = ''
+  await nextTick()
+  window.lucide?.createIcons?.()
+}
+
+async function addCustomRelative() {
+  relError.value = null
+  const id = newRelId.value.trim()
+  const name = newRelName.value.trim()
+  if (!id) {
+    relError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    relError.value = '请填写名称'
+    return
+  }
+  if (reservedIdSet.has(id) || reservedNameSet.has(name)) {
+    relError.value = 'id 或 名称 与保留组件重复'
+    return
+  }
+  if ((currentData.value.prompts || []).some(p => p.identifier === id)) {
+    relError.value = 'id 已存在'
+    return
+  }
+  if ((currentData.value.prompts || []).some(p => p.name === name)) {
+    relError.value = '名称已存在'
+    return
+  }
+  const item = {
+    identifier: id,
+    name,
+    enabled: null,
+    role: 'system',
+    position: 'relative',
+    content: ''
+  }
+  currentData.value.prompts.push(item)
+  newRelId.value = ''
+  newRelName.value = ''
+  await nextTick()
+  window.lucide?.createIcons?.()
+}
+
+// In-Chat 新增
+const newChatId = ref('')
+const newChatName = ref('')
+const chatError = ref(null)
+
+async function addCustomInChat() {
+  chatError.value = null
+  const id = newChatId.value.trim()
+  const name = newChatName.value.trim()
+  if (!id) {
+    chatError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    chatError.value = '请填写名称'
+    return
+  }
+  if ((currentData.value.prompts || []).some(p => p.identifier === id)) {
+    chatError.value = 'id 已存在'
+    return
+  }
+  if ((currentData.value.prompts || []).filter(p => p.position === 'in-chat').some(p => p.name === name)) {
+    chatError.value = '名称已存在'
+    return
+  }
+  const item = {
+    identifier: id,
+    name,
+    enabled: true,
+    role: 'system',
+    position: 'in-chat',
+    depth: 0,
+    order: 0,
+    content: ''
+  }
+  currentData.value.prompts.push(item)
+  newChatId.value = ''
+  newChatName.value = ''
+  await nextTick()
+  window.lucide?.createIcons?.()
+}
+
+// 正则规则新增
+const newRegexId = ref('')
+const newRegexName = ref('')
+const regexError = ref(null)
+
+async function addCustomRegex() {
+  regexError.value = null
+  const id = newRegexId.value.trim()
+  const name = newRegexName.value.trim()
+  if (!id) {
+    regexError.value = '请填写 id'
+    return
+  }
+  if (!name) {
+    regexError.value = '请填写 名称'
+    return
+  }
+  const rules = currentData.value.regex_rules || []
+  if (rules.some(r => r.id === id)) {
+    regexError.value = 'id 已存在'
+    return
+  }
+  const rule = {
+    id,
+    name,
+    enabled: true,
+    find_regex: '',
+    replace_regex: '',
+    targets: [],
+    placement: 'after_macro',
+    views: [],
+  }
+  if (!currentData.value.regex_rules) currentData.value.regex_rules = []
+  currentData.value.regex_rules.push(rule)
+  newRegexId.value = ''
+  newRegexName.value = ''
+  await nextTick()
+  window.lucide?.createIcons?.()
+}
+
+// 提示词更新和删除
+function onPromptUpdate(updated) {
+  const idx = currentData.value.prompts.findIndex(p => p.identifier === updated.identifier)
+  if (idx >= 0) {
+    currentData.value.prompts[idx] = updated
+  }
+}
+
+function onPromptDelete(id) {
+  currentData.value.prompts = currentData.value.prompts.filter(p => p.identifier !== id)
+}
+
+// 正则规则更新和删除
+function onRegexUpdate(updated) {
+  const idx = currentData.value.regex_rules.findIndex(r => r.id === updated.id)
+  if (idx >= 0) {
+    currentData.value.regex_rules[idx] = updated
+  }
+}
+
+function onRegexDelete(id) {
+  currentData.value.regex_rules = currentData.value.regex_rules.filter(r => r.id !== id)
+}
+
+// 拖拽排序（Relative / In-Chat）
+const dragging = ref(null)
+const dragOverId = ref(null)
+const dragOverBefore = ref(true)
+
+// 拖拽时自动滚动
+let autoScrollInterval = null
+
+function startAutoScroll(ev) {
+  const scrollContainer = ev.target.closest('.modal-scroll')?.querySelector('.scroll-container')
+  if (!scrollContainer) return
+
+  const rect = scrollContainer.getBoundingClientRect()
+  const mouseY = ev.clientY
+  const edgeSize = 80
+
+  const distanceFromTop = mouseY - rect.top
+  const distanceFromBottom = rect.bottom - mouseY
+
+  if (autoScrollInterval) {
+    clearInterval(autoScrollInterval)
+    autoScrollInterval = null
+  }
+
+  if (distanceFromTop < edgeSize && distanceFromTop > 0) {
+    const speed = Math.max(2, (edgeSize - distanceFromTop) / 4)
+    autoScrollInterval = setInterval(() => {
+      scrollContainer.scrollTop -= speed
+    }, 16)
+  } else if (distanceFromBottom < edgeSize && distanceFromBottom > 0) {
+    const speed = Math.max(2, (edgeSize - distanceFromBottom) / 4)
+    autoScrollInterval = setInterval(() => {
+      scrollContainer.scrollTop += speed
+    }, 16)
+  }
+}
+
+function stopAutoScroll() {
+  if (autoScrollInterval) {
+    clearInterval(autoScrollInterval)
+    autoScrollInterval = null
+  }
+}
+
+function onDragStart(position, id, ev) {
+  dragging.value = { position, id }
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer.effectAllowed = 'move'
+    const canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
+  } catch {}
+}
+
+function onDragOver(position, overId, ev) {
+  if (dragging.value?.position !== position) return
+  ev.preventDefault()
+  
+  // 启动自动滚动
+  startAutoScroll(ev)
+  
+  try {
+    const el = ev.currentTarget
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverBefore.value = ev.clientY < mid
+    }
+  } catch {}
+  dragOverId.value = overId
+}
+
+function onDrop(position, overId, ev) {
+  if (dragging.value?.position !== position) return
+  ev.preventDefault()
+  const dId = dragging.value.id
+  const list = position === 'relative' ? [...relativePrompts.value] : [...inChatPrompts.value]
+  let ids = list.map(i => i.identifier)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    ids.push(dId)
+  }
+  // 重新排列
+  const allPrompts = currentData.value.prompts || []
+  const otherPrompts = allPrompts.filter(p => p.position !== position)
+  const reordered = ids.map(id => allPrompts.find(p => p.identifier === id)).filter(Boolean)
+  currentData.value.prompts = [...otherPrompts, ...reordered]
+  
+  dragging.value = null
+  dragOverId.value = null
+  window.lucide?.createIcons?.()
+}
+
+function onDropEnd(position, ev) {
+  onDrop(position, null, ev)
+}
+
+function onDragEnd() {
+  stopAutoScroll()
+  dragging.value = null
+  dragOverId.value = null
+}
+
+// 正则规则拖拽排序
+const draggingRegex = ref(null)
+const dragOverRegexId = ref(null)
+const dragOverRegexBefore = ref(true)
+
+function onRegexDragStart(id, ev) {
+  draggingRegex.value = id
+  try {
+    ev.dataTransfer?.setData('text/plain', id)
+    ev.dataTransfer.effectAllowed = 'move'
+    const canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    ev.dataTransfer?.setDragImage(canvas, 0, 0)
+  } catch {}
+}
+
+function onRegexDragOver(overId, ev) {
+  if (!draggingRegex.value) return
+  ev.preventDefault()
+  
+  // 启动自动滚动
+  startAutoScroll(ev)
+  
+  try {
+    const el = ev.currentTarget
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      dragOverRegexBefore.value = ev.clientY < mid
+    }
+  } catch {}
+  dragOverRegexId.value = overId
+}
+
+function onRegexDrop(overId, ev) {
+  if (!draggingRegex.value) return
+  ev.preventDefault()
+  const dId = draggingRegex.value
+  const list = [...(currentData.value.regex_rules || [])]
+  let ids = list.map(i => i.id)
+  const fromIdx = ids.indexOf(dId)
+  if (fromIdx < 0) return
+  ids.splice(fromIdx, 1)
+  if (overId && overId !== dId) {
+    const toIdx = ids.indexOf(overId)
+    let insertIdx = toIdx < 0 ? ids.length : toIdx + (dragOverRegexBefore.value ? 0 : 1)
+    if (insertIdx < 0) insertIdx = 0
+    if (insertIdx > ids.length) insertIdx = ids.length
+    ids.splice(insertIdx, 0, dId)
+  } else {
+    ids.push(dId)
+  }
+  currentData.value.regex_rules = ids.map(id => list.find(r => r.id === id)).filter(Boolean)
+  draggingRegex.value = null
+  dragOverRegexId.value = null
+  window.lucide?.createIcons?.()
+}
+
+function onRegexDropEnd(ev) {
+  onRegexDrop(null, ev)
+}
+
+function onRegexDragEnd() {
+  stopAutoScroll()
+  draggingRegex.value = null
+  dragOverRegexId.value = null
+}
+
+// 初始化 Lucide 图标
 onMounted(() => {
   window.lucide?.createIcons?.()
 })
 
-watch([() => activeData.value.prompts, () => activeData.value.regex_rules], async () => {
+watch([() => currentData.value.prompts, () => currentData.value.regex_rules], async () => {
   await nextTick()
   window.lucide?.createIcons?.()
 }, { flush: 'post' })
-
-// 渲染提示词卡片的方法
-function enabledLabel(v) {
-  return v === true ? '已启用' : v === false ? '未启用' : '未设置'
-}
 </script>
 
 <template>
-  <!-- 仅 Preset 视图的内容（不包含三栏布局与顶部栏） -->
   <section class="space-y-6">
     <!-- 页面标题 -->
     <div class="bg-white rounded-4 card-shadow border border-gray-200 p-6 transition-all duration-200 ease-soft hover:shadow-elevate">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <i data-lucide="settings-2" class="w-5 h-5 text-black"></i>
-          <h2 class="text-lg font-bold">{{ activeData.name || '预设详情' }}</h2>
+          <h2 class="text-lg font-bold text-black">{{ currentData.name || '预设详情' }}</h2>
         </div>
         <div class="px-3 py-1 rounded-4 bg-gray-100 border border-gray-300 text-black text-sm">
-          只读模式
+          编辑模式
         </div>
       </div>
-      <p class="mt-2 text-xs text-black/60">本页为查看模式，展示预设的完整内容</p>
+      <p class="mt-2 text-xs text-black/60">此页面支持完整编辑、新增、删除和拖拽排序功能</p>
     </div>
 
-    <!-- API 配置（默认收起） -->
+    <!-- API 配置 -->
     <div class="bg-white rounded-4 border border-gray-200 transition-all duration-200 ease-soft hover:shadow-elevate">
       <button
         type="button"
@@ -220,105 +538,108 @@ function enabledLabel(v) {
         <!-- 全局启用开关 -->
         <div class="mb-4 flex items-center justify-between">
           <div class="text-sm font-medium text-black">启用 API 配置</div>
-          <span class="text-sm text-black/80">{{ apiEnabled ? '已启用' : '未启用' }}</span>
+          <label class="inline-flex items-center gap-2 select-none">
+            <input
+              type="checkbox"
+              v-model="currentData.api_config.enabled"
+              class="w-5 h-5 border border-gray-400 rounded-4 accent-black"
+            />
+            <span class="text-sm text-black/80">{{ currentData.api_config.enabled ? '已启用' : '未启用' }}</span>
+          </label>
         </div>
 
-        <!-- 参数编辑（仅 UI 显示，不联通后端） -->
+        <!-- 参数编辑 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- temperature -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Temperature</label>
-              <span class="text-xs text-black/60">{{ enableTemperature ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ temperature.toFixed(2) }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Temperature</label>
+            <input
+              type="number"
+              min="0"
+              max="2"
+              step="0.01"
+              v-model.number="currentData.api_config.temperature"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
 
-          <!-- top_p -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Top P</label>
-              <span class="text-xs text-black/60">{{ enableTopP ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ topP.toFixed(2) }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Top P</label>
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              v-model.number="currentData.api_config.top_p"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
 
-          <!-- top_k -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Top K</label>
-              <span class="text-xs text-black/60">{{ enableTopK ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ topK }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Top K</label>
+            <input
+              type="number"
+              min="0"
+              v-model.number="currentData.api_config.top_k"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
 
-          <!-- max_context -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Max Context</label>
-              <span class="text-xs text-black/60">{{ enableMaxContext ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ maxContext }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Max Context</label>
+            <input
+              type="number"
+              min="1"
+              v-model.number="currentData.api_config.max_context"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
 
-          <!-- max_tokens -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Max Tokens</label>
-              <span class="text-xs text-black/60">{{ enableMaxTokens ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ maxTokens }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Max Tokens</label>
+            <input
+              type="number"
+              min="1"
+              v-model.number="currentData.api_config.max_tokens"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
 
-          <!-- stream -->
-          <div class="flex items-end">
-            <div class="w-full">
-              <div class="flex items-center justify-between mb-2">
-                <label class="text-sm font-medium text-black">流式输出（stream）</label>
-                <span class="text-xs text-black/60">{{ enableStream ? '启用' : '禁用' }}</span>
-              </div>
-              <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-                {{ stream ? '开启' : '关闭' }}
-              </div>
-            </div>
+          <div>
+            <label class="block text-sm font-medium text-black mb-2">流式输出（stream）</label>
+            <label class="inline-flex items-center space-x-2">
+              <input
+                type="checkbox"
+                v-model="currentData.api_config.stream"
+                class="w-5 h-5 border border-gray-400 rounded-4 accent-black"
+              />
+              <span class="text-sm text-black/80">开启</span>
+            </label>
           </div>
 
-          <!-- frequency_penalty -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Frequency Penalty</label>
-              <span class="text-xs text-black/60">{{ enableFrequencyPenalty ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ frequencyPenalty }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Frequency Penalty</label>
+            <input
+              type="number"
+              min="0"
+              v-model.number="currentData.api_config.frequency_penalty"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
 
-          <!-- presence_penalty -->
           <div>
-            <div class="flex items-center justify-between mb-2">
-              <label class="text-sm font-medium text-black">Presence Penalty</label>
-              <span class="text-xs text-black/60">{{ enablePresencePenalty ? '启用' : '禁用' }}</span>
-            </div>
-            <div class="w-full px-3 py-2 border border-gray-300 rounded-4 bg-gray-50 text-sm">
-              {{ presencePenalty }}
-            </div>
+            <label class="block text-sm font-medium text-black mb-2">Presence Penalty</label>
+            <input
+              type="number"
+              min="0"
+              v-model.number="currentData.api_config.presence_penalty"
+              class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 提示词编辑（默认展开） -->
+    <!-- 提示词编辑 -->
     <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
       <button
         type="button"
@@ -337,7 +658,6 @@ function enabledLabel(v) {
       </button>
 
       <div v-show="promptsOpen" class="grid grid-cols-1 gap-6">
-        <!-- 右：提示词条目 -->
         <div class="space-y-4">
           <div class="border border-gray-200 rounded-4 p-4 transition-all duration-200 ease-soft hover:shadow-elevate">
             <div class="flex items-center justify-between mb-3">
@@ -365,36 +685,93 @@ function enabledLabel(v) {
                   />
                 </button>
 
-                <!-- 已有 Relative 列表 -->
+                <!-- 新增 Relative -->
+                <div v-show="relativeOpen" class="space-y-2 mb-2">
+                  <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                    <!-- 一次性组件选择 -->
+                    <div class="flex items-center gap-2">
+                      <select
+                        v-model="specialSelect"
+                        class="min-w-[220px] px-3 py-2 border border-gray-300 rounded-4 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                      >
+                        <option value="" disabled>选择一次性组件</option>
+                        <option
+                          v-for="sp in availableSpecials"
+                          :key="sp.identifier"
+                          :value="sp.identifier"
+                        >
+                          {{ sp.name }} (id: {{ sp.identifier }})
+                        </option>
+                      </select>
+                      <button
+                        class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs disabled:opacity-50"
+                        :disabled="!specialSelect"
+                        @click="addSelectedSpecial"
+                      >
+                        添加特殊
+                      </button>
+                    </div>
+
+                    <!-- 自定义 Relative -->
+                    <div class="flex items-center gap-2 justify-end">
+                      <input
+                        v-model="newRelId"
+                        placeholder="id"
+                        class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                      />
+                      <input
+                        v-model="newRelName"
+                        placeholder="名称"
+                        class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                      />
+                      <button
+                        class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+                        @click="addCustomRelative"
+                      >
+                        添加
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="relError" class="text-xs text-red-600">* {{ relError }}</p>
+                </div>
+
+                <!-- Relative 列表（可拖拽） -->
                 <div v-show="relativeOpen" class="space-y-2">
                   <div
                     v-for="it in relativePrompts"
                     :key="it.identifier"
-                    class="border border-gray-200 rounded-4 p-3 bg-white transition-all duration-200 ease-soft hover:shadow-elevate"
+                    class="flex items-stretch gap-2 group draglist-item"
+                    :class="{
+                      'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'relative',
+                      'drag-over-top': dragging && dragOverId === it.identifier && dragging.position === 'relative' && dragOverBefore,
+                      'drag-over-bottom': dragging && dragOverId === it.identifier && dragging.position === 'relative' && !dragOverBefore
+                    }"
+                    @dragover.prevent="onDragOver('relative', it.identifier, $event)"
+                    @drop.prevent="onDrop('relative', it.identifier, $event)"
                   >
-                    <!-- Header -->
-                    <div class="flex items-center justify-between">
-                      <div class="text-sm flex items-center gap-2">
-                        <span class="font-medium">{{ it.name }}</span>
-                      </div>
-
-                      <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ it.role }}</span>
-                        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ enabledLabel(it.enabled) }}</span>
-                      </div>
+                    <div
+                      class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+                      draggable="true"
+                      @dragstart="onDragStart('relative', it.identifier, $event)"
+                      @dragend="onDragEnd"
+                      title="拖拽排序"
+                    >
+                      <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
                     </div>
-
-                    <!-- Identifier -->
-                    <div class="text-xs text-black/60 mt-2">
-                      <span class="font-mono">id:</span>
-                      <span class="ml-1 font-mono">{{ it.identifier }}</span>
-                    </div>
-
-                    <!-- View mode content -->
-                    <div v-if="it.content" class="text-xs text-black/70 mt-2 leading-6 break-words">
-                      {{ it.content }}
+                    <div class="flex-1">
+                      <PresetPromptCard 
+                        :item="it" 
+                        @update="onPromptUpdate"
+                        @delete="onPromptDelete"
+                      />
                     </div>
                   </div>
+                  <div
+                    class="h-3 draglist-end"
+                    :class="{ 'drag-over-end': dragging && dragOverId === null && dragging.position === 'relative' }"
+                    @dragover.prevent="onDragOver('relative', null, $event)"
+                    @drop.prevent="onDropEnd('relative', $event)"
+                  />
                 </div>
               </div>
 
@@ -415,46 +792,74 @@ function enabledLabel(v) {
                     :class="inChatOpen ? 'rotate-180' : ''"
                   />
                 </button>
+                
+                <div v-show="inChatOpen" class="mb-2 flex justify-end">
+                  <div class="flex items-center gap-2">
+                    <input
+                      v-model="newChatId"
+                      placeholder="id"
+                      class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                    />
+                    <input
+                      v-model="newChatName"
+                      placeholder="名称"
+                      class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+                    />
+                    <button
+                      class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+                      @click="addCustomInChat"
+                    >
+                      添加
+                    </button>
+                  </div>
+                </div>
+                <p v-show="inChatOpen && chatError" class="text-xs text-red-600 mb-2">* {{ chatError }}</p>
+                
                 <div v-show="inChatOpen" class="space-y-2">
                   <div
                     v-for="it in inChatPrompts"
                     :key="it.identifier"
-                    class="border border-gray-200 rounded-4 p-3 bg-white transition-all duration-200 ease-soft hover:shadow-elevate"
+                    class="flex items-stretch gap-2 group draglist-item"
+                    :class="{
+                      'dragging-item': dragging && dragging.id === it.identifier && dragging.position === 'in-chat',
+                      'drag-over-top': dragging && dragOverId === it.identifier && dragging.position === 'in-chat' && dragOverBefore,
+                      'drag-over-bottom': dragging && dragOverId === it.identifier && dragging.position === 'in-chat' && !dragOverBefore
+                    }"
+                    @dragover.prevent="onDragOver('in-chat', it.identifier, $event)"
+                    @drop.prevent="onDrop('in-chat', it.identifier, $event)"
                   >
-                    <!-- Header -->
-                    <div class="flex items-center justify-between">
-                      <div class="text-sm flex items-center gap-2">
-                        <span class="font-medium">{{ it.name }}</span>
-                        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">depth: {{ it.depth }}</span>
-                        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">order: {{ it.order }}</span>
-                      </div>
-
-                      <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ it.role }}</span>
-                        <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ enabledLabel(it.enabled) }}</span>
-                      </div>
+                    <div
+                      class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+                      draggable="true"
+                      @dragstart="onDragStart('in-chat', it.identifier, $event)"
+                      @dragend="onDragEnd"
+                      title="拖拽排序"
+                    >
+                      <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
                     </div>
-
-                    <!-- Identifier -->
-                    <div class="text-xs text-black/60 mt-2">
-                      <span class="font-mono">id:</span>
-                      <span class="ml-1 font-mono">{{ it.identifier }}</span>
-                    </div>
-
-                    <!-- View mode content -->
-                    <div v-if="it.content" class="text-xs text-black/70 mt-2 leading-6 break-words">
-                      {{ it.content }}
+                    <div class="flex-1">
+                      <PresetPromptCard 
+                        :item="it" 
+                        @update="onPromptUpdate"
+                        @delete="onPromptDelete"
+                      />
                     </div>
                   </div>
+                  <div
+                    class="h-3 draglist-end"
+                    :class="{ 'drag-over-end': dragging && dragOverId === null && dragging.position === 'in-chat' }"
+                    @dragover.prevent="onDragOver('in-chat', null, $event)"
+                    @drop.prevent="onDropEnd('in-chat', $event)"
+                  />
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div> <!-- grid end -->
+      </div>
     </div>
 
-    <!-- 正则编辑（默认展开） -->
+    <!-- 正则编辑 -->
     <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
       <button
         type="button"
@@ -473,54 +878,70 @@ function enabledLabel(v) {
       </button>
 
       <div v-show="regexOpen" class="space-y-2">
-        <!-- 规则列表 -->
-        <div class="space-y-2">
-          <div
-            v-for="r in (activeData.regex_rules || [])"
-            :key="r.id"
-            class="border border-gray-200 rounded-4 p-3 bg-white transition-all duration-200 ease-soft hover:shadow-elevate"
-          >
-            <!-- Header -->
-            <div class="flex items-center justify-between mb-2">
-              <div class="text-sm font-medium">{{ r.name }}</div>
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ r.enabled ? '已启用' : '未启用' }}</span>
-                <span class="px-2 py-0.5 text-xs rounded-4 border border-gray-800 text-black">{{ r.placement }}</span>
-              </div>
-            </div>
-
-            <!-- ID -->
-            <div class="text-xs text-black/60 mb-2">
-              <span class="font-mono">id:</span>
-              <span class="ml-1 font-mono">{{ r.id }}</span>
-            </div>
-
-            <!-- Rules -->
-            <div class="space-y-2">
-              <div class="grid grid-cols-[80px_1fr] gap-2 items-start">
-                <div class="text-xs font-medium text-black/60">查找正则:</div>
-                <div class="text-xs font-mono text-black/80 bg-gray-50 px-2 py-1 rounded-4 break-all min-h-[28px] flex items-center">
-                  {{ r.find_regex || '(空)' }}
-                </div>
-              </div>
-              <div class="grid grid-cols-[80px_1fr] gap-2 items-start">
-                <div class="text-xs font-medium text-black/60">替换正则:</div>
-                <div class="text-xs font-mono text-black/80 bg-gray-50 px-2 py-1 rounded-4 break-all min-h-[28px] flex items-center">
-                  {{ r.replace_regex === '' ? '(空)' : r.replace_regex }}
-                </div>
-              </div>
-              <div v-if="r.targets && r.targets.length > 0" class="grid grid-cols-[80px_1fr] gap-2 items-start">
-                <div class="text-xs font-medium text-black/60">目标:</div>
-                <div class="text-xs text-black/80 bg-gray-50 px-2 py-1 rounded-4 min-h-[28px] flex items-center">
-                  {{ r.targets.join(', ') }}
-                </div>
-              </div>
-            </div>
+        <!-- 新增 Regex -->
+        <div class="mb-2 flex justify-end">
+          <div class="flex items-center gap-2">
+            <input
+              v-model="newRegexId"
+              placeholder="id"
+              class="w-32 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
+            <input
+              v-model="newRegexName"
+              placeholder="名称"
+              class="w-40 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
+            <button
+              class="px-2 py-1 rounded-4 bg-transparent border border-gray-900 text-black hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft text-xs"
+              @click="addCustomRegex"
+            >
+              添加
+            </button>
           </div>
         </div>
+        <p v-if="regexError" class="text-xs text-red-600 mb-2">* {{ regexError }}</p>
 
-        <div v-if="(activeData.regex_rules || []).length === 0" class="text-xs text-black/50 px-1 py-1">
-          暂无规则
+        <!-- 规则列表（可拖拽排序） -->
+        <div class="space-y-2">
+          <div
+            v-for="r in (currentData.regex_rules || [])"
+            :key="r.id"
+            class="flex items-stretch gap-2 group draglist-item"
+            :class="{
+              'dragging-item': draggingRegex && draggingRegex === r.id,
+              'drag-over-top': draggingRegex && dragOverRegexId === r.id && dragOverRegexBefore,
+              'drag-over-bottom': draggingRegex && dragOverRegexId === r.id && !dragOverRegexBefore
+            }"
+            @dragover.prevent="onRegexDragOver(r.id, $event)"
+            @drop.prevent="onRegexDrop(r.id, $event)"
+          >
+            <div
+              class="w-6 flex items-center justify-center select-none cursor-grab active:cursor-grabbing"
+              draggable="true"
+              @dragstart="onRegexDragStart(r.id, $event)"
+              @dragend="onRegexDragEnd"
+              title="拖拽排序"
+            >
+              <i data-lucide="grip-vertical" class="icon-grip w-4 h-4 text-black opacity-60 group-hover:opacity-100"></i>
+            </div>
+            <div class="flex-1">
+              <RegexRuleCard 
+                :rule="r" 
+                @update="onRegexUpdate"
+                @delete="onRegexDelete"
+              />
+            </div>
+          </div>
+          <div
+            class="h-3 draglist-end"
+            :class="{ 'drag-over-end': draggingRegex && dragOverRegexId === null }"
+            @dragover.prevent="onRegexDragOver(null, $event)"
+            @drop.prevent="onRegexDropEnd($event)"
+          />
+        </div>
+
+        <div v-if="(currentData.regex_rules || []).length === 0" class="text-xs text-black/50 px-1 py-1">
+          暂无规则，请在右上角输入后点击添加
         </div>
       </div>
     </div>
@@ -528,7 +949,6 @@ function enabledLabel(v) {
 </template>
 
 <style scoped>
-/* 遵循 PromptEditor 的黑白主题，使用 Tailwind 工具类 */
 .rounded-4 {
   border-radius: 10px;
 }
@@ -545,13 +965,91 @@ function enabledLabel(v) {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 拖拽相关样式 */
+.cursor-grab {
+  cursor: grab;
+}
+
+.cursor-grab:active {
+  cursor: grabbing;
+}
+
+.icon-grip::before {
+  content: '⋮⋮';
+  display: inline-block;
+  line-height: 1;
+  font-weight: 700;
+  color: #111;
+}
+
+[data-theme="dark"] .icon-grip::before {
+  color: rgb(232, 236, 244);
+}
+
+.draglist-item {
+  position: relative;
+}
+
+.drag-over-top::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .drag-over-top::before {
+  background: rgb(232, 236, 244);
+}
+
+.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -6px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .drag-over-bottom::after {
+  background: rgb(232, 236, 244);
+}
+
+.dragging-item {
+  transform: scale(0.98);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  opacity: 0.92;
+  z-index: 1;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.draglist-end {
+  position: relative;
+}
+
+.drag-over-end::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+[data-theme="dark"] .drag-over-end::after {
+  background: rgb(232, 236, 244);
+}
+
 /* 深色主题适配 */
 [data-theme="dark"] .bg-white {
   background-color: rgb(23, 27, 36) !important;
-}
-
-[data-theme="dark"] .bg-gray-50 {
-  background-color: rgb(28, 34, 45) !important;
 }
 
 [data-theme="dark"] .bg-gray-100 {
@@ -562,12 +1060,12 @@ function enabledLabel(v) {
   color: rgb(232, 236, 244) !important;
 }
 
-[data-theme="dark"] .text-black\/60 {
-  color: rgba(232, 236, 244, 0.6) !important;
+[data-theme="dark"] .text-black\/50 {
+  color: rgba(232, 236, 244, 0.5) !important;
 }
 
-[data-theme="dark"] .text-black\/70 {
-  color: rgba(232, 236, 244, 0.7) !important;
+[data-theme="dark"] .text-black\/60 {
+  color: rgba(232, 236, 244, 0.6) !important;
 }
 
 [data-theme="dark"] .text-black\/80 {
@@ -584,5 +1082,17 @@ function enabledLabel(v) {
 
 [data-theme="dark"] .border-gray-800 {
   border-color: rgb(200, 205, 215) !important;
+}
+
+[data-theme="dark"] .border-gray-900 {
+  border-color: rgb(200, 205, 215) !important;
+}
+
+[data-theme="dark"] .hover\:bg-gray-100:hover {
+  background-color: rgb(33, 39, 52) !important;
+}
+
+[data-theme="dark"] .text-red-600 {
+  color: rgb(248, 113, 113) !important;
 }
 </style>

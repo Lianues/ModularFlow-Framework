@@ -33,6 +33,68 @@ function nameOf(msg) {
   return roleLabel(msg.role)
 }
 
+// 选项菜单状态
+const activeMenu = ref(null)
+
+function toggleMenu(msgId) {
+  activeMenu.value = activeMenu.value === msgId ? null : msgId
+}
+
+function copyMessage(msg) {
+  navigator.clipboard.writeText(msg.content).then(() => {
+    console.log('已复制到剪贴板')
+    activeMenu.value = null
+  })
+}
+
+function deleteMessage(msgId) {
+  const idx = props.messages.findIndex(m => m.id === msgId)
+  if (idx >= 0) {
+    props.messages.splice(idx, 1)
+  }
+  activeMenu.value = null
+}
+
+// 全局点击监听：关闭菜单
+function handleGlobalClick(e) {
+  // 检查点击是否在菜单按钮或菜单内部
+  const menuWrapper = e.target.closest('.menu-wrapper')
+  if (!menuWrapper) {
+    activeMenu.value = null
+  }
+}
+
+// 监听菜单状态，添加/移除全局点击监听
+watch(activeMenu, (newVal) => {
+  if (newVal !== null) {
+    // 菜单打开，添加监听器（下一帧，避免立即触发）
+    nextTick(() => {
+      document.addEventListener('click', handleGlobalClick)
+    })
+  } else {
+    // 菜单关闭，移除监听器
+    document.removeEventListener('click', handleGlobalClick)
+  }
+})
+
+// 组件卸载时清理
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleGlobalClick)
+})
+
+// 分支切换（演示功能）
+const activeBranch = ref(1)
+const totalBranches = ref(2)
+
+function switchBranch(direction) {
+  if (direction === 'left' && activeBranch.value > 1) {
+    activeBranch.value--
+  } else if (direction === 'right' && activeBranch.value < totalBranches.value) {
+    activeBranch.value++
+  }
+  console.log(`切换到分支 ${activeBranch.value}/${totalBranches.value}`)
+}
+
 // 输入框逻辑
 const inputText = ref('')
 const messageListRef = ref(null)
@@ -131,7 +193,7 @@ function onKeydown(e) {
             class="floor-card glass"
           >
           <div class="floor-layout">
-            <!-- 左侧：头像和徽章 -->
+            <!-- 左侧：头像、徽章、楼层号 -->
             <div class="floor-left">
               <div class="avatar role-user" v-if="m.role === 'user'">
                 <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
@@ -143,17 +205,65 @@ function onKeydown(e) {
                 <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
               </div>
               <div class="role-badge">{{ roleLabel(m.role) }}</div>
+              <div class="floor-index-left" :title="'楼层序号'">#{{ idx + 1 }}</div>
             </div>
 
             <!-- 右侧：消息内容 -->
             <div class="floor-right">
               <header class="floor-header">
                 <div class="name">{{ nameOf(m) }}</div>
-                <div class="floor-index" :title="'楼层序号'">#{{ idx + 1 }}</div>
+                <!-- 三点菜单按钮 -->
+                <div class="menu-wrapper">
+                  <button
+                    class="menu-btn"
+                    @click.stop="toggleMenu(m.id)"
+                    :aria-expanded="activeMenu === m.id"
+                  >
+                    ⋮
+                  </button>
+                  <!-- 选项菜单（向左弹出） -->
+                  <transition name="menu-slide">
+                    <div v-if="activeMenu === m.id" class="menu-dropdown">
+                      <button class="menu-item" @click="copyMessage(m)">
+                        <span class="menu-icon">📋</span>
+                        复制
+                      </button>
+                      <button
+                        v-if="idx === props.messages.length - 1"
+                        class="menu-item menu-danger"
+                        @click="deleteMessage(m.id)"
+                      >
+                        <span class="menu-icon">🗑️</span>
+                        删除
+                      </button>
+                    </div>
+                  </transition>
+                </div>
               </header>
               <section data-part="content" class="floor-content">
                 {{ m.content }}
               </section>
+              
+              <!-- 分支切换器（仅最新楼层显示） -->
+              <div v-if="idx === props.messages.length - 1 && totalBranches > 1" class="branch-switcher">
+                <button
+                  class="branch-btn"
+                  @click="switchBranch('left')"
+                  :disabled="activeBranch <= 1"
+                  title="上一个分支"
+                >
+                  ◀
+                </button>
+                <span class="branch-indicator">{{ activeBranch }}/{{ totalBranches }}</span>
+                <button
+                  class="branch-btn"
+                  @click="switchBranch('right')"
+                  :disabled="activeBranch >= totalBranches"
+                  title="下一个分支"
+                >
+                  ▶
+                </button>
+              </div>
             </div>
             </div>
           </article>
@@ -298,11 +408,13 @@ function onKeydown(e) {
   text-align: center;
 }
 
-.floor-index {
+.floor-index-left {
   font-weight: 700;
-  color: rgba(var(--st-color-text), 0.7);
+  color: rgba(var(--st-color-text), 0.6);
   letter-spacing: .3px;
-  font-size: var(--st-floor-font-size, 16px);
+  font-size: var(--st-floor-font-size, 14px);
+  text-align: center;
+  margin-top: 4px;
 }
 
 /* 楼层内容 */
@@ -312,6 +424,138 @@ function onKeydown(e) {
   line-height: 1.75;
   word-break: break-word;
   white-space: pre-wrap;
+}
+
+/* 三点菜单 */
+.menu-wrapper {
+  position: relative;
+}
+
+.menu-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(var(--st-border), 0.6);
+  color: rgba(var(--st-color-text), 0.6);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.menu-btn:hover {
+  background: rgba(var(--st-surface-2), 0.8);
+  border-color: rgba(var(--st-border), 0.9);
+  color: rgba(var(--st-color-text), 0.9);
+}
+
+.menu-dropdown {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  margin-right: 8px;
+  background: rgb(var(--st-surface));
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  min-width: 120px;
+  z-index: 10;
+}
+
+.menu-item {
+  appearance: none;
+  background: transparent;
+  border: none;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgb(var(--st-color-text));
+  transition: background 0.12s ease;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background: rgba(var(--st-surface-2), 0.8);
+}
+
+.menu-item.menu-danger {
+  color: rgb(220, 38, 38);
+}
+
+.menu-item.menu-danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.menu-icon {
+  font-size: 14px;
+}
+
+/* 菜单弹出动画 */
+.menu-slide-enter-active,
+.menu-slide-leave-active {
+  transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.menu-slide-enter-from,
+.menu-slide-leave-to {
+  opacity: 0;
+  transform: translateX(8px) scale(0.95);
+}
+
+/* 分支切换器 */
+.branch-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(var(--st-border), 0.3);
+}
+
+.branch-btn {
+  appearance: none;
+  background: rgba(var(--st-primary), 0.08);
+  border: 1px solid rgba(var(--st-primary), 0.3);
+  color: rgb(var(--st-primary));
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.branch-btn:hover:not(:disabled) {
+  background: rgba(var(--st-primary), 0.15);
+  border-color: rgba(var(--st-primary), 0.5);
+  transform: translateY(-1px);
+}
+
+.branch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.branch-indicator {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(var(--st-color-text), 0.75);
+  padding: 0 8px;
 }
 
 /* 输入行 */

@@ -15,6 +15,10 @@ import PersonaPanel from '@/components/sidebar/PersonaPanel.vue'
 import RegexPanel from '@/components/sidebar/RegexPanel.vue'
 import ContentViewModal from '@/components/common/ContentViewModal.vue'
 import PresetDetailView from '@/components/content/PresetDetailView.vue'
+import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
+import CharacterDetailView from '@/components/content/CharacterDetailView.vue'
+import PersonaDetailView from '@/components/content/PersonaDetailView.vue'
+import RegexDetailView from '@/components/content/RegexDetailView.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -182,6 +186,7 @@ function onThemeUpdate(t) {
         <WorldbookPanel
           v-if="showSidebar && worldbookOpen"
           @close="worldbookOpen = false"
+          @view="(key) => openViewModal('worldbook', '世界书详情 - ' + key, null)"
         />
       </transition>
 
@@ -190,6 +195,7 @@ function onThemeUpdate(t) {
         <CharactersPanel
           v-if="showSidebar && charactersOpen"
           @close="charactersOpen = false"
+          @view="(key) => openViewModal('character', '角色卡详情 - ' + key, null)"
         />
       </transition>
 
@@ -198,6 +204,7 @@ function onThemeUpdate(t) {
         <PersonaPanel
           v-if="showSidebar && personaOpen"
           @close="personaOpen = false"
+          @view="(key) => openViewModal('persona', '用户信息详情 - ' + key, null)"
         />
       </transition>
 
@@ -288,11 +295,18 @@ function onThemeUpdate(t) {
       <PresetDetailView
         v-if="viewModalType === 'preset'"
       />
-      <div v-else-if="viewModalType === 'regex'" class="modal-placeholder">
-        <div class="placeholder-icon">🧹</div>
-        <div class="placeholder-text">正则规则详细视图</div>
-        <div class="placeholder-desc">此视图待后续开发</div>
-      </div>
+      <WorldbookDetailView
+        v-else-if="viewModalType === 'worldbook'"
+      />
+      <CharacterDetailView
+        v-else-if="viewModalType === 'character'"
+      />
+      <PersonaDetailView
+        v-else-if="viewModalType === 'persona'"
+      />
+      <RegexDetailView
+        v-else-if="viewModalType === 'regex'"
+      />
       <div v-else class="modal-placeholder">
         <div class="placeholder-icon">📋</div>
         <div class="placeholder-text">内容查看</div>
