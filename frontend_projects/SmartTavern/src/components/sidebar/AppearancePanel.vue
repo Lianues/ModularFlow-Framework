@@ -1,10 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 const props = defineProps({
-  anchorLeft: { type: Number, default: 348 }, // 左侧锚定像素（默认=12+320+16）
-  width: { type: Number, default: 520 },      // 面板宽度
+  anchorLeft: { type: Number, default: 308 }, // 左侧锚定像素（默认=12+280+16）
+  width: { type: Number, default: 560 },      // 面板宽度
   zIndex: { type: Number, default: 59 },      // 与 Sidebar 同层（> 背景模糊 58）
-  // 统一重命名：外观（原“主题/应用设置”合并）
+  // 统一重命名：外观（原"主题/应用设置"合并）
   title: { type: String, default: '外观 Appearance' },
 })
 const emit = defineEmits(['close'])
@@ -12,8 +12,9 @@ const emit = defineEmits(['close'])
 const tabs = [
   { key: 'home', label: '主页', icon: 'home' },
   { key: 'threaded', label: '楼层对话', icon: 'message-square' },
-  { key: 'backgrounds', label: '背景图片', icon: 'image' },
   { key: 'sandbox', label: '全屏沙盒', icon: 'monitor' },
+  { key: 'backgrounds', label: '背景图片', icon: 'image' },
+  { key: 'theme', label: '主题', icon: 'palette' },
 ]
 const active = ref('home')
 
@@ -583,50 +584,7 @@ onMounted(() => window.lucide?.createIcons?.())
           <p class="muted">拖拽滑条时，页面会自动变透明，仅保留本面板不透明，便于实时查看调整效果。</p>
         </div>
 
-        <div v-else-if="active === 'backgrounds'" class="st-tab-panel">
-          <h3>背景图片</h3>
-          <p class="muted">为开始页面、楼层对话页面、沙盒页面设置背景图。可覆盖默认图片并即时预览。</p>
-
-          <div class="bg-grid">
-            <div class="bg-card">
-              <div class="bg-title">开始页面</div>
-              <div class="bg-preview bg-start" />
-              <div class="bg-actions">
-                <label class="bg-upload">
-                  <input type="file" accept="image/*" @change="onFileChange('start', $event)" />
-                  选择图片
-                </label>
-                <button class="st-settings-close" type="button" @click="resetBg('start')">重置默认</button>
-              </div>
-            </div>
-
-            <div class="bg-card">
-              <div class="bg-title">楼层对话页面</div>
-              <div class="bg-preview bg-threaded" />
-              <div class="bg-actions">
-                <label class="bg-upload">
-                  <input type="file" accept="image/*" @change="onFileChange('threaded', $event)" />
-                  选择图片
-                </label>
-                <button class="st-settings-close" type="button" @click="resetBg('threaded')">重置默认</button>
-              </div>
-            </div>
-
-            <div class="bg-card">
-              <div class="bg-title">沙盒页面</div>
-              <div class="bg-preview bg-sandbox" />
-              <div class="bg-actions">
-                <label class="bg-upload">
-                  <input type="file" accept="image/*" @change="onFileChange('sandbox', $event)" />
-                  选择图片
-                </label>
-                <button class="st-settings-close" type="button" @click="resetBg('sandbox')">重置默认</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="st-tab-panel">
+        <div v-else-if="active === 'sandbox'" class="st-tab-panel">
           <h3>全屏沙盒外观</h3>
           <p class="muted">配置沙盒舞台的尺寸与长宽比，便于后续嵌入画面/预览对齐。</p>
 
@@ -695,6 +653,65 @@ onMounted(() => window.lucide?.createIcons?.())
           </div>
 
           <p class="muted">提示：上述设定实时作用于页面上的"全局沙盒"舞台，并以 CSS 变量方式保存，便于主题或脚本统一接管。</p>
+        </div>
+
+        <div v-else-if="active === 'backgrounds'" class="st-tab-panel">
+          <h3>背景图片</h3>
+          <p class="muted">为开始页面、楼层对话页面、沙盒页面设置背景图。可覆盖默认图片并即时预览。</p>
+
+          <div class="bg-grid">
+            <div class="bg-card">
+              <div class="bg-title">开始页面</div>
+              <div class="bg-preview bg-start" />
+              <div class="bg-actions">
+                <label class="bg-upload">
+                  <input type="file" accept="image/*" @change="onFileChange('start', $event)" />
+                  选择图片
+                </label>
+                <button class="st-settings-close" type="button" @click="resetBg('start')">重置默认</button>
+              </div>
+            </div>
+
+            <div class="bg-card">
+              <div class="bg-title">楼层对话页面</div>
+              <div class="bg-preview bg-threaded" />
+              <div class="bg-actions">
+                <label class="bg-upload">
+                  <input type="file" accept="image/*" @change="onFileChange('threaded', $event)" />
+                  选择图片
+                </label>
+                <button class="st-settings-close" type="button" @click="resetBg('threaded')">重置默认</button>
+              </div>
+            </div>
+
+            <div class="bg-card">
+              <div class="bg-title">沙盒页面</div>
+              <div class="bg-preview bg-sandbox" />
+              <div class="bg-actions">
+                <label class="bg-upload">
+                  <input type="file" accept="image/*" @change="onFileChange('sandbox', $event)" />
+                  选择图片
+                </label>
+                <button class="st-settings-close" type="button" @click="resetBg('sandbox')">重置默认</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="active === 'theme'" class="st-tab-panel">
+          <h3>主题管理</h3>
+          <p class="muted">此为主题配置页面（占位），后续可用于主题切换、自定义主题包导入与预览。</p>
+
+          <div class="theme-placeholder">
+            <div class="theme-placeholder-icon">🎨</div>
+            <div class="theme-placeholder-title">主题系统</div>
+            <div class="theme-placeholder-desc">主题包导入、切换与预览功能即将推出</div>
+          </div>
+        </div>
+
+        <div v-else class="st-tab-panel">
+          <h3>未知页签</h3>
+          <p class="muted">占位内容</p>
         </div>
       </CustomScrollbar>
     </div>
@@ -1042,5 +1059,32 @@ onMounted(() => window.lucide?.createIcons?.())
 }
 .bg-upload input[type="file"] {
   display: none;
+}
+
+/* Theme placeholder */
+.theme-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  text-align: center;
+  border: 1px dashed rgba(var(--st-border), 0.7);
+  border-radius: var(--st-radius-md);
+  background: rgba(var(--st-surface-2), 0.4);
+}
+.theme-placeholder-icon {
+  font-size: 64px;
+  opacity: 0.7;
+}
+.theme-placeholder-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: rgb(var(--st-color-text));
+}
+.theme-placeholder-desc {
+  font-size: 14px;
+  color: rgba(var(--st-color-text), 0.65);
 }
 </style>

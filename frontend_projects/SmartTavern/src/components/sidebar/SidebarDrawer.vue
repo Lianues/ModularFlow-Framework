@@ -14,7 +14,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
  */
 const props = defineProps({
   modelValue: { type: Boolean, default: true }, // open/close
-  width: { type: Number, default: 320 },        // 抽屉宽度
+  width: { type: Number, default: 280 },        // 抽屉宽度
   iconSize: { type: Number, default: 44 },      // 浮标尺寸
   storageKey: { type: String, default: 'st.sidebar.drawer' },
   draggable: { type: Boolean, default: true },

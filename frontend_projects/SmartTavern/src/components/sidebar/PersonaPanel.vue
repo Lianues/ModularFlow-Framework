@@ -2,8 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({
-  anchorLeft: { type: Number, default: 348 },
-  width: { type: Number, default: 520 },
+  anchorLeft: { type: Number, default: 308 },
+  width: { type: Number, default: 560 },
   zIndex: { type: Number, default: 59 },
   top: { type: Number, default: 64 },
   bottom: { type: Number, default: 12 },

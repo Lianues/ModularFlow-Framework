@@ -2,8 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({
-  anchorLeft: { type: Number, default: 348 }, // 左侧锚定像素（与外观面板一致：12+320+16）
-  width: { type: Number, default: 520 },      // 面板宽度
+  anchorLeft: { type: Number, default: 308 }, // 左侧锚定像素（与外观面板一致：12+280+16）
+  width: { type: Number, default: 560 },      // 面板宽度
   zIndex: { type: Number, default: 59 },      // 层级（与 Sidebar 同层）
   top: { type: Number, default: 64 },         // 顶部偏移（避开顶部栏）
   bottom: { type: Number, default: 12 },      // 底部偏移
