@@ -1,4 +1,4 @@
-<script setup>
+1<script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import SidebarNav from '@/components/sidebar/SidebarNav.vue'
 import ThemeSwitch from '@/components/common/ThemeSwitch.vue'
@@ -126,11 +126,19 @@ async function ensureUIAssets() {
   if (window.lucide && typeof window.lucide.createIcons === 'function') {
     window.lucide.createIcons()
   }
+  // 初始化 Flowbite（如 Tooltip 等组件）
+  if (typeof window.initFlowbite === 'function') {
+    try { window.initFlowbite() } catch (_) {}
+  }
 }
 function refreshIcons() {
   nextTick(() => {
     if (window.lucide && typeof window.lucide.createIcons === 'function') {
       window.lucide.createIcons()
+    }
+    // 重新扫描并初始化 Flowbite 组件（确保动态节点生效）
+    if (typeof window.initFlowbite === 'function') {
+      try { window.initFlowbite() } catch (_) {}
     }
   })
 }

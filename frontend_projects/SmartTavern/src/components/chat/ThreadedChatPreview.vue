@@ -33,11 +33,91 @@ function nameOf(msg) {
   return roleLabel(msg.role)
 }
 
+/* 智能色条：根据头像图片/角色生成渐变色 */
+const palettes = ref({}) // id -> { start, end }
+
+function clamp(v, min = 0, max = 255) { return Math.max(min, Math.min(max, v)) }
+function lighten(rgb, amt = 24) {
+  return { r: clamp(rgb.r + amt), g: clamp(rgb.g + amt), b: clamp(rgb.b + amt) }
+}
+function rgbToCss(rgb, a = 1) { return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})` }
+
+function roleFallback(role) {
+  // 角色回退配色（亮/暗主题下仍然清晰）
+  if (role === 'assistant') return { start: 'rgba(14,165,233,1)', end: 'rgba(94,234,212,1)' }
+  if (role === 'system')    return { start: 'rgba(251,191,36,1)', end: 'rgba(253,230,138,1)' }
+  // user 回退使用主题主色-强调色
+  return { start: 'rgb(var(--st-primary))', end: 'rgb(var(--st-accent))' }
+}
+
+async function extractPaletteFromImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        const w = canvas.width = 24
+        const h = canvas.height = 24
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        ctx.drawImage(img, 0, 0, w, h)
+        const data = ctx.getImageData(0, 0, w, h).data
+        let r = 0, g = 0, b = 0, count = 0
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3]
+          if (a < 32) continue // 忽略透明像素
+          r += data[i]; g += data[i + 1]; b += data[i + 2]; count++
+        }
+        if (count === 0) throw new Error('no pixels')
+        r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count)
+        const start = rgbToCss({ r, g, b })
+        const end = rgbToCss(lighten({ r, g, b }, 28))
+        resolve({ start, end })
+      } catch (_) {
+        resolve(null)
+      }
+    }
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
+}
+
+async function ensurePaletteFor(msg) {
+  // 约定：若消息含 avatarUrl，则尝试从图片提取主色；否则按角色回退
+  let pal = null
+  if (msg.avatarUrl) {
+    pal = await extractPaletteFromImage(msg.avatarUrl)
+  }
+  if (!pal) pal = roleFallback(msg.role)
+  palettes.value[msg.id] = pal
+}
+
+function stripeStyle(msg) {
+  const pal = palettes.value[msg.id] || roleFallback(msg.role)
+  return {
+    '--stripe-start': pal.start,
+    '--stripe-end': pal.end,
+  }
+}
+
+// Lucide 图标刷新（局部调用，避免 race）
+function refreshIcons() {
+  nextTick(() => {
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons()
+    }
+    if (typeof window.initFlowbite === 'function') {
+      try { window.initFlowbite() } catch (_) {}
+    }
+  })
+}
+
 // 选项菜单状态
 const activeMenu = ref(null)
 
 function toggleMenu(msgId) {
   activeMenu.value = activeMenu.value === msgId ? null : msgId
+  refreshIcons()
 }
 
 function copyMessage(msg) {
@@ -75,6 +155,9 @@ watch(activeMenu, (newVal) => {
     // 菜单关闭，移除监听器
     document.removeEventListener('click', handleGlobalClick)
   }
+  refreshIcons()
+  // 初始化为现有消息生成色条调色板
+  props.messages.forEach(m => { ensurePaletteFor(m) })
 })
 
 // 组件卸载时清理
@@ -95,9 +178,10 @@ function switchBranch(direction) {
   console.log(`切换到分支 ${activeBranch.value}/${totalBranches.value}`)
 }
 
-// 输入框逻辑
+/* 输入框逻辑 */
 const inputText = ref('')
 const messageListRef = ref(null)
+const inputRef = ref(null)
 let removeWheel = null
 
 onMounted(() => {
@@ -126,6 +210,9 @@ onMounted(() => {
     chatUnified?.removeEventListener('wheel', wheelHandler)
     mainArea?.removeEventListener('wheel', wheelHandler)
   }
+  refreshIcons()
+  // 初始化现有消息的智能色条调色板（若有头像则提取主色）
+  props.messages.forEach(m => { ensurePaletteFor(m) })
 })
 
 onBeforeUnmount(() => {
@@ -134,7 +221,10 @@ onBeforeUnmount(() => {
 
 watch(() => props.messages.length, () => {
   // 消息数量变化后，下一拍更新滚动条
-  nextTick(() => messageListRef.value?.update?.())
+  nextTick(() => {
+    messageListRef.value?.update?.()
+    refreshIcons()
+  })
 })
 
 function sendMessage() {
@@ -150,29 +240,56 @@ function sendMessage() {
   
   // 添加到消息列表
   props.messages.push(newMessage)
+  // 为新消息生成色条调色板（若有头像则尝试提取主色）
+  ensurePaletteFor(newMessage)
   
   // 清空输入框
   inputText.value = ''
   
-  // 滚动到底部（等待过渡动画更丝滑）
+  // 滚动到底部（丝滑且自然）
   nextTick(() => {
     setTimeout(() => {
       if (messageListRef.value?.$el) {
         const container = messageListRef.value.$el.querySelector('.scroll-container')
         if (container) {
-          container.scrollTop = container.scrollHeight
+          // 优先使用原生平滑滚动
+          try {
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+          } catch (_) {
+            // 回退：rAF 动画
+            const start = container.scrollTop
+            const end = container.scrollHeight
+            const dur = 420
+            const t0 = performance.now()
+            const ease = t => 1 - Math.pow(1 - t, 3) // easeOutCubic
+            const step = (now) => {
+              const p = Math.min(1, (now - t0) / dur)
+              container.scrollTop = start + (end - start) * ease(p)
+              if (p < 1) requestAnimationFrame(step)
+            }
+            requestAnimationFrame(step)
+          }
         }
       }
-    }, 320)
+    }, 60)
   })
 }
 
-// 支持Ctrl+Enter发送
+// 输入行为：Enter 发送，Shift+Enter 换行（遵循 UI 规范）
 function onKeydown(e) {
-  if (e.key === 'Enter' && e.ctrlKey) {
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
   }
+}
+
+/* 快捷操作（编辑/再生），更多行为可接入后端 */
+function startEdit(msg) {
+  inputText.value = msg.content
+  nextTick(() => inputRef.value?.focus?.())
+}
+function regenerateMessage(msg) {
+  console.log('请求重新生成：', msg.id)
 }
 </script>
 
@@ -191,6 +308,7 @@ function onKeydown(e) {
             data-scope="message-item"
             :data-role="m.role"
             class="floor-card glass"
+            :style="stripeStyle(m)"
           >
           <div class="floor-layout">
             <!-- 左侧：头像、徽章、楼层号 -->
@@ -218,14 +336,17 @@ function onKeydown(e) {
                     class="menu-btn"
                     @click.stop="toggleMenu(m.id)"
                     :aria-expanded="activeMenu === m.id"
+                    aria-label="更多操作"
+                    title="更多操作"
                   >
-                    ⋮
+                    <i data-lucide="more-vertical" class="icon-16" aria-hidden="true"></i>
+                    <span class="sr-only">更多</span>
                   </button>
                   <!-- 选项菜单（向左弹出） -->
                   <transition name="menu-slide">
                     <div v-if="activeMenu === m.id" class="menu-dropdown">
                       <button class="menu-item" @click="copyMessage(m)">
-                        <span class="menu-icon">📋</span>
+                        <i data-lucide="copy" class="icon-14" aria-hidden="true"></i>
                         复制
                       </button>
                       <button
@@ -233,7 +354,7 @@ function onKeydown(e) {
                         class="menu-item menu-danger"
                         @click="deleteMessage(m.id)"
                       >
-                        <span class="menu-icon">🗑️</span>
+                        <i data-lucide="trash-2" class="icon-14" aria-hidden="true"></i>
                         删除
                       </button>
                     </div>
@@ -244,25 +365,41 @@ function onKeydown(e) {
                 {{ m.content }}
               </section>
               
-              <!-- 分支切换器（仅最新楼层显示） -->
-              <div v-if="idx === props.messages.length - 1 && totalBranches > 1" class="branch-switcher">
-                <button
-                  class="branch-btn"
-                  @click="switchBranch('left')"
-                  :disabled="activeBranch <= 1"
-                  title="上一个分支"
-                >
-                  ◀
-                </button>
-                <span class="branch-indicator">{{ activeBranch }}/{{ totalBranches }}</span>
-                <button
-                  class="branch-btn"
-                  @click="switchBranch('right')"
-                  :disabled="activeBranch >= totalBranches"
-                  title="下一个分支"
-                >
-                  ▶
-                </button>
+              <!-- 楼层页脚：左侧操作按钮 + 右侧分支切换（同一行） -->
+              <div class="floor-footer">
+                <div class="floor-actions">
+                  <button class="act-btn" @click="copyMessage(m)" title="复制" aria-label="复制">
+                    <i data-lucide="copy" class="icon-16" aria-hidden="true"></i>
+                  </button>
+                  <button v-if="m.role === 'assistant'" class="act-btn" @click="regenerateMessage(m)" title="重新生成" aria-label="重新生成">
+                    <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
+                  </button>
+                  <button v-if="m.role === 'user'" class="act-btn" @click="startEdit(m)" title="编辑" aria-label="编辑">
+                    <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>
+                  </button>
+                </div>
+
+                <div v-if="idx === props.messages.length - 1 && totalBranches > 1" class="branch-switcher">
+                  <button
+                    class="branch-btn"
+                    @click="switchBranch('left')"
+                    :disabled="activeBranch <= 1"
+                    title="上一个分支"
+                    aria-label="上一个分支"
+                  >
+                    <i data-lucide="chevron-left" class="icon-16" aria-hidden="true"></i>
+                  </button>
+                  <span class="branch-indicator">{{ activeBranch }}/{{ totalBranches }}</span>
+                  <button
+                    class="branch-btn"
+                    @click="switchBranch('right')"
+                    :disabled="activeBranch >= totalBranches"
+                    title="下一个分支"
+                    aria-label="下一个分支"
+                  >
+                    <i data-lucide="chevron-right" class="icon-16" aria-hidden="true"></i>
+                  </button>
+                </div>
               </div>
             </div>
             </div>
@@ -271,15 +408,41 @@ function onKeydown(e) {
       </div>
     </CustomScrollbar>
 
-    <!-- 输入区（多行文本） -->
-    <div class="tch-input-row">
+    <!-- 输入区（多行文本，玻璃拟态容器 + 工具栏 + Lucide 图标） -->
+    <div class="tch-input-row glass">
+      <div class="tch-tools-left">
+        <button class="tool-btn round" title="拓展" aria-label="拓展" data-tooltip-target="tt-expand">
+          <i data-lucide="plus" class="icon-16" aria-hidden="true"></i>
+        </button>
+        <div id="tt-expand" role="tooltip" class="absolute z-10 invisible inline-block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 tooltip">
+          拓展
+          <div class="tooltip-arrow" data-popper-arrow></div>
+        </div>
+      </div>
       <textarea
+        ref="inputRef"
         v-model="inputText"
         class="tch-input"
-        placeholder="输入消息... (Ctrl+Enter 发送)"
+        placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
         @keydown="onKeydown"
       ></textarea>
-      <button class="tch-send" @click="sendMessage">发送</button>
+      <div class="tch-tools-right">
+        <button
+          class="tch-send"
+          :disabled="!inputText.trim()"
+          @click="sendMessage"
+          title="发送 (Enter)"
+          aria-label="发送"
+          data-tooltip-target="tt-send"
+        >
+          <i data-lucide="send" class="icon-16" aria-hidden="true"></i>
+          <span class="tch-send-text">发送</span>
+        </button>
+        <div id="tt-send" role="tooltip" class="absolute z-10 invisible inline-block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 tooltip">
+          发送
+          <div class="tooltip-arrow" data-popper-arrow></div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -290,7 +453,7 @@ function onKeydown(e) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px;
+  padding: 16px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -300,6 +463,14 @@ function onKeydown(e) {
 .tch-list {
   flex: 1;
   min-height: 0;
+  padding: 8px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: var(--st-radius-lg);
+  background: rgba(var(--st-surface), 0.62);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: var(--st-shadow-sm);
+  overflow: visible;
 }
 
 /* 内部容器（供过渡动画使用） */
@@ -308,17 +479,19 @@ function onKeydown(e) {
   flex-direction: column;
   gap: 12px;
   padding-right: 4px;
+  padding-bottom: 24px;
 }
 
 /* 楼层卡（玻璃拟态） */
 .floor-card {
-  padding: 14px;
+  padding: 12px;
   border-radius: var(--st-radius-lg);
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgba(var(--st-surface), 0.82);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  box-shadow: var(--st-shadow-md);
+  box-shadow: none;
+  overflow: visible; /* 确保伪元素色条与悬浮阴影不被裁剪 */
   transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
   will-change: transform, opacity, filter;
 }
@@ -327,12 +500,62 @@ function onKeydown(e) {
   box-shadow: 0 16px 40px rgba(0,0,0,0.10);
   border-color: rgba(var(--st-primary), 0.35);
   background: rgba(var(--st-surface), 0.88);
+  z-index: 2;
 }
+
+/* 智能渐变色条（变量驱动，带柔和光晕），assistant/system 左侧，user 右侧 */
+.floor-card { position: relative; }
+
+.floor-card::before,
+.floor-card::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 主色条（渐变） - 默认左侧 */
+.floor-card::before {
+  left: 0;
+  border-top-left-radius: var(--st-radius-lg);
+  border-bottom-left-radius: var(--st-radius-lg);
+  background: linear-gradient(180deg,
+    var(--stripe-start, rgb(var(--st-primary))),
+    var(--stripe-end,   rgb(var(--st-accent))));
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.02) inset;
+}
+
+/* 柔光外晕（与主色一致，增强高级感） */
+.floor-card::after {
+  left: 0;
+  filter: blur(12px);
+  opacity: .28;
+  background: linear-gradient(180deg,
+    var(--stripe-start, rgb(var(--st-primary))),
+    transparent 72%);
+}
+
+/* 用户在右侧显示色条与光晕 */
+.floor-card[data-role="user"]::before {
+  left: auto; right: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: var(--st-radius-lg);
+  border-bottom-right-radius: var(--st-radius-lg);
+}
+.floor-card[data-role="user"]::after {
+  left: auto; right: 0;
+}
+
+/* 悬浮时层级提升，避免被相邻元素/容器遮挡（阴影在 .floor-card:hover） */
+.floor-card:hover { z-index: 2; }
 
 /* 楼层布局：左侧头像+徽章，右侧名称+楼层+内容 */
 .floor-layout {
   display: flex;
-  gap: 14px;
+  gap: 12px;
 }
 
 /* 左侧区域 */
@@ -363,7 +586,7 @@ function onKeydown(e) {
 .avatar {
   width: var(--st-avatar-size, 56px);
   height: var(--st-avatar-size, 56px);
-  border-radius: 14px;
+  border-radius: var(--st-radius-lg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -422,8 +645,26 @@ function onKeydown(e) {
   color: rgba(var(--st-color-text), 0.95);
   font-size: var(--st-content-font-size, 18px);
   line-height: 1.75;
+  letter-spacing: .2px;
   word-break: break-word;
   white-space: pre-wrap;
+}
+.floor-content p { margin: 0; }
+.floor-content p + p { margin-top: 8px; }
+.floor-content a {
+  color: rgb(var(--st-primary));
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(var(--st-primary), 0.4);
+}
+.floor-content a:hover { text-decoration: underline; }
+.floor-content code {
+  font-family: var(--st-font-mono);
+  background: rgba(var(--st-color-text), 0.06);
+  padding: 0 4px;
+  border-radius: var(--st-radius-sm);
+}
+[data-theme="dark"] .floor-content code {
+  background: rgba(var(--st-color-text), 0.14);
 }
 
 /* 三点菜单 */
@@ -438,14 +679,14 @@ function onKeydown(e) {
   color: rgba(var(--st-color-text), 0.6);
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--st-radius-lg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   line-height: 1;
-  transition: all 0.15s ease;
+  transition: all .18s cubic-bezier(.22,.61,.36,1);
 }
 
 .menu-btn:hover {
@@ -461,7 +702,7 @@ function onKeydown(e) {
   margin-right: 8px;
   background: rgb(var(--st-surface));
   border: 1px solid rgba(var(--st-border), 0.9);
-  border-radius: 10px;
+  border-radius: var(--st-radius-lg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   padding: 4px;
   min-width: 120px;
@@ -481,7 +722,7 @@ function onKeydown(e) {
   gap: 8px;
   font-size: 13px;
   color: rgb(var(--st-color-text));
-  transition: background 0.12s ease;
+  transition: background .18s cubic-bezier(.22,.61,.36,1);
   text-align: left;
 }
 
@@ -500,6 +741,17 @@ function onKeydown(e) {
 .menu-icon {
   font-size: 14px;
 }
+/* icon utilities */
+.icon-14 { width: 14px; height: 14px; stroke: currentColor; }
+.icon-16 { width: 16px; height: 16px; stroke: currentColor; }
+/* a11y helper */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0);
+  white-space: nowrap; border: 0;
+}
 
 /* 菜单弹出动画 */
 .menu-slide-enter-active,
@@ -513,15 +765,12 @@ function onKeydown(e) {
   transform: translateX(8px) scale(0.95);
 }
 
-/* 分支切换器 */
+/* 分支切换器（放在页脚右侧） */
 .branch-switcher {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(var(--st-border), 0.3);
 }
 
 .branch-btn {
@@ -531,13 +780,13 @@ function onKeydown(e) {
   color: rgb(var(--st-primary));
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--st-radius-lg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  transition: all 0.15s ease;
+  transition: all .18s cubic-bezier(.22,.61,.36,1);
 }
 
 .branch-btn:hover:not(:disabled) {
@@ -558,51 +807,193 @@ function onKeydown(e) {
   padding: 0 8px;
 }
 
-/* 输入行 */
-.tch-input-row {
+/* 楼层页脚行（左操作 + 右分支） */
+.floor-footer {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  align-items: stretch;
-  flex-shrink: 0;
-  height: var(--st-input-height, 100px);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(var(--st-border), 0.3);
 }
-.tch-input {
-  flex: 1;
-  padding: 10px 12px;
-  border: 1px solid rgb(var(--st-border));
+
+/* 楼层内操作按钮行（悬浮显示，居左） */
+.floor-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .18s cubic-bezier(.22,.61,.36,1), transform .2s cubic-bezier(.22,.61,.36,1);
+}
+.floor-card:hover .floor-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 操作按钮样式（与工具按钮一致的设计语言） */
+.act-btn {
+  appearance: none;
+  background: rgba(var(--st-surface-2), 0.6);
+  border: 1px solid rgba(var(--st-border), 0.9);
+  color: rgba(var(--st-color-text), 0.8);
   border-radius: var(--st-radius-md);
-  background: rgb(var(--st-surface));
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s cubic-bezier(.22,.61,.36,1), transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s cubic-bezier(.22,.61,.36,1);
+}
+.act-btn:hover {
+  background: rgba(var(--st-surface-2), 0.9);
+  border-color: rgba(var(--st-border), 1);
+  transform: translateY(-1px);
+}
+.act-btn:active {
+  transform: translateY(0);
+}
+.act-btn.ghost {
+  background: transparent;
+  border-color: rgba(var(--st-border), 0.8);
+}
+.act-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--st-primary), 0.14);
+  border-color: rgba(var(--st-primary), 0.6);
+}
+
+/* 输入行（玻璃拟态输入容器） */
+.tch-input-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: var(--st-radius-lg);
+  background: rgba(var(--st-surface), 0.80);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: var(--st-shadow-sm);
+  flex-shrink: 0;
+  min-height: clamp(calc(var(--st-content-font-size) * 2.8 + 28px), var(--st-input-height, 100px), 100vh);
+  transition: box-shadow .2s cubic-bezier(.22,.61,.36,1), border-color .2s cubic-bezier(.22,.61,.36,1), background .2s cubic-bezier(.22,.61,.36,1), transform .2s cubic-bezier(.22,.61,.36,1);
+}
+.tch-input-row:focus-within {
+  border-color: rgba(var(--st-primary), 0.45);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.08), 0 0 0 3px rgba(var(--st-primary), 0.08);
+  background: rgba(var(--st-surface), 0.86);
+}
+
+/* 工具栏按钮 */
+.tch-tools-left,
+.tch-tools-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-btn {
+  appearance: none;
+  background: rgba(var(--st-surface-2), 0.6);
+  border: 1px solid rgba(var(--st-border), 0.9);
+  color: rgba(var(--st-color-text), 0.8);
+  border-radius: var(--st-radius-md);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s cubic-bezier(.22,.61,.36,1), transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s cubic-bezier(.22,.61,.36,1);
+}
+.tool-btn:hover {
+  background: rgba(var(--st-surface-2), 0.9);
+  border-color: rgba(var(--st-border), 1);
+  transform: translateY(-1px);
+}
+.tool-btn:active {
+  transform: translateY(0);
+}
+.tool-btn.ghost {
+  background: transparent;
+  border-color: rgba(var(--st-border), 0.8);
+}
+/* 圆形拓展按钮 */
+.tool-btn.round {
+  border-radius: 9999px;
+  width: 36px;
+  height: 36px;
+}
+
+.tool-btn:focus-visible,
+.menu-btn:focus-visible,
+.tch-send:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--st-primary), 0.14);
+  border-color: rgba(var(--st-primary), 0.6);
+}
+
+/* 多行输入区域 */
+.tch-input {
+  width: 100%;
+  min-height: calc(var(--st-content-font-size) * 2.2 + 12px);
+  padding: 10px 2px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: rgb(var(--st-color-text));
+  caret-color: rgb(var(--st-color-text));
   font-family: var(--st-font-body);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--st-content-font-size);
+  line-height: 1.6;
   resize: none;
-  height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
 }
+.tch-input::placeholder {
+  color: rgba(var(--st-color-text), 0.45);
+  font-size: var(--st-content-font-size);
+}
 .tch-input:focus {
   outline: none;
-  border-color: rgba(var(--st-primary), 0.5);
-  box-shadow: 0 0 0 3px rgba(var(--st-primary), 0.1);
 }
+
+/* 发送按钮 */
 .tch-send {
-  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
   border-radius: var(--st-radius-md);
   background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1));
   color: var(--st-primary-contrast);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  height: 100%;
+  height: 36px;
   box-sizing: border-box;
-  transition: filter .15s ease, transform .15s ease;
+  transition: filter .18s cubic-bezier(.22,.61,.36,1), transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s cubic-bezier(.22,.61,.36,1);
 }
-.tch-send:hover {
-  filter: saturate(1.1) brightness(1.05);
+.tch-send:hover:enabled {
+  filter: saturate(1.08) brightness(1.04);
   transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.10);
 }
-.tch-send:active {
+.tch-send:active:enabled {
   transform: translateY(0);
+}
+.tch-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(10%);
+}
+
+.tch-send-text {
+  font-weight: 600;
+  letter-spacing: .2px;
 }
 
 /* 消息出现/离场与重排过渡（丝滑高质感） */
@@ -653,4 +1044,28 @@ function onKeydown(e) {
     transform: none !important;
   }
 }
+/* 高级消息出现动画（更自然的入场与微超调），使用更高优先级选择器覆盖默认 */
+.floor-card.msg-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  filter: blur(10px) saturate(0.9);
+}
+.floor-card.msg-enter-to {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+.floor-card.msg-enter-active {
+  transition:
+    opacity .34s cubic-bezier(.22,.61,.36,1),
+    transform .44s cubic-bezier(.22,.61,.36,1),
+    filter .44s ease;
+  will-change: opacity, transform, filter;
+}
+
+/* 轻微阶梯延时：最新的 1~3 条入场动画更靠后，营造自然“瀑布式”感觉 */
+[data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(1) { transition-delay: 24ms; }
+[data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(2) { transition-delay: 48ms; }
+[data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(3) { transition-delay: 72ms; }
+
 </style>
