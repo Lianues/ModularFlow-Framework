@@ -858,6 +858,43 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   will-change: transform, filter, opacity;
   animation: stDepthIntroSubtle 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
+
+/* 禁止侧边栏按钮与展开面板文本被选中复制（保留表单可编辑） */
+[data-scope="sidebar"],
+[data-scope="sidebar"] *,
+[data-scope="sidebar-nav"],
+[data-scope="sidebar-nav"] *,
+[data-scope="settings-view"],
+[data-scope="settings-view"] *,
+[data-scope="presets-view"],
+[data-scope="presets-view"] *,
+[data-scope="worldbook-view"],
+[data-scope="worldbook-view"] *,
+[data-scope="characters-view"],
+[data-scope="characters-view"] *,
+[data-scope="persona-view"],
+[data-scope="persona-view"] *,
+[data-scope="regex-view"],
+[data-scope="regex-view"] *,
+[data-scope="appsettings-view"],
+[data-scope="appsettings-view"] * {
+  user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 例外：面板内的表单控件允许选中文本，保证可编辑性 */
+[data-scope$="-view"] input,
+[data-scope$="-view"] textarea,
+[data-scope$="-view"] select,
+[data-scope="settings-view"] input,
+[data-scope="settings-view"] textarea,
+[data-scope="settings-view"] select {
+  user-select: text;
+  -webkit-user-select: text;
+  -ms-user-select: text;
+}
 </style>
 
 <!-- 局部样式（scoped） -->
