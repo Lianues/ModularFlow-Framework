@@ -779,7 +779,11 @@ body.st-live-tuning[data-active-slider="chatWidth"] [data-scope="settings-view"]
 body.st-live-tuning[data-active-slider="inputHeight"] [data-scope="settings-view"] .st-control[data-slider="inputHeight"],
 body.st-live-tuning[data-active-slider="sandboxMaxWidth"] [data-scope="settings-view"] .st-control[data-slider="sandboxMaxWidth"],
 body.st-live-tuning[data-active-slider="sandboxPadding"] [data-scope="settings-view"] .st-control[data-slider="sandboxPadding"],
-body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-view"] .st-control[data-slider="sandboxRadius"] {
+body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-view"] .st-control[data-slider="sandboxRadius"],
+/* NEW: Threaded HTML stage sliders */
+body.st-live-tuning[data-active-slider="threadedStageMaxWidthPct"] [data-scope="settings-view"] .st-control[data-slider="threadedStageMaxWidthPct"],
+body.st-live-tuning[data-active-slider="threadedStagePadding"] [data-scope="settings-view"] .st-control[data-slider="threadedStagePadding"],
+body.st-live-tuning[data-active-slider="threadedStageRadius"] [data-scope="settings-view"] .st-control[data-slider="threadedStageRadius"] {
   visibility: visible !important;
 }
 
