@@ -166,8 +166,8 @@ watch(() => props.theme, (v) => {
   width: calc((100% - 4px) / 3);
   height: calc(100% - 4px);
   border-radius: 999px;
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 18px rgba(239,68,68,.35);
+  background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 18px rgba(96,165,250,.35);
   transform: translateX(calc(var(--active-index, 0) * 100%));
   transition: transform .28s cubic-bezier(.22,.61,.36,1), background .28s ease, box-shadow .28s ease;
   z-index: 0;
