@@ -123,13 +123,17 @@ watch(drawerOpen, (v) => {
   }
 })
 
-// 监听视图切换，start 视图时将 body 背景设为透明
+/* 监听视图切换，start/threaded/sandbox 统一景深+焦点动画 */
 watch(view, (v) => {
   document.body.dataset.home = (v === 'start' ? 'plain' : '')
-  // 视图切换后更新主页按钮的智能反色
   if (v === 'start') {
-    nextTick(() => updateHomeMenuInk())
-  } else {
+    nextTick(() => { updateHomeMenuInk(); playHomeBgFX() })
+  } else if (v === 'threaded') {
+    nextTick(() => { playThreadedBgFX() })
+  } else if (v === 'sandbox') {
+    nextTick(() => { playSandboxBgFX() })
+  }
+  if (v !== 'start') {
     // 离开主页时关闭主页相关模态
     homeModalOpen.value = false
     homeModalType.value = ''
@@ -256,6 +260,37 @@ function __onResizeOrScroll() {
   updateHomeMenuInk()
 }
 
+/* 高级背景动画：景深过渡 + 焦点位移（进入/切换各视图时触发）
+ * 两段式：0-75% 焦点位移 + 模糊减弱；75-100% 仅清晰过渡
+ */
+let __bgFxTimer = null
+function __triggerBgAnim(bodyClass) {
+  const docEl = document.documentElement
+  const target = document.body
+  // 随机焦点位移（细微偏移，营造镜头对焦感）
+  const rx = ((Math.random() * 2) - 1) * 14 // -14 ~ 14 px
+  const ry = ((Math.random() * 2) - 1) * 10 // -10 ~ 10 px
+  docEl.style.setProperty('--fx-shift-x', rx.toFixed(1) + 'px')
+  docEl.style.setProperty('--fx-shift-y', ry.toFixed(1) + 'px')
+
+  // 移除所有动画类，重新触发
+  target.classList.remove('st-bg-anim', 'st-bg-anim-threaded', 'st-bg-anim-sandbox')
+  // 强制重排以重触发动画
+  void target.offsetWidth
+  target.classList.add(bodyClass)
+
+  clearTimeout(__bgFxTimer)
+  // 总时长 4s：前 3s 焦点位移 + 模糊减弱，最后 1s 仅清晰过渡
+  __bgFxTimer = setTimeout(() => {
+    target.classList.remove(bodyClass)
+    docEl.style.removeProperty('--fx-shift-x')
+    docEl.style.removeProperty('--fx-shift-y')
+  }, 4100)
+}
+function playHomeBgFX(){ __triggerBgAnim('st-bg-anim') }
+function playThreadedBgFX(){ __triggerBgAnim('st-bg-anim-threaded') }
+function playSandboxBgFX(){ __triggerBgAnim('st-bg-anim-sandbox') }
+
 onMounted(() => {
   window.addEventListener('resize', __onResizeOrScroll, { passive: true })
   window.addEventListener('scroll', __onResizeOrScroll, { passive: true })
@@ -287,6 +322,19 @@ const messages = reactive([
  * - 通过 data-theme 属性切换 CSS Variables
  */
 const theme = ref('system')
+
+// 初始化主题优先从 documentElement 或本地存储读取，避免深色主题白屏闪烁
+try {
+  const attrTheme = document?.documentElement?.getAttribute?.('data-theme')
+  const savedTheme = localStorage.getItem('st.theme')
+  const init = (attrTheme === 'dark' || attrTheme === 'light') ? attrTheme
+             : (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'system') ? savedTheme
+             : 'system'
+  if (init !== 'system') {
+    theme.value = init
+  }
+} catch (_) {}
+
 function applyTheme(t) {
   const root = document.documentElement
   if (t === 'dark') {
@@ -340,9 +388,16 @@ function refreshIcons() {
 onMounted(() => {
   applyTheme(theme.value)
   ensureUIAssets().finally(() => {
-    if (view.value === 'start') {
-      try { updateHomeMenuInk() } catch (_) {}
-    }
+    try {
+      if (view.value === 'start') {
+        updateHomeMenuInk()
+        playHomeBgFX()
+      } else if (view.value === 'threaded') {
+        playThreadedBgFX()
+      } else if (view.value === 'sandbox') {
+        playSandboxBgFX()
+      }
+    } catch (_) {}
   })
   // 主页（start-view）时让 body 完全透明，避免白色半透明底
   document.body.dataset.home = (view.value === 'start' ? 'plain' : '')
@@ -351,6 +406,7 @@ onMounted(() => {
 function onThemeUpdate(t) {
   theme.value = t
   applyTheme(t)
+  try { localStorage.setItem('st.theme', t) } catch (_) {}
   refreshIcons()
 }
 
@@ -742,6 +798,71 @@ body.st-live-tuning[data-active-slider="sandboxMaxWidth"] [data-scope="settings-
 body.st-live-tuning[data-active-slider="sandboxPadding"] [data-scope="settings-view"] .st-control[data-slider="sandboxPadding"],
 body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-view"] .st-control[data-slider="sandboxRadius"] {
   visibility: visible !important;
+}
+
+/* Home 背景景深 + 焦点位移动画（进入/返回主页时触发） */
+:root {
+  --fx-shift-x: 0px;
+  --fx-shift-y: 0px;
+}
+
+@keyframes stDepthIntro {
+  /* 两段式：0-75% 焦点位移+模糊减弱；75-100% 仅清晰过渡 */
+  0% {
+    transform: scale(1.08) translate3d(var(--fx-shift-x), var(--fx-shift-y), 0);
+    filter: blur(20px) saturate(118%) brightness(0.96);
+    opacity: 0;
+  }
+  75% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: blur(2px) saturate(103%) brightness(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: blur(0px) saturate(100%) brightness(1);
+    opacity: 1;
+  }
+}
+
+
+/* 使用 body.st-bg-anim 切换动画态，避免常驻性能消耗 */
+body.st-bg-anim [data-scope="start-view"]::before {
+  will-change: transform, filter, opacity;
+  /* 放慢到 4s，总时长匹配 JS 清理 4.1s */
+  animation: stDepthIntro 4s cubic-bezier(.22,.61,.36,1) forwards;
+}
+/* Threaded/Sandbox 背景：两段式“0-75% 位移+模糊、75-100% 仅清晰”动画（细腻透明度版本） */
+@keyframes stDepthIntroSubtle {
+  0% {
+    transform: scale(1.08) translate3d(var(--fx-shift-x), var(--fx-shift-y), 0);
+    filter: blur(20px) saturate(118%) brightness(0.96);
+    opacity: 0;
+  }
+  75% {
+    transform: scale(1) translate3d(0,0,0);
+    filter: blur(2px) saturate(103%) brightness(1);
+    opacity: .12; /* 保持与基线相同的透明度 */
+  }
+  100% {
+    transform: scale(1) translate3d(0,0,0);
+    filter: blur(0px) saturate(100%) brightness(1);
+    opacity: .12;
+  }
+}
+
+/* 楼层对话页（threaded）：透明度维持在 .12，使用细腻版动画 */
+body.st-bg-anim-threaded .st-threaded::before,
+body.st-bg-anim-threaded [data-scope="chat-threaded"]::before {
+  will-change: transform, filter, opacity;
+  animation: stDepthIntroSubtle 4s cubic-bezier(.22,.61,.36,1) forwards;
+}
+
+/* 前端沙盒页（sandbox）：透明度维持在 .12，使用细腻版动画 */
+body.st-bg-anim-sandbox .st-sandbox::before,
+body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
+  will-change: transform, filter, opacity;
+  animation: stDepthIntroSubtle 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
 </style>
 

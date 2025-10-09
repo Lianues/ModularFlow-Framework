@@ -11,6 +11,32 @@
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <!-- Optional: Flowbite components (per ui美化规范) -->
     <script defer src="https://cdn.jsdelivr.net/npm/flowbite@2.0.0/dist/flowbite.min.js"></script>
+  <!-- Early theming + background to avoid white flash on dark theme -->
+  <style>
+    /* Default to dark background to prevent flash; override via prefers-color-scheme */
+    html, body { background: #0b0e14; }
+    @media (prefers-color-scheme: light) {
+      html, body { background: #f6f8fd; }
+    }
+    /* Honor early data-theme if present (set by the bootstrap script below) */
+    html[data-theme="dark"], html[data-theme="dark"] body { background: #0b0e14 !important; }
+    html[data-theme="light"], html[data-theme="light"] body { background: #f6f8fd !important; }
+  </style>
+  <script>
+    (function () {
+      try {
+        // Load last selected theme if available; otherwise follow system
+        var saved = localStorage.getItem('st.theme');
+        var t = (saved === 'dark' || saved === 'light' || saved === 'system') ? saved : null;
+        if (!t) {
+          t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'system';
+        }
+        if (t === 'dark' || t === 'light') {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+      } catch (e) {}
+    })();
+  </script>
   </head>
   <body data-app="smarttavern">
     <div id="app"></div>
