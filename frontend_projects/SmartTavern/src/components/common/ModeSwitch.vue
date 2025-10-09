@@ -38,21 +38,24 @@ function selectMode(key) {
   gap: 8px;
 }
 .st-switch-btn {
-  padding: 8px 10px;
-  border-radius: 9999px;
+  padding: 6px 10px;
+  border-radius: var(--st-radius-md);
   border: 1px solid rgb(var(--st-border));
   background: rgb(var(--st-surface));
   color: rgb(var(--st-color-text));
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+  transition:
+    background .18s cubic-bezier(.22,.61,.36,1),
+    border-color .18s cubic-bezier(.22,.61,.36,1),
+    transform .18s cubic-bezier(.22,.61,.36,1);
 }
 .st-switch-btn:hover {
   transform: translateY(-1px);
 }
 .st-switch-btn.active {
   background: rgba(var(--st-primary), 0.14);
-  border-color: rgba(var(--st-primary),0.4);
+  border-color: rgba(var(--st-primary),0.45);
 }
 </style>

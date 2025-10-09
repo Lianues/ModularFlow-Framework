@@ -114,6 +114,16 @@ function refreshIcons() {
 
 // 选项菜单状态
 const activeMenu = ref(null)
+const copiedState = ref({})
+function isCopied(id) { return !!copiedState.value[id] }
+function markCopied(id) {
+  copiedState.value[id] = true
+  refreshIcons()
+  setTimeout(() => {
+    copiedState.value[id] = false
+    refreshIcons()
+  }, 1600)
+}
 
 function toggleMenu(msgId) {
   activeMenu.value = activeMenu.value === msgId ? null : msgId
@@ -122,8 +132,8 @@ function toggleMenu(msgId) {
 
 function copyMessage(msg) {
   navigator.clipboard.writeText(msg.content).then(() => {
-    console.log('已复制到剪贴板')
     activeMenu.value = null
+    markCopied(msg.id)
   })
 }
 
@@ -433,13 +443,17 @@ function cancelPending() {
               <!-- 楼层页脚：左侧操作按钮 + 右侧分支切换（同一行） -->
               <div class="floor-footer">
                 <div class="floor-actions">
-                  <button class="act-btn" @click="copyMessage(m)" title="复制" aria-label="复制">
-                    <i data-lucide="copy" class="icon-16" aria-hidden="true"></i>
+                  <transition name="copy-tip">
+                    <div v-if="isCopied(m.id)" class="copy-tip">已复制</div>
+                  </transition>
+
+                  <button class="act-btn" :class="{ success: isCopied(m.id) }" @click="copyMessage(m)" :title="isCopied(m.id) ? '已复制' : '复制'" :aria-label="isCopied(m.id) ? '已复制' : '复制'">
+                    <i :data-lucide="isCopied(m.id) ? 'check' : 'copy'" class="icon-16" aria-hidden="true"></i>
                   </button>
-                  <button v-if="m.role === 'assistant'" class="act-btn" @click="regenerateMessage(m)" title="重新生成" aria-label="重新生成">
+                  <button class="act-btn" @click="regenerateMessage(m)" title="重试" aria-label="重试">
                     <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
                   </button>
-                  <button v-if="m.role === 'user'" class="act-btn" @click="startEdit(m)" title="编辑" aria-label="编辑">
+                  <button class="act-btn" @click="startEdit(m)" title="编辑" aria-label="编辑">
                     <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>
                   </button>
                 </div>
@@ -892,6 +906,7 @@ function cancelPending() {
 
 /* 楼层内操作按钮行（悬浮显示，居左） */
 .floor-actions {
+  position: relative;
   display: flex;
   justify-content: flex-start;
   gap: 8px;
@@ -936,6 +951,47 @@ function cancelPending() {
   box-shadow: 0 0 0 3px rgba(var(--st-primary), 0.14);
   border-color: rgba(var(--st-primary), 0.6);
 }
+
+/* 成功态复制按钮 */
+.act-btn.success {
+  background: linear-gradient(135deg, rgba(var(--st-accent),1), rgba(var(--st-primary),1));
+  color: var(--st-primary-contrast);
+  border-color: transparent;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+.act-btn.success:hover {
+  filter: saturate(1.05) brightness(1.03);
+}
+
+/* 复制提示气泡 */
+.copy-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: 9999px;
+  background: rgba(var(--st-surface), 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(var(--st-color-text), 0.95);
+  box-shadow: var(--st-shadow-sm);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 复制提示动效 */
+.copy-tip-enter-from,
+.copy-tip-leave-to { opacity: 0; transform: translateY(4px); }
+.copy-tip-enter-active,
+.copy-tip-leave-active { transition: opacity .18s ease, transform .2s cubic-bezier(.22,.61,.36,1); }
 
 /* 输入行（玻璃拟态输入容器） */
 .tch-input-row {

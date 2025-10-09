@@ -14,6 +14,7 @@ import CharactersPanel from '@/components/sidebar/CharactersPanel.vue'
 import PersonaPanel from '@/components/sidebar/PersonaPanel.vue'
 import RegexPanel from '@/components/sidebar/RegexPanel.vue'
 import ContentViewModal from '@/components/common/ContentViewModal.vue'
+import AppTopBar from '@/components/common/AppTopBar.vue'
 import PresetDetailView from '@/components/content/PresetDetailView.vue'
 import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
 import CharacterDetailView from '@/components/content/CharacterDetailView.vue'
@@ -168,23 +169,14 @@ function onThemeUpdate(t) {
       <div class="st-noise" />
     </div>
 
-    <!-- 顶部栏（玻璃拟态） -->
-    <header class="st-header glass">
-      <div class="st-left">
-        <button class="st-brand" @click="view = 'start'">
-          <span class="st-logo">∞</span>
-          SmartTavern
-        </button>
-        <ModeSwitch
-          v-if="showSidebar"
-          v-model:modelValue="view"
-          class="st-mode-switch"
-        />
-      </div>
-      <div class="st-actions-top">
-        <ThemeSwitch :theme="theme" @update:theme="onThemeUpdate" />
-      </div>
-    </header>
+    <!-- 顶部栏（统一顶栏组件） -->
+    <AppTopBar
+      :view="view"
+      :showSidebar="showSidebar"
+      :theme="theme"
+      @update:view="(v) => (view = v)"
+      @update:theme="onThemeUpdate"
+    />
 
     <!-- 主体 -->
     <div class="st-body">
@@ -559,20 +551,7 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   height: 100vh;
   overflow: hidden;
 }
-.st-header {
-  position: sticky; top: 0; z-index: 5;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px;
-}
-.st-logo { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px;
-  background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1)); color: #fff; margin-right: 10px; font-weight: 700; }
-.st-brand {
-  display: inline-flex; align-items: center;
-  gap: 12px; font-weight: 700; font-size: 16px;
-  background: transparent; border: none; color: rgb(var(--st-color-text)); cursor: pointer;
-}
-.st-actions-top { display: flex; align-items: center; gap: 8px; }
-.st-left { display: inline-flex; align-items: center; gap: 12px; }
+/* 旧 st-header 样式已移除，改用 AppTopBar 统一顶栏组件 */
 
 .st-body {
   display: flex;
@@ -704,7 +683,7 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   border-radius: var(--st-sandbox-radius);
   /* 舞台可见边界：淡色边框 + 半透明背景 */
   border: 2px solid rgba(var(--st-primary), 0.25);
-  background: rgba(var(--st-surface), 0.4);
+  background: rgba(var(--st-surface), 0.82);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
