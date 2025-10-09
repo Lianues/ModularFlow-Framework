@@ -1,5 +1,6 @@
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
+import HtmlIframeSandbox from '@/components/sandbox/HtmlIframeSandbox.vue'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
@@ -358,6 +359,24 @@ function cancelPending() {
   pendingSeconds.value = 0
   refreshIcons()
 }
+
+// 基于 DOCTYPE 检测 HTML 文档代码块（支持 ```html/```HTML/``` 或纯文本包含 <!DOCTYPE html>）
+const HTML_DOC_RE = /<!DOCTYPE\s+html/i
+const FENCE_RE = /```(?:html|HTML)?\s*([\s\S]*?)```/i
+
+function extractHtmlDocFromText(text) {
+  if (!text || typeof text !== 'string') return ''
+  const fence = text.match(FENCE_RE)
+  if (fence && fence[1] && HTML_DOC_RE.test(fence[1])) {
+    return fence[1].trim()
+  }
+  if (HTML_DOC_RE.test(text)) {
+    return text.trim()
+  }
+  return ''
+}
+function hasHtmlDoc(msg) { return !!extractHtmlDocFromText(msg.content) }
+function getHtmlDoc(msg) { return extractHtmlDocFromText(msg.content) }
 </script>
 
 <template>
@@ -437,7 +456,17 @@ function cancelPending() {
                 </div>
               </header>
               <section data-part="content" class="floor-content">
-                {{ m.content }}
+                <template v-if="hasHtmlDoc(m)">
+                  <!-- 楼层内 iframe 舞台（宽度百分比受 --st-threaded-stage-maxw 控制，不超过消息宽度） -->
+                  <div class="floor-html-stage">
+                    <div class="floor-html-stage-inner">
+                      <HtmlIframeSandbox :html="getHtmlDoc(m)" />
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  {{ m.content }}
+                </template>
               </section>
               
               <!-- 楼层页脚：左侧操作按钮 + 右侧分支切换（同一行） -->
@@ -1267,4 +1296,29 @@ function cancelPending() {
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(2) { transition-delay: 48ms; }
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(3) { transition-delay: 72ms; }
 
+/* 楼层内 HTML 舞台（iframe 渲染） */
+.floor-html-stage {
+  width: min(100%, calc(var(--st-threaded-stage-maxw, 100) * 1%));
+  margin: 6px 0;
+}
+.floor-html-stage-inner {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--st-threaded-stage-aspect, 16 / 9);
+  padding: var(--st-threaded-stage-padding, 8px);
+  border-radius: var(--st-threaded-stage-radius, 12px);
+  border: 1px solid rgba(var(--st-border), 0.6);
+  background: rgba(var(--st-surface), 0.82);
+  box-shadow: var(--st-shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  overflow: hidden;
+}
+/* 让 HtmlIframeSandbox 内部 iframe 铺满舞台 */
+.floor-html-stage-inner :deep(.st-iframe) {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+}
 </style>

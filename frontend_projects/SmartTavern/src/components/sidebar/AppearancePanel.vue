@@ -16,7 +16,7 @@ const tabs = [
   { key: 'backgrounds', label: '背景图片', icon: 'image' },
   { key: 'theme', label: '主题', icon: 'palette' },
 ]
-const active = ref('home')
+const active = ref('threaded')
 
 const panelStyle = computed(() => ({
   position: 'fixed',
@@ -46,6 +46,13 @@ const sandboxPadding = ref(16)         // 舞台内边距(px)
 const sandboxRadius = ref(18)          // 舞台圆角(px)
 const sandboxAspectX = ref(16)         // 宽高比：分子
 const sandboxAspectY = ref(9)          // 宽高比：分母
+
+/* --- Threaded 内嵌 HTML 舞台（iframe）控制 --- */
+const thAspectX = ref(16)              // 宽高比：分子
+const thAspectY = ref(9)               // 宽高比：分母
+const thMaxWidthPct = ref(100)         // 舞台最大宽度（%），不超过消息宽度
+const thPadding = ref(8)               // 舞台内边距(px)
+const thRadius = ref(12)               // 舞台圆角(px)
 
 /* 预设比例选项 */
 const aspectPresets = [
@@ -293,6 +300,65 @@ function onSandboxRadiusRangeInput(e) {
   sandboxRadius.value = Number(e.target.value)
   setRootVar('--st-sandbox-radius', sandboxRadius.value)
 }
+
+/* --- Threaded HTML 舞台 handlers --- */
+function onThreadedAspectPreset(e) {
+  const raw = e.target.value
+  if (!raw) return
+  const [ax, ay] = raw.split(',').map(Number)
+  if (ax > 0 && ay > 0) {
+    thAspectX.value = ax
+    thAspectY.value = ay
+    setRootVarUnitless('--st-threaded-stage-aspect', `${ax} / ${ay}`)
+  }
+}
+function onThreadedAspectNumInputX(e) {
+  const v = Number(e.target.value)
+  if (v > 0) {
+    thAspectX.value = v
+    setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
+  }
+}
+function onThreadedAspectNumInputY(e) {
+  const v = Number(e.target.value)
+  if (v > 0) {
+    thAspectY.value = v
+    setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
+  }
+}
+function onThreadedMaxWidthNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 30 && v <= 100) {
+    thMaxWidthPct.value = v
+    setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
+  }
+}
+function onThreadedMaxWidthRangeInput(e) {
+  thMaxWidthPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
+}
+function onThreadedPaddingNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 48) {
+    thPadding.value = v
+    setRootVar('--st-threaded-stage-padding', thPadding.value)
+  }
+}
+function onThreadedPaddingRangeInput(e) {
+  thPadding.value = Number(e.target.value)
+  setRootVar('--st-threaded-stage-padding', thPadding.value)
+}
+function onThreadedRadiusNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 32) {
+    thRadius.value = v
+    setRootVar('--st-threaded-stage-radius', thRadius.value)
+  }
+}
+function onThreadedRadiusRangeInput(e) {
+  thRadius.value = Number(e.target.value)
+  setRootVar('--st-threaded-stage-radius', thRadius.value)
+}
 onMounted(() => {
   contentFontSize.value = readCssVar('--st-content-font-size', 18)
   nameFontSize.value = readCssVar('--st-name-font-size', 16)
@@ -324,7 +390,8 @@ onMounted(() => {
 
   // 初始化沙盒布局变量（从 CSS 变量读取）
   const rs = getComputedStyle(document.documentElement)
-  // 比例
+
+  // 全屏沙盒 比例
   const aspRaw = rs.getPropertyValue('--st-sandbox-aspect')?.trim()
   if (aspRaw && aspRaw.includes('/')) {
     const parts = aspRaw.split('/')
@@ -335,10 +402,31 @@ onMounted(() => {
       sandboxAspectY.value = Math.round(ay)
     }
   }
-  // 其他参数
+  // 全屏沙盒 其他参数
   sandboxMaxWidth.value = readCssVarFloat('--st-sandbox-max-width', 1100)
   sandboxPadding.value = readCssVarFloat('--st-sandbox-padding', 16)
   sandboxRadius.value = readCssVarFloat('--st-sandbox-radius', 18)
+
+  // 楼层对话内嵌 HTML 舞台（iframe）变量
+  const thAspRaw = rs.getPropertyValue('--st-threaded-stage-aspect')?.trim()
+  if (thAspRaw && thAspRaw.includes('/')) {
+    const parts = thAspRaw.split('/')
+    const ax = parseFloat(parts[0])
+    const ay = parseFloat(parts[1])
+    if (Number.isFinite(ax) && Number.isFinite(ay) && ax > 0 && ay > 0) {
+      thAspectX.value = Math.round(ax)
+      thAspectY.value = Math.round(ay)
+    }
+  }
+  thMaxWidthPct.value = readCssVarFloat('--st-threaded-stage-maxw', 100)
+  thPadding.value = readCssVarFloat('--st-threaded-stage-padding', 8)
+  thRadius.value = readCssVarFloat('--st-threaded-stage-radius', 12)
+
+  // 回写一次，确保打开面板即与 UI 同步
+  setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
+  setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
+  setRootVar('--st-threaded-stage-padding', thPadding.value)
+  setRootVar('--st-threaded-stage-radius', thRadius.value)
 })
 onBeforeUnmount(() => {
   document.body.classList.remove('st-live-tuning')
@@ -579,6 +667,67 @@ onMounted(() => window.lucide?.createIcons?.())
               @pointerdown="onTuningStart('inputHeight')"
               @input="onInputHeightInput"
             />
+          </div>
+
+          <!-- 楼层对话：HTML 舞台（iframe）设置 -->
+          <h4 class="muted" style="margin:8px 0 0;">HTML 舞台（楼层内 iframe）</h4>
+
+          <!-- 画面宽高比 -->
+          <div class="st-control" data-slider="threadedStageAspect">
+            <label class="st-control-label">
+              <span class="label-text">画面宽高比</span>
+              <div class="value-group">
+                <select class="st-number-input" @change="onThreadedAspectPreset">
+                  <option disabled selected value="">预设</option>
+                  <option v-for="p in aspectPresets" :key="p.label" :value="p.v.join(',')">{{ p.label }}</option>
+                </select>
+                <span class="unit">或 自定义</span>
+              </div>
+            </label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="number" class="st-number-input" :value="thAspectX" min="1" max="100" @input="onThreadedAspectNumInputX" />
+              <span>:</span>
+              <input type="number" class="st-number-input" :value="thAspectY" min="1" max="100" @input="onThreadedAspectNumInputY" />
+            </div>
+          </div>
+
+          <!-- 舞台最大宽度（%） -->
+          <div class="st-control" data-slider="threadedStageMaxWidthPct">
+            <label class="st-control-label">
+              <span class="label-text">舞台最大宽度</span>
+              <div class="value-group">
+                <input type="number" class="st-number-input" :value="thMaxWidthPct" min="30" max="100" @input="onThreadedMaxWidthNumberInput" />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input type="range" min="30" max="100" step="1" :value="thMaxWidthPct" @pointerdown="onTuningStart('threadedStageMaxWidthPct')" @input="onThreadedMaxWidthRangeInput" />
+            <div class="st-control-hint">
+              <span class="muted" style="font-size:12px;">以消息内容宽度为上限，设置相对百分比宽度</span>
+            </div>
+          </div>
+
+          <!-- 内边距 -->
+          <div class="st-control" data-slider="threadedStagePadding">
+            <label class="st-control-label">
+              <span class="label-text">舞台内边距</span>
+              <div class="value-group">
+                <input type="number" class="st-number-input" :value="thPadding" min="0" max="48" @input="onThreadedPaddingNumberInput" />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input type="range" min="0" max="48" step="1" :value="thPadding" @pointerdown="onTuningStart('threadedStagePadding')" @input="onThreadedPaddingRangeInput" />
+          </div>
+
+          <!-- 圆角 -->
+          <div class="st-control" data-slider="threadedStageRadius">
+            <label class="st-control-label">
+              <span class="label-text">舞台圆角</span>
+              <div class="value-group">
+                <input type="number" class="st-number-input" :value="thRadius" min="0" max="32" @input="onThreadedRadiusNumberInput" />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input type="range" min="0" max="32" step="1" :value="thRadius" @pointerdown="onTuningStart('threadedStageRadius')" @input="onThreadedRadiusRangeInput" />
           </div>
 
           <p class="muted">拖拽滑条时，页面会自动变透明，仅保留本面板不透明，便于实时查看调整效果。</p>

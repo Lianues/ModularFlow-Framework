@@ -1,4 +1,4 @@
-1<script setup>
+<script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import SidebarNav from '@/components/sidebar/SidebarNav.vue'
 import ThemeSwitch from '@/components/common/ThemeSwitch.vue'
@@ -22,6 +22,7 @@ import RegexDetailView from '@/components/content/RegexDetailView.vue'
 import LoadGameView from '@/components/home/LoadGameView.vue'
 import GalleryView from '@/components/home/GalleryView.vue'
 import OptionsView from '@/components/home/OptionsView.vue'
+import SandboxStage from '@/components/sandbox/SandboxStage.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -542,32 +543,7 @@ function onThemeUpdate(t) {
 
         <!-- 全局沙盒独立视图 -->
         <section v-else data-scope="chat-sandbox" class="st-sandbox">
-          <div class="st-sandbox-stage">
-            <div class="st-sandbox-content">
-              <div class="st-sandbox-header">
-                <h2 class="st-sandbox-title">🎬 沙盒舞台预览</h2>
-                <p class="st-sandbox-desc">可在侧栏"外观 → 全屏沙盒设定"中调节舞台尺寸、比例与样式</p>
-              </div>
-              <div class="st-sandbox-body">
-                <div class="st-sandbox-demo-box">
-                  <div class="st-demo-icon">🎯</div>
-                  <div class="st-demo-text">拖拽"舞台最大宽度"滑条<br/>可看到此区域横向缩放</div>
-                </div>
-                <div class="st-sandbox-demo-box">
-                  <div class="st-demo-icon">📐</div>
-                  <div class="st-demo-text">调节"画面宽高比"<br/>可改变舞台的长宽比例</div>
-                </div>
-                <div class="st-sandbox-demo-box">
-                  <div class="st-demo-icon">📏</div>
-                  <div class="st-demo-text">调节"舞台内边距"<br/>可改变内容与边界的距离</div>
-                </div>
-                <div class="st-sandbox-demo-box">
-                  <div class="st-demo-icon">✨</div>
-                  <div class="st-demo-text">调节"舞台圆角"<br/>可看到四角的圆润程度</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <SandboxStage />
         </section>
       </main>
     </div>
@@ -691,6 +667,12 @@ function onThemeUpdate(t) {
   --st-avatar-size: 56px; /* 角色头像大小 */
   --st-chat-width: 80%; /* 百分比宽度 */
   --st-input-height: 100px; /* 输入框高度 */
+
+  /* Threaded 内嵌 HTML 舞台（消息卡片内 iframe） */
+  --st-threaded-stage-aspect: 16 / 9;   /* 宽高比 */
+  --st-threaded-stage-maxw: 100;        /* 最大宽度（百分比的数值，CSS 内用 *1%） */
+  --st-threaded-stage-padding: 8px;     /* 舞台内边距 */
+  --st-threaded-stage-radius: 12px;     /* 舞台圆角 */
 
   /* Sandbox layout controls */
   --st-sandbox-max-width: 1100px;  /* 舞台最大宽度 */
