@@ -19,6 +19,9 @@ import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
 import CharacterDetailView from '@/components/content/CharacterDetailView.vue'
 import PersonaDetailView from '@/components/content/PersonaDetailView.vue'
 import RegexDetailView from '@/components/content/RegexDetailView.vue'
+import LoadGameView from '@/components/home/LoadGameView.vue'
+import GalleryView from '@/components/home/GalleryView.vue'
+import OptionsView from '@/components/home/OptionsView.vue'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -61,6 +64,33 @@ function closeViewModal() {
   viewModalData.value = null
 }
 
+// 主页功能模态（Load / Gallery / Options）
+const homeModalOpen = ref(false)
+const homeModalTitle = ref('')
+const homeModalType = ref('') // 'load' | 'gallery' | 'options'
+
+function openHomeModal(type) {
+  homeModalType.value = type
+  homeModalTitle.value =
+    type === 'load' ? '读取存档'
+    : type === 'gallery' ? '画廊'
+    : type === 'options' ? '选项'
+    : ' '
+  homeModalOpen.value = true
+  nextTick(() => {
+    window?.lucide?.createIcons?.()
+    if (typeof window.initFlowbite === 'function') {
+      try { window.initFlowbite() } catch (_) {}
+    }
+  })
+}
+
+function closeHomeModal() {
+  homeModalOpen.value = false
+  homeModalType.value = ''
+  homeModalTitle.value = ''
+}
+
 /* New Game 模态：选择聊天方式（对话楼层 / 前端沙盒） */
 const newGameOpen = ref(false)
 function openNewGame() {
@@ -97,7 +127,14 @@ watch(drawerOpen, (v) => {
 watch(view, (v) => {
   document.body.dataset.home = (v === 'start' ? 'plain' : '')
   // 视图切换后更新主页按钮的智能反色
-  if (v === 'start') nextTick(() => updateHomeMenuInk())
+  if (v === 'start') {
+    nextTick(() => updateHomeMenuInk())
+  } else {
+    // 离开主页时关闭主页相关模态
+    homeModalOpen.value = false
+    homeModalType.value = ''
+    homeModalTitle.value = ''
+  }
 })
 
 /* 主页左下菜单：根据所占背景像素自动选择黑/白前景色 */
@@ -424,15 +461,15 @@ function onThemeUpdate(t) {
                 <i data-lucide="swords" class="icon-20" aria-hidden="true"></i>
                 <span>New Game</span>
               </button>
-              <button class="menu-btn" type="button">
+              <button class="menu-btn" type="button" @click="openHomeModal('load')">
                 <i data-lucide="history" class="icon-20" aria-hidden="true"></i>
                 <span>Load Game</span>
               </button>
-              <button class="menu-btn" type="button">
+              <button class="menu-btn" type="button" @click="openHomeModal('gallery')">
                 <i data-lucide="image" class="icon-20" aria-hidden="true"></i>
                 <span>Gallery</span>
               </button>
-              <button class="menu-btn" type="button">
+              <button class="menu-btn" type="button" @click="openHomeModal('options')">
                 <i data-lucide="settings" class="icon-20" aria-hidden="true"></i>
                 <span>Options</span>
               </button>
@@ -522,6 +559,28 @@ function onThemeUpdate(t) {
           <div class="mode-title">前端沙盒</div>
           <div class="mode-sub">Frontend Sandbox</div>
         </button>
+      </div>
+    </ContentViewModal>
+
+    <!-- Home menu modals: Load/Gallery/Options -->
+    <ContentViewModal
+      v-model:show="homeModalOpen"
+      :title="homeModalTitle"
+      @close="closeHomeModal"
+    >
+      <div v-if="homeModalType === 'load'">
+        <LoadGameView />
+      </div>
+      <div v-else-if="homeModalType === 'gallery'">
+        <GalleryView />
+      </div>
+      <div v-else-if="homeModalType === 'options'">
+        <OptionsView />
+      </div>
+      <div v-else class="modal-placeholder">
+        <div class="placeholder-icon">🗂️</div>
+        <div class="placeholder-text">主页功能</div>
+        <div class="placeholder-desc">类型：{{ homeModalType || '未选择' }}</div>
       </div>
     </ContentViewModal>
   </div>
