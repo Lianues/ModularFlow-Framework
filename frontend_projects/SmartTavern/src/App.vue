@@ -787,6 +787,13 @@ body.st-live-tuning[data-active-slider="threadedStageRadius"] [data-scope="setti
   visibility: visible !important;
 }
 
+/* Live-tuning 时隐藏外观面板中的自定义滚动条（避免干扰聚焦） */
+body.st-live-tuning [data-scope="settings-view"] .custom-scrollbar-wrapper .scroll-track {
+  opacity: 0 !important;
+  transform: translateX(8px) !important;
+  pointer-events: none !important;
+}
+
 /* Home 背景景深 + 焦点位移动画（进入/返回主页时触发） */
 :root {
   --fx-shift-x: 0px;
