@@ -35,13 +35,16 @@ function selectTheme(key) {
 /* 与全局 Design Tokens 兼容的样式，遵循 4/8 间距体系 */
 .st-theme-switch {
   display: inline-flex;
-  background: rgba(0,0,0,0.04);
+  background: rgba(var(--st-surface), 0.35);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
   padding: 4px;
   border-radius: var(--st-radius-lg);
   border: 1px solid rgba(var(--st-border),0.9);
+  box-shadow: var(--st-shadow-sm);
 }
 [data-theme="dark"] .st-theme-switch {
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--st-surface), 0.28);
 }
 .st-pill {
   padding: 6px 10px;

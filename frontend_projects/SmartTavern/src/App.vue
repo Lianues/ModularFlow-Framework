@@ -1,5 +1,5 @@
 1<script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import SidebarNav from '@/components/sidebar/SidebarNav.vue'
 import ThemeSwitch from '@/components/common/ThemeSwitch.vue'
 import ModeSwitch from '@/components/common/ModeSwitch.vue'
@@ -14,7 +14,6 @@ import CharactersPanel from '@/components/sidebar/CharactersPanel.vue'
 import PersonaPanel from '@/components/sidebar/PersonaPanel.vue'
 import RegexPanel from '@/components/sidebar/RegexPanel.vue'
 import ContentViewModal from '@/components/common/ContentViewModal.vue'
-import AppTopBar from '@/components/common/AppTopBar.vue'
 import PresetDetailView from '@/components/content/PresetDetailView.vue'
 import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
 import CharacterDetailView from '@/components/content/CharacterDetailView.vue'
@@ -62,6 +61,25 @@ function closeViewModal() {
   viewModalData.value = null
 }
 
+/* New Game 模态：选择聊天方式（对话楼层 / 前端沙盒） */
+const newGameOpen = ref(false)
+function openNewGame() {
+  newGameOpen.value = true
+  nextTick(() => {
+    window?.lucide?.createIcons?.()
+    if (typeof window.initFlowbite === 'function') {
+      try { window.initFlowbite() } catch (_) {}
+    }
+  })
+}
+function selectMode(mode) {
+  if (mode === 'threaded' || mode === 'sandbox') {
+    view.value = mode
+  }
+  newGameOpen.value = false
+  nextTick(() => { window?.lucide?.createIcons?.() })
+}
+
 // 当侧边栏抽屉关闭时，同步关闭右侧“应用设置”面板，保持同层同生命周期
 watch(drawerOpen, (v) => {
   if (!v) {
@@ -73,6 +91,119 @@ watch(drawerOpen, (v) => {
     personaOpen.value = false
     regexOpen.value = false
   }
+})
+
+// 监听视图切换，start 视图时将 body 背景设为透明
+watch(view, (v) => {
+  document.body.dataset.home = (v === 'start' ? 'plain' : '')
+  // 视图切换后更新主页按钮的智能反色
+  if (v === 'start') nextTick(() => updateHomeMenuInk())
+})
+
+/* 主页左下菜单：根据所占背景像素自动选择黑/白前景色 */
+let __bgImg = null
+let __bgUrlCache = null
+let __cv = null
+let __ctx = null
+
+function getBgUrlFromCSS() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--st-bg-start') || ''
+  const m = raw.match(/url\\((["']?)(.*?)\\1\\)/)
+  return m ? m[2] : ''
+}
+
+async function ensureBgImage() {
+  const url = getBgUrlFromCSS()
+  if (!url) return null
+  if (__bgImg && __bgUrlCache === url) return __bgImg
+  __bgUrlCache = url
+  __bgImg = await new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
+  return __bgImg
+}
+
+function ensureCanvas() {
+  const vw = window.innerWidth, vh = window.innerHeight
+  if (!__cv) {
+    __cv = document.createElement('canvas')
+    __ctx = __cv.getContext('2d', { willReadFrequently: true })
+  }
+  if (__cv.width !== vw || __cv.height !== vh) {
+    __cv.width = vw
+    __cv.height = vh
+  }
+}
+
+function drawBgToCanvas(img) {
+  if (!img || !__ctx) return
+  const vw = window.innerWidth, vh = window.innerHeight
+  const iw = img.naturalWidth, ih = img.naturalHeight
+  const scale = Math.max(vw / iw, vh / ih)
+  const sw = iw * scale, sh = ih * scale
+  const ox = (vw - sw) / 2
+  const oy = (vh - sh) / 2
+  __ctx.clearRect(0, 0, vw, vh)
+  __ctx.drawImage(img, ox, oy, sw, sh)
+}
+
+function sampleBrightnessAt(x, y, r = 8) {
+  if (!__ctx) return 255
+  const x0 = Math.max(0, Math.floor(x - r))
+  const y0 = Math.max(0, Math.floor(y - r))
+  const w = Math.min(__cv.width - x0, r * 2)
+  const h = Math.min(__cv.height - y0, r * 2)
+  if (w <= 0 || h <= 0) return 255
+  const data = __ctx.getImageData(x0, y0, w, h).data
+  let sum = 0, n = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2]
+    // 相对亮度（sRGB）
+    sum += 0.2126 * r + 0.7152 * g + 0.0722 * b
+    n++
+  }
+  return n ? (sum / n) : 255
+}
+
+function chooseInkFor(brightness) {
+  // 背景亮 → 用深色字；背景暗 → 用白字
+  return brightness > 160 ? '#0f1226' : '#ffffff'
+}
+
+async function updateHomeMenuInk() {
+  if (view.value !== 'start') return
+  const img = await ensureBgImage()
+  ensureCanvas()
+  drawBgToCanvas(img)
+  const buttons = document.querySelectorAll('.home-menu .menu-btn')
+  buttons.forEach(btn => {
+    const rect = btn.getBoundingClientRect()
+    const cx = rect.left + rect.width * 0.5
+    const cy = rect.top + rect.height * 0.5
+    const b = sampleBrightnessAt(cx, cy, 10)
+    const ink = chooseInkFor(b)
+    btn.style.setProperty('--menu-fg', ink)
+  })
+}
+
+function __onResizeOrScroll() {
+  // 轻量更新（无需抖动：按钮较少）
+  updateHomeMenuInk()
+}
+
+onMounted(() => {
+  window.addEventListener('resize', __onResizeOrScroll, { passive: true })
+  window.addEventListener('scroll', __onResizeOrScroll, { passive: true })
+  // 首次进入主页时计算一次
+  if (view.value === 'start') setTimeout(updateHomeMenuInk, 50)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', __onResizeOrScroll)
+  window.removeEventListener('scroll', __onResizeOrScroll)
 })
 
 // 楼层对话演示消息（占位）
@@ -147,6 +278,8 @@ function refreshIcons() {
 onMounted(() => {
   applyTheme(theme.value)
   ensureUIAssets()
+  // 主页（start-view）时让 body 完全透明，避免白色半透明底
+  document.body.dataset.home = (view.value === 'start' ? 'plain' : '')
 })
 
 function onThemeUpdate(t) {
@@ -162,27 +295,23 @@ function onThemeUpdate(t) {
 </script>
 
 <template>
-  <div data-scope="app-shell" class="st-app-shell">
+  <div data-scope="app-shell" class="st-app-shell" :class="{ 'home-plain': view === 'start' }">
     <!-- 背景层（渐变 + 噪点） -->
     <div class="st-bg">
       <div class="st-gradient" />
       <div class="st-noise" />
     </div>
 
-    <!-- 顶部栏（统一顶栏组件） -->
-    <AppTopBar
-      :view="view"
-      :showSidebar="showSidebar"
-      :theme="theme"
-      @update:view="(v) => (view = v)"
-      @update:theme="onThemeUpdate"
-    />
 
     <!-- 主体 -->
     <div class="st-body">
       <!-- 侧边栏（仅聊天视图显示） -->
       <SidebarDrawer v-if="showSidebar" v-model="drawerOpen">
         <SidebarNav
+          :view="view"
+          :theme="theme"
+          @update:view="(v) => (view = v)"
+          @update:theme="onThemeUpdate"
           @openAppearance="(appearanceOpen = !appearanceOpen, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
           @openAppSettings="(appSettingsOpen = !appSettingsOpen, appearanceOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
           @openPresets="(presetsOpen = !presetsOpen, appearanceOpen = false, appSettingsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
@@ -258,31 +387,27 @@ function onThemeUpdate(t) {
       <main data-scope="main" class="st-main">
         <!-- 开始视图（无侧边栏） -->
         <section v-if="view === 'start'" data-scope="start-view" class="st-start">
-          <div class="st-hero glass">
-            <h1 class="st-title">欢迎使用 SmartTavern</h1>
-            <p class="st-desc">一个可对话、可美化、可扩展的前端应用。</p>
-            <div class="st-cta">
-              <button class="st-btn st-primary" @click="view = 'threaded'">开始聊天（对话楼层）</button>
-              <button class="st-btn" @click="view = 'sandbox'">全局沙盒（占位）</button>
-            </div>
-          </div>
+          <!-- hero removed: 主页采用神话风格行动面板全屏居中 -->
 
-          <div class="st-features">
-            <div class="st-feature card">
-              <div class="st-feature-icon">🎯</div>
-              <div class="st-feature-title">解耦架构</div>
-              <div class="st-feature-desc">表现/逻辑/样式分离，主题与布局可热插拔。</div>
-            </div>
-            <div class="st-feature card">
-              <div class="st-feature-icon">🎨</div>
-              <div class="st-feature-title">主题 2.0</div>
-              <div class="st-feature-desc">单文件主题包 + 受控 JS 扩展，安全且强大。</div>
-            </div>
-            <div class="st-feature card">
-              <div class="st-feature-icon">⚡</div>
-              <div class="st-feature-title">静态发布</div>
-              <div class="st-feature-desc">编译产物可直接部署，运行时加载主题与配置。</div>
-            </div>
+          <div class="st-home-menu">
+            <nav class="home-menu">
+              <button class="menu-btn" type="button" @click="openNewGame">
+                <i data-lucide="swords" class="icon-20" aria-hidden="true"></i>
+                <span>New Game</span>
+              </button>
+              <button class="menu-btn" type="button">
+                <i data-lucide="history" class="icon-20" aria-hidden="true"></i>
+                <span>Load Game</span>
+              </button>
+              <button class="menu-btn" type="button">
+                <i data-lucide="image" class="icon-20" aria-hidden="true"></i>
+                <span>Gallery</span>
+              </button>
+              <button class="menu-btn" type="button">
+                <i data-lucide="settings" class="icon-20" aria-hidden="true"></i>
+                <span>Options</span>
+              </button>
+            </nav>
           </div>
         </section>
 
@@ -350,12 +475,33 @@ function onThemeUpdate(t) {
         <div class="placeholder-desc">视图类型：{{ viewModalType }}</div>
       </div>
     </ContentViewModal>
+
+    <!-- New Game 选择聊天方式 -->
+    <ContentViewModal
+      v-model:show="newGameOpen"
+      title="选择聊天方式"
+      @close="newGameOpen = false"
+    >
+      <div class="mode-select">
+        <button class="mode-card" type="button" @click="selectMode('threaded')">
+          <span class="mode-icon"><i data-lucide="message-square" class="icon-24" aria-hidden="true"></i></span>
+          <div class="mode-title">对话楼层</div>
+          <div class="mode-sub">Threaded Chat</div>
+        </button>
+        <button class="mode-card" type="button" @click="selectMode('sandbox')">
+          <span class="mode-icon"><i data-lucide="app-window" class="icon-24" aria-hidden="true"></i></span>
+          <div class="mode-title">前端沙盒</div>
+          <div class="mode-sub">Frontend Sandbox</div>
+        </button>
+      </div>
+    </ContentViewModal>
   </div>
 </template>
 
 <!-- 全局：设计令牌 + 主题（不加 scoped，供全局使用） -->
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cormorant+Garamond:wght@400;600;700&display=swap');
 
 :root {
   /* 基础语义令牌（RGB 形式，便于调优） */
@@ -389,9 +535,10 @@ function onThemeUpdate(t) {
 
   --st-font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
   --st-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --st-font-myth: 'Cinzel', 'Cormorant Garamond', Georgia, serif;
 
   /* Chat tuning defaults */
-  --st-content-font-size: 18px; /* 正文文字大小 */
+  --st-content-font-size: 20px; /* 正文文字大小 */
   --st-name-font-size: 16px; /* 角色名称文字大小 */
   --st-badge-font-size: 11px; /* 角色徽章文字大小 */
   --st-floor-font-size: 16px; /* 楼层号文字大小 */
@@ -428,6 +575,10 @@ body[data-app="smarttavern"] {
   background-size: var(--st-surface-bg-size);
   background-position: var(--st-surface-bg-position);
   background-repeat: var(--st-surface-bg-repeat);
+}
+/* start-view 完全透明：去除 body 白色底色 */
+body[data-app="smarttavern"][data-home="plain"] {
+  background-color: transparent !important;
 }
 
 * { box-sizing: border-box; }
@@ -523,6 +674,15 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   background-size: cover;
 }
 
+/* Home plain mode: remove gradient/noise overlay */
+.home-plain .st-bg { display: none; }
+/* Home plain: 所有容器完全透明，不带颜色 */
+.home-plain .st-body,
+.home-plain .st-main,
+.home-plain [data-scope="start-view"] {
+  background: transparent !important;
+}
+
 /* 玻璃拟态与卡片 */
 .glass {
   background: rgba(255, 255, 255, 0.6);
@@ -576,12 +736,13 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
 
 /* 开始视图（Hero） */
 .st-start {
-  display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: 16px;
-  align-items: start;
-  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
   position: relative;
 }
 .st-start::before {
@@ -592,8 +753,8 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
-  opacity: 0.15;
-  z-index: -1;
+  opacity: 1;
+  z-index: 0; /* 确保背景图位于内容层后面但不被 body 白底影响 */
   pointer-events: none;
 }
 @media (max-width: 980px) { .st-start { grid-template-columns: 1fr; } }
@@ -602,7 +763,17 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   padding: 24px; border-radius: var(--st-radius-lg);
   box-shadow: var(--st-shadow-lg);
 }
-.st-title { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
+.st-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--st-font-myth);
+  letter-spacing: .6px;
+  background: linear-gradient(90deg, #e9d8a6, #ffd166);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .st-desc { margin: 0 0 12px; color: rgba(var(--st-color-text), 0.75); }
 .st-cta { display: flex; gap: 12px; margin-top: 6px; }
 .st-btn {
@@ -620,6 +791,193 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
 .st-feature-icon { font-size: 20px; }
 .st-feature-title { margin-top: 8px; font-weight: 600; }
 .st-feature-desc { margin-top: 4px; color: rgba(var(--st-color-text), 0.7); }
+
+/* Mythic home actions */
+.st-myth-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
+  grid-template-rows: repeat(2, 1fr);
+  gap: 24px;
+  width: 100%;
+  max-width: 1400px;
+  height: clamp(560px, 74vh, 900px);
+  margin: 0 auto;
+  padding: 16px;
+}
+@media (max-width: 980px) {
+  .st-myth-actions {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    height: auto;
+    padding: 12px;
+  }
+}
+
+.myth-action {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "icon label"
+    "icon sub";
+  align-items: center;
+  gap: 12px 20px;
+  padding: 28px 30px;
+  height: 100%;
+  border-radius: var(--st-radius-lg);
+  border: 1px solid rgba(var(--st-border), 0.9);
+  background: rgba(var(--st-surface), 0.72);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: var(--st-shadow-md);
+  cursor: pointer;
+  transition: transform .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s cubic-bezier(.22,.61,.36,1), border-color .2s ease, background .2s ease;
+  overflow: hidden;
+}
+.myth-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.14);
+  border-color: rgba(var(--st-primary), 0.5);
+  background: rgba(var(--st-surface), 0.78);
+}
+.myth-icon {
+  grid-area: icon;
+  width: 84px; height: 84px;
+  border-radius: 9999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(var(--st-primary),.16), rgba(var(--st-accent),.16));
+  border: 1px solid rgba(var(--st-border), 0.9);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 14px rgba(0,0,0,0.08);
+  color: var(--menu-fg, rgb(var(--st-color-text)));
+  z-index: 1;
+}
+.icon-20 { width: 28px; height: 28px; stroke: currentColor; }
+
+.myth-label {
+  grid-area: label;
+  font-family: var(--st-font-myth);
+  font-weight: 800;
+  letter-spacing: 1px;
+  font-size: 28px;
+  color: rgb(var(--st-color-text));
+}
+.myth-sub {
+  grid-area: sub;
+  font-size: 14px;
+  color: rgba(var(--st-color-text), 0.78);
+  letter-spacing: .4px;
+}
+
+/* Ornament ring */
+.myth-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background:
+    radial-gradient(1200px 400px at 0% 0%, rgba(255,255,255,0.12), transparent 50%),
+    conic-gradient(from 0deg at 50% 50%, rgba(233,216,166,0.35), rgba(94,234,212,0.25), rgba(88,80,236,0.25), rgba(233,216,166,0.35));
+  mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  padding: 1px; /* hairline */
+  border: 1px solid rgba(var(--st-border), 0.6);
+  opacity: .65;
+  pointer-events: none;
+}
+
+/* New Game 模态选择样式 */
+.mode-select {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 16px;
+}
+@media (max-width: 720px) {
+  .mode-select { grid-template-columns: 1fr; }
+}
+.mode-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "icon title"
+    "icon sub";
+  align-items: center;
+  gap: 8px 12px;
+  padding: 16px 18px;
+  border-radius: var(--st-radius-lg);
+  border: 1px solid rgba(var(--st-border), 0.9);
+  background: rgba(var(--st-surface), 0.72);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow: var(--st-shadow-sm);
+  cursor: pointer;
+  transition: transform .2s cubic-bezier(.22,.61,.36,1), box-shadow .2s cubic-bezier(.22,.61,.36,1), border-color .18s ease;
+}
+.mode-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--st-shadow-md);
+  border-color: rgba(var(--st-primary), 0.5);
+}
+.mode-icon {
+  grid-area: icon;
+  width: 48px; height: 48px;
+  border-radius: 9999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(var(--st-primary),.16), rgba(var(--st-accent),.16));
+  border: 1px solid rgba(var(--st-border), 0.9);
+  color: rgb(var(--st-color-text));
+}
+.icon-24 { width: 24px; height: 24px; stroke: currentColor; }
+.mode-title {
+  grid-area: title;
+  font-family: var(--st-font-myth);
+  font-weight: 700;
+  letter-spacing: .6px;
+  color: rgb(var(--st-color-text));
+}
+.mode-sub {
+  grid-area: sub;
+  font-size: 12px;
+  color: rgba(var(--st-color-text), 0.75);
+}
+
+/* Home vertical menu (bottom-left) */
+.st-home-menu {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 2;
+}
+.home-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-radius: var(--st-radius-lg);
+  border: 1px solid rgba(var(--st-border), 0.7);
+  background: transparent; /* no white mask on home */
+  color: rgb(var(--st-color-text));
+  font-family: var(--st-font-myth);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: .8px;
+  cursor: pointer;
+  transition:
+    transform .18s cubic-bezier(.22,.61,.36,1),
+    border-color .18s ease,
+    color .18s ease;
+}
+.menu-btn:hover {
+  transform: translateX(4px);
+  border-color: rgba(var(--st-primary), 0.6);
+  color: rgb(var(--st-color-text));
+}
+.home-menu .icon-20 { width: 26px; height: 26px; stroke: currentColor; }
 
 /* Threaded chat container */
 .st-threaded {
