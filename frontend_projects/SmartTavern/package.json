@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
     "vue": "^3.5.22",
     "vue-router": "^4.4.5"
   },
