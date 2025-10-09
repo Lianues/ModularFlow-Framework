@@ -400,6 +400,8 @@ function onThemeUpdate(t) {
       <transition name="st-subpage">
         <AppSettingsPanel
           v-if="showSidebar && appSettingsOpen"
+          :theme="theme"
+          @update:theme="onThemeUpdate"
           @close="appSettingsOpen = false"
         />
       </transition>

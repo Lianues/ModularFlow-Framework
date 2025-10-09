@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 },
@@ -8,9 +8,10 @@ const props = defineProps({
   top: { type: Number, default: 64 },
   bottom: { type: Number, default: 12 },
   title: { type: String, default: '应用设置 App Settings' },
+  theme: { type: String, default: 'system' } // 同步主页 Options 主题状态
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'update:theme'])
 
 const panelStyle = computed(() => ({
   position: 'fixed',
@@ -22,7 +23,43 @@ const panelStyle = computed(() => ({
 }))
 
 function close(){ emit('close') }
-onMounted(() => window.lucide?.createIcons?.())
+
+// OptionsView 同步：主题切换逻辑
+const lang = ref('zh-CN')
+const currentTheme = ref(props.theme || 'system')
+
+function applyThemeToRoot(t) {
+  const root = document.documentElement
+  if (t === 'dark') {
+    root.setAttribute('data-theme', 'dark')
+  } else if (t === 'light') {
+    root.setAttribute('data-theme', 'light')
+  } else {
+    root.removeAttribute('data-theme')
+  }
+}
+
+function setTheme(t) {
+  currentTheme.value = t
+  applyThemeToRoot(t)
+  emit('update:theme', t)
+}
+
+const activeIndex = computed(() => currentTheme.value === 'system' ? 0 : (currentTheme.value === 'light' ? 1 : 2))
+const themeLabel = computed(() => currentTheme.value === 'system' ? '系统' : (currentTheme.value === 'light' ? '浅色' : '深色'))
+
+// 外部主题变化时，同步内部视图
+watch(() => props.theme, (v) => {
+  if (!v) return
+  currentTheme.value = v
+  applyThemeToRoot(v)
+})
+
+onMounted(() => {
+  window.lucide?.createIcons?.()
+  // 打开面板时，根据当前主题同步到根节点
+  applyThemeToRoot(currentTheme.value)
+})
 </script>
 
 <template>
@@ -40,48 +77,68 @@ onMounted(() => window.lucide?.createIcons?.())
       </header>
 
       <CustomScrollbar class="as-body">
-        <div class="as-content">
-          <h3>应用设置（占位）</h3>
-          <p class="muted">此为独立的应用设置页面，用于配置全局应用行为与高级选项。</p>
-          
-          <div class="as-placeholder-grid">
-            <div class="as-placeholder-card">
-              <div class="as-placeholder-icon">🔔</div>
-              <div class="as-placeholder-title">通知设置</div>
-              <div class="as-placeholder-desc">配置应用通知与提醒方式</div>
+        <section class="home-modal-section">
+          <div class="hm-title">
+            <i data-lucide="settings" class="icon-20" aria-hidden="true"></i>
+            <h2>选项</h2>
+          </div>
+          <p class="hm-desc">与主页 Options 完全一致的设置项：主题切换为“系统/浅色/深色”。</p>
+
+          <div class="opt-panel">
+            <!-- 语言（占位，保持禁用态） -->
+            <div class="opt-row">
+              <label class="opt-label">语言</label>
+              <select class="opt-input" v-model="lang" disabled>
+                <option value="zh-CN">简体中文</option>
+                <option value="en-US">English</option>
+                <option value="ja-JP">日本語</option>
+              </select>
             </div>
-            
-            <div class="as-placeholder-card">
-              <div class="as-placeholder-icon">🗄️</div>
-              <div class="as-placeholder-title">数据存储</div>
-              <div class="as-placeholder-desc">管理本地数据与缓存策略</div>
-            </div>
-            
-            <div class="as-placeholder-card">
-              <div class="as-placeholder-icon">🔒</div>
-              <div class="as-placeholder-title">隐私与安全</div>
-              <div class="as-placeholder-desc">配置隐私保护与安全选项</div>
-            </div>
-            
-            <div class="as-placeholder-card">
-              <div class="as-placeholder-icon">🌐</div>
-              <div class="as-placeholder-title">语言与区域</div>
-              <div class="as-placeholder-desc">设置语言、时区与地区偏好</div>
-            </div>
-            
-            <div class="as-placeholder-card">
-              <div class="as-placeholder-icon">🔌</div>
-              <div class="as-placeholder-title">插件与扩展</div>
-              <div class="as-placeholder-desc">管理已安装的插件与扩展</div>
-            </div>
-            
-            <div class="as-placeholder-card">
-              <div class="as-placeholder-icon">📊</div>
-              <div class="as-placeholder-title">统计与日志</div>
-              <div class="as-placeholder-desc">查看使用统计与系统日志</div>
+
+            <!-- 主题：三段按钮切换（与 OptionsView 同步实现） -->
+            <div class="opt-row">
+              <label class="opt-label">主题</label>
+              <div class="theme-group" role="group" aria-label="Theme Switch" :style="{ '--active-index': activeIndex }">
+                <div class="seg-indicator" aria-hidden="true"></div>
+
+                <button
+                  type="button"
+                  class="seg-btn"
+                  :class="{ active: currentTheme === 'system' }"
+                  @click="setTheme('system')"
+                >
+                  <i data-lucide="monitor" class="icon-16" aria-hidden="true"></i>
+                  <span>系统</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="seg-btn"
+                  :class="{ active: currentTheme === 'light' }"
+                  @click="setTheme('light')"
+                >
+                  <i data-lucide="sun" class="icon-16" aria-hidden="true"></i>
+                  <span>浅色</span>
+                </button>
+
+                <button
+                  type="button"
+                  class="seg-btn"
+                  :class="{ active: currentTheme === 'dark' }"
+                  @click="setTheme('dark')"
+                >
+                  <i data-lucide="moon" class="icon-16" aria-hidden="true"></i>
+                  <span>深色</span>
+                </button>
+              </div>
+
+              <div class="theme-current">
+                <i data-lucide="badge-check" class="icon-16" aria-hidden="true"></i>
+                <span>正在使用：{{ themeLabel }}</span>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
       </CustomScrollbar>
     </div>
 </template>
@@ -179,4 +236,99 @@ onMounted(() => window.lucide?.createIcons?.())
 @media (max-width: 640px) {
   .as-placeholder-grid { grid-template-columns: 1fr; }
 }
+/* ========== OptionsView 同步样式（按钮/动画/布局完整迁移） ========== */
+.home-modal-section { display: grid; gap: 12px; }
+.hm-title { display: flex; align-items: center; gap: 10px; }
+.hm-title .icon-20 { width: 20px; height: 20px; stroke: currentColor; color: rgb(var(--st-color-text)); }
+.hm-title h2 { margin: 0; font-size: 18px; font-weight: 700; color: rgb(var(--st-color-text)); }
+.hm-desc { margin: 0 0 8px; font-size: 12px; color: rgba(var(--st-color-text), 0.7); }
+
+.opt-panel {
+  display: grid; gap: 12px;
+  border: 1px solid rgb(var(--st-border));
+  background: rgb(var(--st-surface));
+  border-radius: var(--st-radius-lg);
+  padding: 12px;
+}
+
+/* 行布局：左侧标签 + 右侧内容 */
+.opt-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px; align-items: center;
+}
+@media (max-width: 640px) {
+  .opt-row { grid-template-columns: 1fr; align-items: start; }
+}
+
+.opt-label {
+  font-size: 13px; color: rgba(var(--st-color-text), .85); font-weight: 600;
+}
+
+.opt-input {
+  width: 100%; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid rgb(var(--st-border));
+  background: rgb(var(--st-surface-2));
+  color: rgb(var(--st-color-text));
+  opacity: .7;
+}
+
+/* 主题三段按钮（胶囊分段），含滑动指示器与动效 */
+.theme-group {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid rgba(var(--st-border), .9);
+  background: rgba(var(--st-surface), .85);
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: var(--st-shadow-sm);
+  isolation: isolate;
+}
+
+.seg-indicator {
+  position: absolute;
+  inset: 2px;
+  width: calc((100% - 4px) / 3);
+  height: calc(100% - 4px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #60a5fa, #a78bfa);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 18px rgba(96,165,250,.35);
+  transform: translateX(calc(var(--active-index, 0) * 100%));
+  transition: transform .28s cubic-bezier(.22,.61,.36,1), background .28s ease, box-shadow .28s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--st-color-text));
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .18s ease, transform .18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  z-index: 1;
+}
+.seg-btn:hover { transform: translateY(-1px); }
+.seg-btn.active { color: rgb(var(--st-color-text)); font-weight: 700; }
+
+.theme-current {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(var(--st-color-text), .75);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-16 { width: 16px; height: 16px; stroke: currentColor; }
+
+/* 深色主题微调 */
+[data-theme="dark"] .opt-input { background: rgb(var(--st-surface)); }
 </style>
