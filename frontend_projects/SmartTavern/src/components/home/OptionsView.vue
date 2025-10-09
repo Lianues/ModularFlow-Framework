@@ -1,11 +1,46 @@
 <script setup>
-import { ref, onMounted } from "vue"
-onMounted(() => window.lucide?.createIcons?.())
+import { ref, onMounted, watch, computed } from "vue"
 
-// 占位状态（控件禁用，仅作演示）
+const props = defineProps({
+  theme: { type: String, default: "system" } // system | light | dark
+})
+const emit = defineEmits(["update:theme"])
+
 const lang = ref("zh-CN")
-const volume = ref(60)
-const theme = ref("system")
+const currentTheme = ref(props.theme || "system")
+
+function applyThemeToRoot(t) {
+  const root = document.documentElement
+  if (t === "dark") {
+    root.setAttribute("data-theme", "dark")
+  } else if (t === "light") {
+    root.setAttribute("data-theme", "light")
+  } else {
+    root.removeAttribute("data-theme")
+  }
+}
+
+function setTheme(t) {
+  currentTheme.value = t
+  applyThemeToRoot(t)
+  emit("update:theme", t)
+}
+
+const activeIndex = computed(() => currentTheme.value === 'system' ? 0 : (currentTheme.value === 'light' ? 1 : 2))
+const themeLabel = computed(() => currentTheme.value === 'system' ? '系统' : (currentTheme.value === 'light' ? '浅色' : '深色'))
+
+onMounted(() => {
+  // 初始化图标 + 根据 props.theme 同步一次根节点主题
+  window.lucide?.createIcons?.()
+  applyThemeToRoot(currentTheme.value)
+})
+
+// 外部主题变化时，同步内部视图
+watch(() => props.theme, (v) => {
+  if (!v) return
+  currentTheme.value = v
+  applyThemeToRoot(v)
+})
 </script>
 
 <template>
@@ -14,9 +49,10 @@ const theme = ref("system")
       <i data-lucide="settings" class="icon-20" aria-hidden="true"></i>
       <h2>选项</h2>
     </div>
-    <p class="hm-desc">占位界面：未来这里提供音量、语言、显示与键位等设置。</p>
+    <p class="hm-desc">主页选项与侧边栏保持一致：主题切换为“系统/浅色/深色”。</p>
 
     <div class="opt-panel">
+      <!-- 语言（占位，保留但不改动逻辑） -->
       <div class="opt-row">
         <label class="opt-label">语言</label>
         <select class="opt-input" v-model="lang" disabled>
@@ -26,22 +62,50 @@ const theme = ref("system")
         </select>
       </div>
 
+      <!-- 主题：与侧边栏一致的三按钮切换 -->
       <div class="opt-row">
         <label class="opt-label">主题</label>
-        <select class="opt-input" v-model="theme" disabled>
-          <option value="system">系统</option>
-          <option value="light">浅色</option>
-          <option value="dark">深色</option>
-        </select>
+        <div class="theme-group" role="group" aria-label="Theme Switch" :style="{ '--active-index': activeIndex }">
+          <div class="seg-indicator" aria-hidden="true"></div>
+
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: currentTheme === 'system' }"
+            @click="setTheme('system')"
+          >
+            <i data-lucide="monitor" class="icon-16" aria-hidden="true"></i>
+            <span>系统</span>
+          </button>
+
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: currentTheme === 'light' }"
+            @click="setTheme('light')"
+          >
+            <i data-lucide="sun" class="icon-16" aria-hidden="true"></i>
+            <span>浅色</span>
+          </button>
+
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: currentTheme === 'dark' }"
+            @click="setTheme('dark')"
+          >
+            <i data-lucide="moon" class="icon-16" aria-hidden="true"></i>
+            <span>深色</span>
+          </button>
+        </div>
+
+        <div class="theme-current">
+          <i data-lucide="badge-check" class="icon-16" aria-hidden="true"></i>
+          <span>正在使用：{{ themeLabel }}</span>
+        </div>
       </div>
 
-      <div class="opt-row">
-        <label class="opt-label">音量</label>
-        <input type="range" min="0" max="100" v-model="volume" class="opt-range" disabled />
-        <span class="opt-val">{{ volume }}%</span>
-      </div>
-
-      <div class="opt-hint">当前为占位界面，控件不可用。</div>
+      <!-- 音量已按要求移除 -->
     </div>
   </section>
 </template>
@@ -60,16 +124,21 @@ const theme = ref("system")
   border-radius: var(--st-radius-lg);
   padding: 12px;
 }
+
+/* 行布局：左侧标签 + 右侧内容 */
 .opt-row {
   display: grid;
-  grid-template-columns: 120px 1fr auto;
+  grid-template-columns: 120px 1fr;
   gap: 10px; align-items: center;
 }
 @media (max-width: 640px) {
   .opt-row { grid-template-columns: 1fr; align-items: start; }
 }
 
-.opt-label { font-size: 13px; color: rgba(var(--st-color-text), .85); font-weight: 600; }
+.opt-label {
+  font-size: 13px; color: rgba(var(--st-color-text), .85); font-weight: 600;
+}
+
 .opt-input {
   width: 100%; padding: 8px 10px; border-radius: 8px;
   border: 1px solid rgb(var(--st-border));
@@ -77,8 +146,63 @@ const theme = ref("system")
   color: rgb(var(--st-color-text));
   opacity: .7;
 }
-.opt-range { width: 100%; }
-.opt-val { font-size: 12px; color: rgba(var(--st-color-text), .7); }
 
-.opt-hint { font-size: 12px; color: rgba(var(--st-color-text), .6); }
+/* 主题三段按钮（与侧边风格一致的胶囊分段） */
+.theme-group {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid rgba(var(--st-border), .9);
+  background: rgba(var(--st-surface), .85);
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: var(--st-shadow-sm);
+  isolation: isolate;
+}
+
+.seg-indicator {
+  position: absolute;
+  inset: 2px;
+  width: calc((100% - 4px) / 3);
+  height: calc(100% - 4px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 18px rgba(239,68,68,.35);
+  transform: translateX(calc(var(--active-index, 0) * 100%));
+  transition: transform .28s cubic-bezier(.22,.61,.36,1), background .28s ease, box-shadow .28s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--st-color-text));
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .18s ease, transform .18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  z-index: 1;
+}
+.seg-btn:hover { transform: translateY(-1px); }
+.seg-btn.active { color: rgb(var(--st-color-text)); font-weight: 700; }
+
+.theme-current {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(var(--st-color-text), .75);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-16 { width: 16px; height: 16px; stroke: currentColor; }
+
+/* 深色主题微调 */
+[data-theme="dark"] .opt-input { background: rgb(var(--st-surface)); }
 </style>

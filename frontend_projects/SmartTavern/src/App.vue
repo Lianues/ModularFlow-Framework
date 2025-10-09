@@ -575,7 +575,7 @@ function onThemeUpdate(t) {
         <GalleryView />
       </div>
       <div v-else-if="homeModalType === 'options'">
-        <OptionsView />
+        <OptionsView :theme="theme" @update:theme="onThemeUpdate" />
       </div>
       <div v-else class="modal-placeholder">
         <div class="placeholder-icon">🗂️</div>
