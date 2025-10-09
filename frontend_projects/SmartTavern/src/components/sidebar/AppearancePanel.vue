@@ -1128,6 +1128,13 @@ onMounted(() => window.lucide?.createIcons?.())
   text-align: right;
   font-size: 12px;
 }
+/* 预设下拉宽度与文字居中（同时作用于“楼层对话/全屏沙盒”的比例预设） */
+select.st-number-input {
+  width: 120px;
+  text-align: center;
+  text-align-last: center;
+  -moz-text-align-last: center;
+}
 .st-number-input:focus-visible {
   outline: 2px solid rgba(var(--st-primary), 0.6);
   outline-offset: 2px;

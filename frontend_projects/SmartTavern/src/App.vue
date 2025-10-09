@@ -316,6 +316,7 @@ const messages = reactive([
   { id: 8, role: 'user', content: '我想了解一下这个应用的特点。' },
   { id: 9, role: 'assistant', content: '这个应用具有以下特点：\n\n1. 解耦架构设计\n2. 可自定义主题\n3. 支持多种显示模式\n4. 响应式设计\n5. 美观的UI界面' },
   { id: 10, role: 'user', content: '听起来不错！' },
+  { id: 11, role: 'assistant', content: '下面是一个内嵌演示网页，前后还有普通正文，便于比对。\n\n正文段落 A。\n\n```html\n<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>内嵌演示</title></head><body><h1 style="font-family:system-ui;margin:16px;">楼层内 Iframe 演示</h1><p style="margin:16px;">这是一段通过 iframe 渲染的 HTML。</p></body></html>\n```\n\n正文段落 B。' },
 ])
 
 /**
