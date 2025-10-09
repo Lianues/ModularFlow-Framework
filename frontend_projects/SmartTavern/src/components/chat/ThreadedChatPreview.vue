@@ -377,6 +377,49 @@ function extractHtmlDocFromText(text) {
 }
 function hasHtmlDoc(msg) { return !!extractHtmlDocFromText(msg.content) }
 function getHtmlDoc(msg) { return extractHtmlDocFromText(msg.content) }
+
+/**
+ * 将消息文本拆分为 前置文本 / HTML 文档 / 后置文本 三段，仅替换中间代码块
+ * 支持：
+ *  - ```html ... ``` 或 ```HTML ... ``` 围栏中包含 <!DOCTYPE html>
+ *  - 纯文本中包含 <!DOCTYPE html> ... </html>
+ */
+function splitHtmlFromText(text) {
+  if (!text || typeof text !== 'string') return { before: '', html: '', after: '' }
+
+  // 优先匹配围栏代码块
+  const fence = text.match(/```(?:html|HTML)?\s*([\s\S]*?)```/i)
+  if (fence && fence[0]) {
+    const fenceIdx = text.indexOf(fence[0])
+    const code = fence[1] ?? ''
+    if (/<!DOCTYPE\s+html/i.test(code)) {
+      const before = text.slice(0, fenceIdx)
+      const after = text.slice(fenceIdx + fence[0].length)
+      return { before, html: code.trim(), after }
+    }
+  }
+
+  // 回退：匹配纯文本中的 <!DOCTYPE html> ... </html>
+  const doctypeRe = /<!DOCTYPE\s+html[^>]*>/i
+  const endHtmlRe = /<\/html>/i
+  const m = text.match(doctypeRe)
+  if (m) {
+    const start = m.index ?? -1
+    if (start >= 0) {
+      const tail = text.slice(start)
+      const endMatchIdx = tail.search(endHtmlRe)
+      const end = endMatchIdx >= 0 ? start + endMatchIdx + '</html>'.length : text.length
+      const before = text.slice(0, start)
+      const html = text.slice(start, end).trim()
+      const after = text.slice(end)
+      return { before, html, after }
+    }
+  }
+
+  return { before: '', html: '', after: '' }
+}
+
+function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 </script>
 
 <template>
@@ -456,13 +499,15 @@ function getHtmlDoc(msg) { return extractHtmlDocFromText(msg.content) }
                 </div>
               </header>
               <section data-part="content" class="floor-content">
-                <template v-if="hasHtmlDoc(m)">
+                <template v-if="splitDoc(m).html">
+                  <div v-if="splitDoc(m).before" class="floor-text">{{ splitDoc(m).before }}</div>
                   <!-- 楼层内 iframe 舞台（宽度百分比受 --st-threaded-stage-maxw 控制，不超过消息宽度） -->
                   <div class="floor-html-stage">
                     <div class="floor-html-stage-inner">
-                      <HtmlIframeSandbox :html="getHtmlDoc(m)" />
+                      <HtmlIframeSandbox :html="splitDoc(m).html" />
                     </div>
                   </div>
+                  <div v-if="splitDoc(m).after" class="floor-text">{{ splitDoc(m).after }}</div>
                 </template>
                 <template v-else>
                   {{ m.content }}
