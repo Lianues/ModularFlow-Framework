@@ -151,21 +151,26 @@ function drawBgToCanvas(img) {
 }
 
 function sampleBrightnessAt(x, y, r = 8) {
-  if (!__ctx) return 255
+  if (!__ctx) return null
   const x0 = Math.max(0, Math.floor(x - r))
   const y0 = Math.max(0, Math.floor(y - r))
   const w = Math.min(__cv.width - x0, r * 2)
   const h = Math.min(__cv.height - y0, r * 2)
-  if (w <= 0 || h <= 0) return 255
-  const data = __ctx.getImageData(x0, y0, w, h).data
-  let sum = 0, n = 0
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2]
-    // 相对亮度（sRGB）
-    sum += 0.2126 * r + 0.7152 * g + 0.0722 * b
-    n++
+  if (w <= 0 || h <= 0) return null
+  try {
+    const data = __ctx.getImageData(x0, y0, w, h).data
+    let sum = 0, n = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2]
+      // 相对亮度（sRGB）
+      sum += 0.2126 * r + 0.7152 * g + 0.0722 * b
+      n++
+    }
+    return n ? (sum / n) : null
+  } catch (e) {
+    // Canvas 污染或数据不可读，返回空以触发降级方案
+    return null
   }
-  return n ? (sum / n) : 255
 }
 
 function chooseInkFor(brightness) {
@@ -181,11 +186,31 @@ async function updateHomeMenuInk() {
   const buttons = document.querySelectorAll('.home-menu .menu-btn')
   buttons.forEach(btn => {
     const rect = btn.getBoundingClientRect()
-    const cx = rect.left + rect.width * 0.5
-    const cy = rect.top + rect.height * 0.5
-    const b = sampleBrightnessAt(cx, cy, 10)
-    const ink = chooseInkFor(b)
+    // 采样 5 点（中心 + 四角中点），避免局部高亮/阴影导致误判
+    const pts = [
+      [rect.left + rect.width * 0.5, rect.top + rect.height * 0.5],
+      [rect.left + rect.width * 0.25, rect.top + rect.height * 0.35],
+      [rect.right - rect.width * 0.25, rect.top + rect.height * 0.35],
+      [rect.left + rect.width * 0.25, rect.bottom - rect.height * 0.35],
+      [rect.right - rect.width * 0.25, rect.bottom - rect.height * 0.35],
+    ]
+    const samples = pts
+      .map(([x,y]) => sampleBrightnessAt(x, y, 10))
+      .filter(v => typeof v === 'number')
+    const avg = samples.length ? (samples.reduce((a,b)=>a+b,0) / samples.length) : null
+    const ink = avg == null ? '#ffffff' : chooseInkFor(avg)
+
+    // 智能前景色 + 辅助阴影与边框，提升在复杂背景下的可读性
+    const shadow = ink === '#ffffff'
+      ? '0 1px 2px rgba(0,0,0,0.55), 0 0 8px rgba(0,0,0,0.20)'
+      : '0 1px 0 rgba(255,255,255,0.35)'
+    const border = ink === '#ffffff'
+      ? 'rgba(255,255,255,0.55)'
+      : 'rgba(0,0,0,0.45)'
+
     btn.style.setProperty('--menu-fg', ink)
+    btn.style.setProperty('--menu-shadow', shadow)
+    btn.style.setProperty('--menu-border', border)
   })
 }
 
@@ -277,7 +302,11 @@ function refreshIcons() {
 
 onMounted(() => {
   applyTheme(theme.value)
-  ensureUIAssets()
+  ensureUIAssets().finally(() => {
+    if (view.value === 'start') {
+      try { updateHomeMenuInk() } catch (_) {}
+    }
+  })
   // 主页（start-view）时让 body 完全透明，避免白色半透明底
   document.body.dataset.home = (view.value === 'start' ? 'plain' : '')
 })
@@ -959,9 +988,10 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   gap: 14px;
   padding: 14px 20px;
   border-radius: var(--st-radius-lg);
-  border: 1px solid rgba(var(--st-border), 0.7);
+  border: 1px solid var(--menu-border, rgba(var(--st-border), 0.7));
   background: transparent; /* no white mask on home */
-  color: rgb(var(--st-color-text));
+  color: var(--menu-fg, rgb(var(--st-color-text)));
+  text-shadow: var(--menu-shadow, none);
   font-family: var(--st-font-myth);
   font-weight: 800;
   font-size: 20px;
@@ -970,12 +1000,13 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
   transition:
     transform .18s cubic-bezier(.22,.61,.36,1),
     border-color .18s ease,
-    color .18s ease;
+    color .18s ease,
+    text-shadow .18s ease;
 }
 .menu-btn:hover {
   transform: translateX(4px);
   border-color: rgba(var(--st-primary), 0.6);
-  color: rgb(var(--st-color-text));
+  color: var(--menu-fg, rgb(var(--st-color-text)));
 }
 .home-menu .icon-20 { width: 26px; height: 26px; stroke: currentColor; }
 
