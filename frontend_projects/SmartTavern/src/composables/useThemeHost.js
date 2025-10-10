@@ -81,6 +81,25 @@ async function setToken(name, value, { persist = true } = {}) {
 }
 
 /**
+ * 主题扩展接口：注册/注销/广播（不执行脚本，仅用于美化扩展监听外观快照）
+ */
+async function registerExtension(ext) {
+  await ensureInit()
+  // 返回一个注销函数，若宿主未实现则返回空函数
+  return ThemeManager?.registerExtension?.(ext) ?? (() => {})
+}
+function unregisterExtension(id) {
+  try { ThemeManager?.unregisterExtension?.(id) } catch (_) {}
+}
+function getExtensions() {
+  try { return ThemeManager?.getExtensions?.() ?? [] } catch (_) { return [] }
+}
+async function applyAppearanceSnapshot(snapshot) {
+  await ensureInit()
+  try { ThemeManager?.applyAppearanceSnapshot?.(snapshot) } catch (_) {}
+}
+
+/**
  * 组合式函数：返回响应式状态与 API
  */
 export function useThemeHost() {
@@ -103,6 +122,14 @@ export function useThemeHost() {
     applyThemePack,
     resetTheme,
     setToken,
+    registerExtension,
+    unregisterExtension,
+    getExtensions,
+    applyAppearanceSnapshot,
+    registerExtension,
+    unregisterExtension,
+    getExtensions,
+    applyAppearanceSnapshot,
   }
 }
 

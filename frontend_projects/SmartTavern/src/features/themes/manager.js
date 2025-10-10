@@ -29,6 +29,45 @@ const PARAM_URL = 'themeUrl'
 const PARAM_DATA = 'themeData'
 const PARAM_PERSIST = 'themePersist'
 
+/* Theme extension registry (v1, optional; no script execution) */
+const __extensions = new Map()
+/**
+ * Register a theme extension. Returns disposer function.
+ * @param {{id:string,enabled?:boolean,priority?:number,scopes?:string[],applyAppearance?:(snapshot:any)=>void}} ext
+ * @returns {() => void}
+ */
+function registerExtension(ext) {
+  if (!ext || typeof ext.id !== 'string' || !ext.id) {
+    throw new Error('[ThemeManager] extension.id required')
+  }
+  __extensions.set(ext.id, { ...ext })
+  return () => unregisterExtension(ext.id)
+}
+/** @param {string} id */
+function unregisterExtension(id) {
+  try { __extensions.delete(id) } catch (_) {}
+}
+/** @returns {any[]} */
+function getExtensions() {
+  return Array.from(__extensions.values())
+}
+/**
+ * Broadcast current Appearance snapshot to all registered extensions.
+ * The snapshot is a plain object; extensions may selectively consume fields.
+ * @param {Record<string, any>} snapshot
+ */
+function applyAppearanceSnapshot(snapshot) {
+  for (const ext of __extensions.values()) {
+    try {
+      if (ext && ext.enabled !== false && typeof ext.applyAppearance === 'function') {
+        ext.applyAppearance(snapshot)
+      }
+    } catch (e) {
+      console.warn('[ThemeManager] extension.applyAppearance error:', e)
+    }
+  }
+}
+
 function isObject(v) {
   return v && typeof v === 'object' && !Array.isArray(v)
 }
@@ -193,6 +232,12 @@ const ThemeManager = {
   importFromFile,
   on,
   off,
+  // Extensions API (beautification hooks)
+  registerExtension,
+  unregisterExtension,
+  getExtensions,
+  applyAppearanceSnapshot,
+  // Query
   getCurrentTheme: ThemeStore.getCurrentTheme,
   getState: ThemeStore.getState,
   getVersion: ThemeStore.getVersion,

@@ -1,69 +1,16 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import useAppearanceThreaded from '@/composables/appearance/useAppearanceThreaded'
 
 /**
  * 楼层对话外观配置（拆分自 AppearancePanel）
- * - 直接写入/读取 CSS 变量
- * - 使用本地持久化（仅本页签）：st.appearance.threaded.v1
- * - 与父容器视觉语言统一（复用 .st-control 等样式）
+ * 重构：使用 useAppearanceThreaded 统一处理
+ * - CSS 变量读写
+ * - 本地持久化（st.appearance.threaded.v1）
+ * - 定时广播给主题扩展（ThemeManager.applyAppearanceSnapshot）
  */
 
-/* helpers */
-function readCssVar(name, fallback) {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name)?.trim()
-  if (!v) return fallback
-  const n = parseInt(v, 10)
-  return Number.isFinite(n) ? n : fallback
-}
-function readCssVarFloat(name, fallback) {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name)?.trim()
-  if (!v) return fallback
-  const n = parseFloat(v)
-  return Number.isFinite(n) ? n : fallback
-}
-function setRootVar(name, value) {
-  const suffix = name === '--st-chat-width' ? '%' : 'px'
-  document.documentElement.style.setProperty(name, typeof value === 'number' ? value + suffix : String(value))
-}
-function setRootVarUnitless(name, value) {
-  document.documentElement.style.setProperty(name, String(value))
-}
-
-/* state */
-const contentFontSize = ref(18)
-const nameFontSize = ref(16)
-const badgeFontSize = ref(11)
-const floorFontSize = ref(16)
-const avatarSize = ref(56)
-const chatWidth = ref(80)
-const inputHeight = ref(100)
-
-const contentLineHeight = ref(1.75)
-const messageGap = ref(12)
-const cardRadius = ref(NaN) // NaN 表示未覆盖（沿用默认）
-const stripeWidth = ref(8)
-
-/* 背景与容器透明度（%） */
-const threadedBgOpacityPct = ref(12)
-const threadedMsgBgOpacityPct = ref(82)
-const threadedListBgOpacityPct = ref(62)
-const threadedInputBgOpacityPct = ref(80)
-
-/* 楼层内 HTML 舞台（iframe） */
-const thAspectX = ref(16)
-const thAspectY = ref(9)
-const thMaxWidthPct = ref(100)
-const thPadding = ref(8)
-const thRadius = ref(12)
-
-const aspectPresets = [
-  { label: '16:9', v: [16, 9] },
-  { label: '4:3', v: [4, 3] },
-  { label: '21:9', v: [21, 9] },
-  { label: '1:1', v: [1, 1] },
-]
-
-/* live tuning indicator */
+// live tuning indicator
 const tuning = ref(false)
 const activeTuningSlider = ref(null)
 function onTuningStart(sliderName) {
@@ -81,178 +28,81 @@ function onTuningEndOnce() {
   document.body.removeAttribute('data-active-slider')
 }
 
-/* handlers: 字号/尺寸 */
-function onContentFontSizeInput(e) {
-  contentFontSize.value = Number(e.target.value)
-  setRootVar('--st-content-font-size', contentFontSize.value)
-}
-function onContentFontSizeNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 12 && val <= 32) {
-    contentFontSize.value = val
-    setRootVar('--st-content-font-size', contentFontSize.value)
-  }
-}
-function onNameFontSizeInput(e) {
-  nameFontSize.value = Number(e.target.value)
-  setRootVar('--st-name-font-size', nameFontSize.value)
-}
-function onNameFontSizeNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 10 && val <= 24) {
-    nameFontSize.value = val
-    setRootVar('--st-name-font-size', nameFontSize.value)
-  }
-}
-function onBadgeFontSizeInput(e) {
-  badgeFontSize.value = Number(e.target.value)
-  setRootVar('--st-badge-font-size', badgeFontSize.value)
-}
-function onBadgeFontSizeNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 8 && val <= 16) {
-    badgeFontSize.value = val
-    setRootVar('--st-badge-font-size', badgeFontSize.value)
-  }
-}
-function onFloorFontSizeInput(e) {
-  floorFontSize.value = Number(e.target.value)
-  setRootVar('--st-floor-font-size', floorFontSize.value)
-}
-function onFloorFontSizeNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 10 && val <= 24) {
-    floorFontSize.value = val
-    setRootVar('--st-floor-font-size', floorFontSize.value)
-  }
-}
-function onAvatarSizeInput(e) {
-  avatarSize.value = Number(e.target.value)
-  setRootVar('--st-avatar-size', avatarSize.value)
-}
-function onAvatarSizeNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 32 && val <= 80) {
-    avatarSize.value = val
-    setRootVar('--st-avatar-size', avatarSize.value)
-  }
-}
-function onWidthInput(e) {
-  chatWidth.value = Number(e.target.value)
-  setRootVar('--st-chat-width', chatWidth.value)
-}
-function onWidthNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 30 && val <= 100) {
-    chatWidth.value = val
-    setRootVar('--st-chat-width', chatWidth.value)
-  }
-}
-function onInputHeightInput(e) {
-  inputHeight.value = Number(e.target.value)
-  setRootVar('--st-input-height', inputHeight.value)
-}
-function onInputHeightNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 60 && val <= 300) {
-    inputHeight.value = val
-    setRootVar('--st-input-height', inputHeight.value)
-  }
-}
+// Composable: state + helpers
+const {
+  state,
+  initFromCSS,
+  startAutoSave,
+  setRootVar,
+  setRootVarUnitless,
+} = useAppearanceThreaded()
 
-/* handlers: 常用外观 */
-function onContentLineHeightNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 1.2 && val <= 2.0) {
-    contentLineHeight.value = val
-    setRootVarUnitless('--st-content-line-height', String(val))
-  }
-}
-function onContentLineHeightRangeInput(e) {
-  contentLineHeight.value = Number(e.target.value)
-  setRootVarUnitless('--st-content-line-height', String(contentLineHeight.value))
-}
-function onMessageGapNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 6 && val <= 24) {
-    messageGap.value = val
-    setRootVar('--st-message-gap', messageGap.value)
-  }
-}
-function onMessageGapRangeInput(e) {
-  messageGap.value = Number(e.target.value)
-  setRootVar('--st-message-gap', messageGap.value)
-}
-function onCardRadiusNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 0 && val <= 24) {
-    cardRadius.value = val
-    setRootVar('--st-card-radius', cardRadius.value)
-  }
-}
-function onCardRadiusRangeInput(e) {
-  cardRadius.value = Number(e.target.value)
-  setRootVar('--st-card-radius', cardRadius.value)
-}
-function onStripeWidthNumberInput(e) {
-  const val = Number(e.target.value)
-  if (val >= 0 && val <= 12) {
-    stripeWidth.value = val
-    setRootVar('--st-stripe-width', stripeWidth.value)
-  }
-}
-function onStripeWidthRangeInput(e) {
-  stripeWidth.value = Number(e.target.value)
-  setRootVar('--st-stripe-width', stripeWidth.value)
-}
+// Destructure refs for template parity
+const {
+  contentFontSize, nameFontSize, badgeFontSize, floorFontSize, avatarSize,
+  chatWidth, inputHeight,
+  contentLineHeight, messageGap, cardRadius, stripeWidth,
+  threadedBgOpacityPct, threadedMsgBgOpacityPct, threadedListBgOpacityPct, threadedInputBgOpacityPct,
+  thAspectX, thAspectY, thMaxWidthPct, thPadding, thRadius,
+} = state
 
-/* handlers: 透明度（%→小数写 CSS） */
-function onThreadedBgOpacityNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 0 && v <= 100) {
-    threadedBgOpacityPct.value = v
-    setRootVarUnitless('--st-threaded-bg-opacity', String(v / 100))
-  }
-}
-function onThreadedBgOpacityRangeInput(e) {
-  threadedBgOpacityPct.value = Number(e.target.value)
-  setRootVarUnitless('--st-threaded-bg-opacity', String(threadedBgOpacityPct.value / 100))
-}
-function onThreadedMsgBgOpacityNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 0 && v <= 100) {
-    threadedMsgBgOpacityPct.value = v
-    setRootVarUnitless('--st-threaded-msg-bg-opacity', String(v / 100))
-  }
-}
-function onThreadedMsgBgOpacityRangeInput(e) {
-  threadedMsgBgOpacityPct.value = Number(e.target.value)
-  setRootVarUnitless('--st-threaded-msg-bg-opacity', String(threadedMsgBgOpacityPct.value / 100))
-}
-function onThreadedListBgOpacityNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 0 && v <= 100) {
-    threadedListBgOpacityPct.value = v
-    setRootVarUnitless('--st-threaded-list-bg-opacity', String(v / 100))
-  }
-}
-function onThreadedListBgOpacityRangeInput(e) {
-  threadedListBgOpacityPct.value = Number(e.target.value)
-  setRootVarUnitless('--st-threaded-list-bg-opacity', String(threadedListBgOpacityPct.value / 100))
-}
-function onThreadedInputBgOpacityNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 0 && v <= 100) {
-    threadedInputBgOpacityPct.value = v
-    setRootVarUnitless('--st-threaded-input-bg-opacity', String(v / 100))
-  }
-}
-function onThreadedInputBgOpacityRangeInput(e) {
-  threadedInputBgOpacityPct.value = Number(e.target.value)
-  setRootVarUnitless('--st-threaded-input-bg-opacity', String(threadedInputBgOpacityPct.value / 100))
-}
+// Presets (unchanged)
+const aspectPresets = [
+  { label: '16:9', v: [16, 9] },
+  { label: '4:3', v: [4, 3] },
+  { label: '21:9', v: [21, 9] },
+  { label: '1:1', v: [1, 1] },
+]
 
-/* handlers: 楼层内 HTML 舞台 */
+// Handlers: same signatures, write via helpers
+function onContentFontSizeInput(e) { contentFontSize.value = Number(e.target.value); setRootVar('--st-content-font-size', contentFontSize.value) }
+function onContentFontSizeNumberInput(e) { const v = Number(e.target.value); if (v >= 12 && v <= 32) { contentFontSize.value = v; setRootVar('--st-content-font-size', v) } }
+
+function onNameFontSizeInput(e) { nameFontSize.value = Number(e.target.value); setRootVar('--st-name-font-size', nameFontSize.value) }
+function onNameFontSizeNumberInput(e) { const v = Number(e.target.value); if (v >= 10 && v <= 24) { nameFontSize.value = v; setRootVar('--st-name-font-size', v) } }
+
+function onBadgeFontSizeInput(e) { badgeFontSize.value = Number(e.target.value); setRootVar('--st-badge-font-size', badgeFontSize.value) }
+function onBadgeFontSizeNumberInput(e) { const v = Number(e.target.value); if (v >= 8 && v <= 16) { badgeFontSize.value = v; setRootVar('--st-badge-font-size', v) } }
+
+function onFloorFontSizeInput(e) { floorFontSize.value = Number(e.target.value); setRootVar('--st-floor-font-size', floorFontSize.value) }
+function onFloorFontSizeNumberInput(e) { const v = Number(e.target.value); if (v >= 10 && v <= 24) { floorFontSize.value = v; setRootVar('--st-floor-font-size', v) } }
+
+function onAvatarSizeInput(e) { avatarSize.value = Number(e.target.value); setRootVar('--st-avatar-size', avatarSize.value) }
+function onAvatarSizeNumberInput(e) { const v = Number(e.target.value); if (v >= 32 && v <= 80) { avatarSize.value = v; setRootVar('--st-avatar-size', v) } }
+
+function onWidthInput(e) { chatWidth.value = Number(e.target.value); setRootVar('--st-chat-width', chatWidth.value) }
+function onWidthNumberInput(e) { const v = Number(e.target.value); if (v >= 30 && v <= 100) { chatWidth.value = v; setRootVar('--st-chat-width', v) } }
+
+function onInputHeightInput(e) { inputHeight.value = Number(e.target.value); setRootVar('--st-input-height', inputHeight.value) }
+function onInputHeightNumberInput(e) { const v = Number(e.target.value); if (v >= 60 && v <= 300) { inputHeight.value = v; setRootVar('--st-input-height', v) } }
+
+// Common appearance
+function onContentLineHeightNumberInput(e) { const v = Number(e.target.value); if (v >= 1.2 && v <= 2.0) { contentLineHeight.value = v; setRootVarUnitless('--st-content-line-height', String(v)) } }
+function onContentLineHeightRangeInput(e) { contentLineHeight.value = Number(e.target.value); setRootVarUnitless('--st-content-line-height', String(contentLineHeight.value)) }
+
+function onMessageGapNumberInput(e) { const v = Number(e.target.value); if (v >= 6 && v <= 24) { messageGap.value = v; setRootVar('--st-message-gap', v) } }
+function onMessageGapRangeInput(e) { messageGap.value = Number(e.target.value); setRootVar('--st-message-gap', messageGap.value) }
+
+function onCardRadiusNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 24) { cardRadius.value = v; setRootVar('--st-card-radius', v) } }
+function onCardRadiusRangeInput(e) { cardRadius.value = Number(e.target.value); setRootVar('--st-card-radius', cardRadius.value) }
+
+function onStripeWidthNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 12) { stripeWidth.value = v; setRootVar('--st-stripe-width', v) } }
+function onStripeWidthRangeInput(e) { stripeWidth.value = Number(e.target.value); setRootVar('--st-stripe-width', stripeWidth.value) }
+
+// Opacity handlers (% → 0~1)
+function onThreadedBgOpacityNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 100) { threadedBgOpacityPct.value = v; setRootVarUnitless('--st-threaded-bg-opacity', String(v / 100)) } }
+function onThreadedBgOpacityRangeInput(e) { threadedBgOpacityPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-bg-opacity', String(threadedBgOpacityPct.value / 100)) }
+
+function onThreadedMsgBgOpacityNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 100) { threadedMsgBgOpacityPct.value = v; setRootVarUnitless('--st-threaded-msg-bg-opacity', String(v / 100)) } }
+function onThreadedMsgBgOpacityRangeInput(e) { threadedMsgBgOpacityPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-msg-bg-opacity', String(threadedMsgBgOpacityPct.value / 100)) }
+
+function onThreadedListBgOpacityNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 100) { threadedListBgOpacityPct.value = v; setRootVarUnitless('--st-threaded-list-bg-opacity', String(v / 100)) } }
+function onThreadedListBgOpacityRangeInput(e) { threadedListBgOpacityPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-list-bg-opacity', String(threadedListBgOpacityPct.value / 100)) }
+
+function onThreadedInputBgOpacityNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 100) { threadedInputBgOpacityPct.value = v; setRootVarUnitless('--st-threaded-input-bg-opacity', String(v / 100)) } }
+function onThreadedInputBgOpacityRangeInput(e) { threadedInputBgOpacityPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-input-bg-opacity', String(threadedInputBgOpacityPct.value / 100)) }
+
+// Threaded HTML stage handlers
 function onThreadedAspectPreset(e) {
   const raw = e.target.value
   if (!raw) return
@@ -263,207 +113,24 @@ function onThreadedAspectPreset(e) {
     setRootVarUnitless('--st-threaded-stage-aspect', `${ax} / ${ay}`)
   }
 }
-function onThreadedAspectNumInputX(e) {
-  const v = Number(e.target.value)
-  if (v > 0) {
-    thAspectX.value = v
-    setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
-  }
-}
-function onThreadedAspectNumInputY(e) {
-  const v = Number(e.target.value)
-  if (v > 0) {
-    thAspectY.value = v
-    setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
-  }
-}
-function onThreadedMaxWidthNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 30 && v <= 100) {
-    thMaxWidthPct.value = v
-    setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
-  }
-}
-function onThreadedMaxWidthRangeInput(e) {
-  thMaxWidthPct.value = Number(e.target.value)
-  setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
-}
-function onThreadedPaddingNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 0 && v <= 48) {
-    thPadding.value = v
-    setRootVar('--st-threaded-stage-padding', thPadding.value)
-  }
-}
-function onThreadedPaddingRangeInput(e) {
-  thPadding.value = Number(e.target.value)
-  setRootVar('--st-threaded-stage-padding', thPadding.value)
-}
-function onThreadedRadiusNumberInput(e) {
-  const v = Number(e.target.value)
-  if (v >= 0 && v <= 32) {
-    thRadius.value = v
-    setRootVar('--st-threaded-stage-radius', thRadius.value)
-  }
-}
-function onThreadedRadiusRangeInput(e) {
-  thRadius.value = Number(e.target.value)
-  setRootVar('--st-threaded-stage-radius', thRadius.value)
-}
+function onThreadedAspectNumInputX(e) { const v = Number(e.target.value); if (v > 0) { thAspectX.value = v; setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`) } }
+function onThreadedAspectNumInputY(e) { const v = Number(e.target.value); if (v > 0) { thAspectY.value = v; setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`) } }
+function onThreadedMaxWidthNumberInput(e) { const v = Number(e.target.value); if (v >= 30 && v <= 100) { thMaxWidthPct.value = v; setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value) } }
+function onThreadedMaxWidthRangeInput(e) { thMaxWidthPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value) }
+function onThreadedPaddingNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 48) { thPadding.value = v; setRootVar('--st-threaded-stage-padding', thPadding.value) } }
+function onThreadedPaddingRangeInput(e) { thPadding.value = Number(e.target.value); setRootVar('--st-threaded-stage-padding', thPadding.value) }
+function onThreadedRadiusNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 32) { thRadius.value = v; setRootVar('--st-threaded-stage-radius', thRadius.value) } }
+function onThreadedRadiusRangeInput(e) { thRadius.value = Number(e.target.value); setRootVar('--st-threaded-stage-radius', thRadius.value) }
 
-/* persistence (tab-scoped) */
-const STORE_KEY = 'st.appearance.threaded.v1'
-let __lastSaved = ''
-let __saveTimer = null
-
-function getSnapshot() {
-  return {
-    contentFontSize: Number(contentFontSize.value),
-    nameFontSize: Number(nameFontSize.value),
-    badgeFontSize: Number(badgeFontSize.value),
-    floorFontSize: Number(floorFontSize.value),
-    avatarSize: Number(avatarSize.value),
-    chatWidth: Number(chatWidth.value),
-    inputHeight: Number(inputHeight.value),
-    contentLineHeight: Number(contentLineHeight.value),
-    messageGap: Number(messageGap.value),
-    cardRadius: Number.isFinite(cardRadius.value) ? Number(cardRadius.value) : null,
-    stripeWidth: Number(stripeWidth.value),
-    threadedBgOpacityPct: Number(threadedBgOpacityPct.value),
-    threadedMsgBgOpacityPct: Number(threadedMsgBgOpacityPct.value),
-    threadedListBgOpacityPct: Number(threadedListBgOpacityPct.value),
-    threadedInputBgOpacityPct: Number(threadedInputBgOpacityPct.value),
-    thAspectX: Number(thAspectX.value),
-    thAspectY: Number(thAspectY.value),
-    thMaxWidthPct: Number(thMaxWidthPct.value),
-    thPadding: Number(thPadding.value),
-    thRadius: Number(thRadius.value),
-  }
-}
-function applyState(s) {
-  if (!s || typeof s !== 'object') return
-  const num = (v, f) => (typeof v === 'number' ? v : f)
-
-  contentFontSize.value = num(s.contentFontSize, 18); setRootVar('--st-content-font-size', contentFontSize.value)
-  nameFontSize.value = num(s.nameFontSize, 16); setRootVar('--st-name-font-size', nameFontSize.value)
-  badgeFontSize.value = num(s.badgeFontSize, 11); setRootVar('--st-badge-font-size', badgeFontSize.value)
-  floorFontSize.value = num(s.floorFontSize, 16); setRootVar('--st-floor-font-size', floorFontSize.value)
-  avatarSize.value = num(s.avatarSize, 56); setRootVar('--st-avatar-size', avatarSize.value)
-  chatWidth.value = num(s.chatWidth, 80); setRootVar('--st-chat-width', chatWidth.value)
-  inputHeight.value = num(s.inputHeight, 100); setRootVar('--st-input-height', inputHeight.value)
-
-  contentLineHeight.value = num(s.contentLineHeight, 1.75); setRootVarUnitless('--st-content-line-height', String(contentLineHeight.value))
-  messageGap.value = num(s.messageGap, 12); setRootVar('--st-message-gap', messageGap.value)
-  if (s.cardRadius === null) {
-    cardRadius.value = NaN
-    document.documentElement.style.removeProperty('--st-card-radius')
-  } else {
-    cardRadius.value = num(s.cardRadius, NaN)
-    if (Number.isFinite(cardRadius.value)) setRootVar('--st-card-radius', cardRadius.value)
-  }
-  stripeWidth.value = num(s.stripeWidth, 8); setRootVar('--st-stripe-width', stripeWidth.value)
-
-  threadedBgOpacityPct.value = num(s.threadedBgOpacityPct, 12); setRootVarUnitless('--st-threaded-bg-opacity', String(threadedBgOpacityPct.value / 100))
-  threadedMsgBgOpacityPct.value = num(s.threadedMsgBgOpacityPct, 82); setRootVarUnitless('--st-threaded-msg-bg-opacity', String(threadedMsgBgOpacityPct.value / 100))
-  threadedListBgOpacityPct.value = num(s.threadedListBgOpacityPct, 62); setRootVarUnitless('--st-threaded-list-bg-opacity', String(threadedListBgOpacityPct.value / 100))
-  threadedInputBgOpacityPct.value = num(s.threadedInputBgOpacityPct, 80); setRootVarUnitless('--st-threaded-input-bg-opacity', String(threadedInputBgOpacityPct.value / 100))
-
-  thAspectX.value = num(s.thAspectX, 16)
-  thAspectY.value = num(s.thAspectY, 9)
-  setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
-  thMaxWidthPct.value = num(s.thMaxWidthPct, 100); setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
-  thPadding.value = num(s.thPadding, 8); setRootVar('--st-threaded-stage-padding', thPadding.value)
-  thRadius.value = num(s.thRadius, 12); setRootVar('--st-threaded-stage-radius', thRadius.value)
-}
-function loadSaved() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY)
-    if (!raw) return
-    const saved = JSON.parse(raw)
-    applyState(saved)
-    __lastSaved = raw
-  } catch (_) {}
-}
-function maybeSave() {
-  try {
-    const snap = getSnapshot()
-    const str = JSON.stringify(snap)
-    if (str !== __lastSaved) {
-      localStorage.setItem(STORE_KEY, str)
-      __lastSaved = str
-    }
-  } catch (_) {}
-}
-
+// Lifecycle: init + auto-save broadcast
+let __dispose = null
 onMounted(() => {
-  /* init from CSS vars */
-  contentFontSize.value = readCssVar('--st-content-font-size', 18)
-  nameFontSize.value = readCssVar('--st-name-font-size', 16)
-  badgeFontSize.value = readCssVar('--st-badge-font-size', 11)
-  floorFontSize.value = readCssVar('--st-floor-font-size', 16)
-  avatarSize.value = readCssVar('--st-avatar-size', 56)
-  {
-    const widthVar = getComputedStyle(document.documentElement).getPropertyValue('--st-chat-width')?.trim()
-    chatWidth.value = widthVar ? parseInt(widthVar, 10) : 80
-  }
-  inputHeight.value = readCssVar('--st-input-height', 100)
-
-  contentLineHeight.value = readCssVarFloat('--st-content-line-height', 1.75)
-  messageGap.value = readCssVarFloat('--st-message-gap', 12)
-  {
-    const cr = readCssVarFloat('--st-card-radius', NaN)
-    cardRadius.value = Number.isFinite(cr) ? cr : NaN
-  }
-  stripeWidth.value = readCssVarFloat('--st-stripe-width', 8)
-
-  threadedBgOpacityPct.value = Math.round(readCssVarFloat('--st-threaded-bg-opacity', 0.12) * 100)
-  threadedMsgBgOpacityPct.value = Math.round(readCssVarFloat('--st-threaded-msg-bg-opacity', 0.82) * 100)
-  threadedListBgOpacityPct.value = Math.round(readCssVarFloat('--st-threaded-list-bg-opacity', 0.62) * 100)
-  threadedInputBgOpacityPct.value = Math.round(readCssVarFloat('--st-threaded-input-bg-opacity', 0.80) * 100)
-
-  /* threaded stage */
-  {
-    const asp = getComputedStyle(document.documentElement).getPropertyValue('--st-threaded-stage-aspect')?.trim()
-    if (asp && asp.includes('/')) {
-      const parts = asp.split('/')
-      const ax = parseFloat(parts[0]); const ay = parseFloat(parts[1])
-      if (Number.isFinite(ax) && Number.isFinite(ay) && ax > 0 && ay > 0) {
-        thAspectX.value = Math.round(ax)
-        thAspectY.value = Math.round(ay)
-      }
-    }
-  }
-  thMaxWidthPct.value = readCssVarFloat('--st-threaded-stage-maxw', 100)
-  thPadding.value = readCssVarFloat('--st-threaded-stage-padding', 8)
-  thRadius.value = readCssVarFloat('--st-threaded-stage-radius', 12)
-
-  /* write-back to ensure sync */
-  setRootVar('--st-content-font-size', contentFontSize.value)
-  setRootVar('--st-name-font-size', nameFontSize.value)
-  setRootVar('--st-badge-font-size', badgeFontSize.value)
-  setRootVar('--st-floor-font-size', floorFontSize.value)
-  setRootVar('--st-avatar-size', avatarSize.value)
-  setRootVar('--st-chat-width', chatWidth.value)
-  setRootVar('--st-input-height', inputHeight.value)
-  setRootVarUnitless('--st-content-line-height', String(contentLineHeight.value))
-  setRootVar('--st-message-gap', messageGap.value)
-  if (Number.isFinite(cardRadius.value)) setRootVar('--st-card-radius', cardRadius.value)
-  setRootVar('--st-stripe-width', stripeWidth.value)
-  setRootVarUnitless('--st-threaded-bg-opacity', String(threadedBgOpacityPct.value / 100))
-  setRootVarUnitless('--st-threaded-msg-bg-opacity', String(threadedMsgBgOpacityPct.value / 100))
-  setRootVarUnitless('--st-threaded-list-bg-opacity', String(threadedListBgOpacityPct.value / 100))
-  setRootVarUnitless('--st-threaded-input-bg-opacity', String(threadedInputBgOpacityPct.value / 100))
-  setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
-  setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value)
-  setRootVar('--st-threaded-stage-padding', thPadding.value)
-  setRootVar('--st-threaded-stage-radius', thRadius.value)
-
-  loadSaved()
-  if (__saveTimer) { clearInterval(__saveTimer); __saveTimer = null }
-  __saveTimer = setInterval(maybeSave, 1000)
+  initFromCSS()
+  __dispose = startAutoSave({ intervalMs: 1000 })
 })
-
-onBeforeUnmount(() => { if (__saveTimer) { clearInterval(__saveTimer); __saveTimer = null } })
+onBeforeUnmount(() => {
+  if (typeof __dispose === 'function') __dispose()
+})
 </script>
 
 <template>

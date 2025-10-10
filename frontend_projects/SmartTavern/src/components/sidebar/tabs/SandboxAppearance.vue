@@ -1,45 +1,16 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import useAppearanceSandbox from '@/composables/appearance/useAppearanceSandbox'
 
 /**
  * 全屏沙盒外观配置（拆分自 AppearancePanel）
- * - 控制 CSS 变量：--st-sandbox-aspect / --st-sandbox-max-width / --st-sandbox-padding / --st-sandbox-radius
- *                --st-sandbox-bg-opacity / --st-sandbox-stage-bg-opacity
- * - 本页签独立持久化（localStorage）：st.appearance.sandbox.v1
+ * 重构：使用 useAppearanceSandbox 统一处理
+ * - CSS 变量读写
+ * - 本地持久化（st.appearance.sandbox.v1）
+ * - 定时广播给主题扩展（ThemeManager.applyAppearanceSnapshot）
  */
 
-/* helpers */
-function readCssVarFloat(name, fallback) {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name)?.trim()
-  if (!v) return fallback
-  const n = parseFloat(v)
-  return Number.isFinite(n) ? n : fallback
-}
-function setRootVar(name, value) {
-  document.documentElement.style.setProperty(name, typeof value === 'number' ? `${value}px` : String(value))
-}
-function setRootVarUnitless(name, value) {
-  document.documentElement.style.setProperty(name, String(value))
-}
-
-/* state */
-const sandboxAspectX = ref(16)
-const sandboxAspectY = ref(9)
-const sandboxMaxWidth = ref(1100)
-const sandboxMaxWidthLimit = ref(1920)
-const sandboxPadding = ref(16)
-const sandboxRadius = ref(18)
-const sandboxBgOpacityPct = ref(12)     // 0~100
-const sandboxStageBgOpacityPct = ref(82) // 0~100
-
-const aspectPresets = [
-  { label: '16:9', v: [16, 9] },
-  { label: '4:3', v: [4, 3] },
-  { label: '21:9', v: [21, 9] },
-  { label: '1:1', v: [1, 1] },
-]
-
-/* live tuning indicator */
+// live tuning indicator
 const tuning = ref(false)
 const activeTuningSlider = ref(null)
 function onTuningStart(sliderName) {
@@ -57,7 +28,32 @@ function onTuningEndOnce() {
   document.body.removeAttribute('data-active-slider')
 }
 
-/* handlers: 画面宽高比 */
+// Composable: state + helpers
+const {
+  state,
+  initFromCSS,
+  startAutoSave,
+  setRootVar,
+  setRootVarUnitless,
+} = useAppearanceSandbox()
+
+// Destructure refs for template parity
+const {
+  sandboxAspectX, sandboxAspectY,
+  sandboxMaxWidth, sandboxMaxWidthLimit,
+  sandboxPadding, sandboxRadius,
+  sandboxBgOpacityPct, sandboxStageBgOpacityPct,
+} = state
+
+// Presets (unchanged)
+const aspectPresets = [
+  { label: '16:9', v: [16, 9] },
+  { label: '4:3', v: [4, 3] },
+  { label: '21:9', v: [21, 9] },
+  { label: '1:1', v: [1, 1] },
+]
+
+// Handlers: same signatures, write via helpers
 function onSandboxAspectPreset(e) {
   const raw = e.target.value
   if (!raw) return
@@ -65,25 +61,25 @@ function onSandboxAspectPreset(e) {
   if (ax > 0 && ay > 0) {
     sandboxAspectX.value = ax
     sandboxAspectY.value = ay
-    setRootVar('--st-sandbox-aspect', `${ax} / ${ay}`)
+    setRootVarUnitless('--st-sandbox-aspect', `${ax} / ${ay}`)
   }
 }
 function onSandboxAspectNumInputX(e) {
   const v = Number(e.target.value)
   if (v > 0) {
     sandboxAspectX.value = v
-    setRootVar('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
+    setRootVarUnitless('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
   }
 }
 function onSandboxAspectNumInputY(e) {
   const v = Number(e.target.value)
   if (v > 0) {
     sandboxAspectY.value = v
-    setRootVar('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
+    setRootVarUnitless('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
   }
 }
 
-/* handlers: 尺寸与圆角/内边距 */
+// 尺寸与圆角/内边距
 function onSandboxMaxWidthNumberInput(e) {
   const v = Number(e.target.value)
   if (v >= 640 && v <= sandboxMaxWidthLimit.value) {
@@ -128,7 +124,7 @@ function onSandboxRadiusRangeInput(e) {
   setRootVar('--st-sandbox-radius', sandboxRadius.value)
 }
 
-/* handlers: 不透明度（%→小数写 CSS） */
+// 不透明度（%→小数写 CSS）
 function onSandboxBgOpacityNumberInput(e) {
   const v = Number(e.target.value)
   if (v >= 0 && v <= 100) {
@@ -152,105 +148,15 @@ function onSandboxStageBgOpacityRangeInput(e) {
   setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(sandboxStageBgOpacityPct.value / 100))
 }
 
-/* persistence (tab-scoped) */
-const STORE_KEY = 'st.appearance.sandbox.v1'
-let __lastSaved = ''
-let __saveTimer = null
-
-function getSnapshot() {
-  return {
-    sandboxAspectX: Number(sandboxAspectX.value),
-    sandboxAspectY: Number(sandboxAspectY.value),
-    sandboxMaxWidth: Number(sandboxMaxWidth.value),
-    sandboxMaxWidthLimit: Number(sandboxMaxWidthLimit.value),
-    sandboxPadding: Number(sandboxPadding.value),
-    sandboxRadius: Number(sandboxRadius.value),
-    sandboxBgOpacityPct: Number(sandboxBgOpacityPct.value),
-    sandboxStageBgOpacityPct: Number(sandboxStageBgOpacityPct.value),
-  }
-}
-function applyState(s) {
-  if (!s || typeof s !== 'object') return
-  const num = (v, f) => (typeof v === 'number' ? v : f)
-
-  sandboxAspectX.value = num(s.sandboxAspectX, 16)
-  sandboxAspectY.value = num(s.sandboxAspectY, 9)
-  setRootVar('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
-
-  sandboxMaxWidth.value = num(s.sandboxMaxWidth, 1100)
-  setRootVar('--st-sandbox-max-width', sandboxMaxWidth.value)
-
-  sandboxMaxWidthLimit.value = num(s.sandboxMaxWidthLimit, 1920)
-
-  sandboxPadding.value = num(s.sandboxPadding, 16)
-  setRootVar('--st-sandbox-padding', sandboxPadding.value)
-
-  sandboxRadius.value = num(s.sandboxRadius, 18)
-  setRootVar('--st-sandbox-radius', sandboxRadius.value)
-
-  sandboxBgOpacityPct.value = num(s.sandboxBgOpacityPct, 12)
-  setRootVarUnitless('--st-sandbox-bg-opacity', String(sandboxBgOpacityPct.value / 100))
-
-  sandboxStageBgOpacityPct.value = num(s.sandboxStageBgOpacityPct, 82)
-  setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(sandboxStageBgOpacityPct.value / 100))
-}
-function loadSaved() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY)
-    if (!raw) return
-    const saved = JSON.parse(raw)
-    applyState(saved)
-    __lastSaved = raw
-  } catch (_) {}
-}
-function maybeSave() {
-  try {
-    const snap = getSnapshot()
-    const str = JSON.stringify(snap)
-    if (str !== __lastSaved) {
-      localStorage.setItem(STORE_KEY, str)
-      __lastSaved = str
-    }
-  } catch (_) {}
-}
-
+// Lifecycle: init + auto-save broadcast
+let __dispose = null
 onMounted(() => {
-  // init from CSS vars
-  const rs = getComputedStyle(document.documentElement)
-
-  // aspect
-  const aspRaw = rs.getPropertyValue('--st-sandbox-aspect')?.trim()
-  if (aspRaw && aspRaw.includes('/')) {
-    const parts = aspRaw.split('/')
-    const ax = parseFloat(parts[0]); const ay = parseFloat(parts[1])
-    if (Number.isFinite(ax) && Number.isFinite(ay) && ax > 0 && ay > 0) {
-      sandboxAspectX.value = Math.round(ax)
-      sandboxAspectY.value = Math.round(ay)
-    }
-  }
-
-  sandboxMaxWidth.value = readCssVarFloat('--st-sandbox-max-width', 1100)
-  sandboxPadding.value = readCssVarFloat('--st-sandbox-padding', 16)
-  sandboxRadius.value = readCssVarFloat('--st-sandbox-radius', 18)
-
-  // opacities (css stores 0~1)
-  sandboxBgOpacityPct.value = Math.round(readCssVarFloat('--st-sandbox-bg-opacity', 0.12) * 100)
-  sandboxStageBgOpacityPct.value = Math.round(readCssVarFloat('--st-sandbox-stage-bg-opacity', 0.82) * 100)
-
-  // write-back to ensure sync
-  setRootVar('--st-sandbox-max-width', sandboxMaxWidth.value)
-  setRootVar('--st-sandbox-padding', sandboxPadding.value)
-  setRootVar('--st-sandbox-radius', sandboxRadius.value)
-  setRootVarUnitless('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
-  setRootVarUnitless('--st-sandbox-bg-opacity', String(sandboxBgOpacityPct.value / 100))
-  setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(sandboxStageBgOpacityPct.value / 100))
-
-  loadSaved()
-  if (__saveTimer) { clearInterval(__saveTimer); __saveTimer = null }
-  __saveTimer = setInterval(maybeSave, 1000)
+  initFromCSS()
+  __dispose = startAutoSave({ intervalMs: 1000 })
 })
-
-onBeforeUnmount(() => { if (__saveTimer) { clearInterval(__saveTimer); __saveTimer = null } })
+onBeforeUnmount(() => {
+  if (typeof __dispose === 'function') __dispose()
+})
 </script>
 
 <template>

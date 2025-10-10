@@ -99,6 +99,14 @@ export interface ThemeManagerAPI {
   getVersion(): string;
   on(event: ThemeEvent, cb: ThemeListener): () => void;
   off(event: ThemeEvent, cb: ThemeListener): void;
+
+  /** Theme extensions (beautification hooks; no scripts executed by default) */
+  registerExtension(ext: ThemeExtension): () => void;
+  unregisterExtension(id: string): void;
+  getExtensions(): ThemeExtension[];
+  /** Broadcast current appearance snapshot to extensions */
+  applyAppearanceSnapshot(snapshot: ThemeAppearanceSnapshot): void;
+
   /** Low-level store (advanced usage) */
   store?: ThemeStoreAPI;
 }
@@ -112,6 +120,64 @@ export interface ThemePackHelpers {
   createPack(spec?: Partial<ThemePackV1>): ThemePackV1;
   parsePackFromJSON(text: string): ThemePackV1 | null;
   stringifyPack(pack: ThemePackV1, pretty?: boolean): string;
+}
+
+/** Snapshot of current Appearance settings (subset; fields may expand in minor versions) */
+export interface ThemeAppearanceSnapshot {
+  // Threaded/common sizes
+  contentFontSize?: number;
+  nameFontSize?: number;
+  badgeFontSize?: number;
+  floorFontSize?: number;
+  avatarSize?: number;
+  chatWidth?: number;              // percentage
+  inputHeight?: number;            // px
+
+  // Opacity percentages (0~100)
+  threadedBgOpacityPct?: number;
+  threadedMsgBgOpacityPct?: number;
+  threadedListBgOpacityPct?: number;
+  threadedInputBgOpacityPct?: number;
+  sandboxBgOpacityPct?: number;
+  sandboxStageBgOpacityPct?: number;
+
+  // Sandbox layout
+  sandboxAspectX?: number;
+  sandboxAspectY?: number;
+  sandboxMaxWidth?: number;
+  sandboxMaxWidthLimit?: number;
+  sandboxPadding?: number;
+  sandboxRadius?: number;
+
+  // Threaded HTML stage
+  thAspectX?: number;
+  thAspectY?: number;
+  thMaxWidthPct?: number;
+  thPadding?: number;
+  thRadius?: number;
+
+  // Common appearance
+  contentLineHeight?: number;
+  messageGap?: number;
+  cardRadius?: number | null;
+  stripeWidth?: number;
+
+  // Index signature for forward compatibility
+  [key: string]: number | string | null | undefined;
+}
+
+/** Lightweight extension for theming runtime (no untrusted code execution) */
+export interface ThemeExtension {
+  /** Unique id */
+  id: string;
+  /** Whether the extension is active (default true) */
+  enabled?: boolean;
+  /** Optional priority for ordering (higher runs first); not strictly guaranteed */
+  priority?: number;
+  /** Logical scopes per contract.json (e.g., "chat-threaded", "sandbox") */
+  scopes?: string[];
+  /** Receive Appearance snapshot to optionally adjust tokens/CSS */
+  applyAppearance?(snapshot: ThemeAppearanceSnapshot): void;
 }
 
 /** Augment JS imports for editors */
