@@ -1,6 +1,8 @@
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
-import HtmlIframeSandbox from '@/components/sandbox/HtmlIframeSandbox.vue'
+import HtmlStage from '@/components/chat/HtmlStage.vue'
+import { HTML_DOC_RE, FENCE_RE, extractHtmlDocFromText, hasHtmlDoc as hasHtmlDocText, splitHtmlFromText } from '@/features/chat/normalizer.js'
+import usePalette from '@/composables/usePalette.js'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
@@ -34,72 +36,8 @@ function nameOf(msg) {
   return roleLabel(msg.role)
 }
 
-/* 智能色条：根据头像图片/角色生成渐变色 */
-const palettes = ref({}) // id -> { start, end }
-
-function clamp(v, min = 0, max = 255) { return Math.max(min, Math.min(max, v)) }
-function lighten(rgb, amt = 24) {
-  return { r: clamp(rgb.r + amt), g: clamp(rgb.g + amt), b: clamp(rgb.b + amt) }
-}
-function rgbToCss(rgb, a = 1) { return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})` }
-
-function roleFallback(role) {
-  // 角色回退配色（亮/暗主题下仍然清晰）
-  if (role === 'assistant') return { start: 'rgba(14,165,233,1)', end: 'rgba(94,234,212,1)' }
-  if (role === 'system')    return { start: 'rgba(251,191,36,1)', end: 'rgba(253,230,138,1)' }
-  // user 回退使用主题主色-强调色
-  return { start: 'rgb(var(--st-primary))', end: 'rgb(var(--st-accent))' }
-}
-
-async function extractPaletteFromImage(url) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas')
-        const w = canvas.width = 24
-        const h = canvas.height = 24
-        const ctx = canvas.getContext('2d', { willReadFrequently: true })
-        ctx.drawImage(img, 0, 0, w, h)
-        const data = ctx.getImageData(0, 0, w, h).data
-        let r = 0, g = 0, b = 0, count = 0
-        for (let i = 0; i < data.length; i += 4) {
-          const a = data[i + 3]
-          if (a < 32) continue // 忽略透明像素
-          r += data[i]; g += data[i + 1]; b += data[i + 2]; count++
-        }
-        if (count === 0) throw new Error('no pixels')
-        r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count)
-        const start = rgbToCss({ r, g, b })
-        const end = rgbToCss(lighten({ r, g, b }, 28))
-        resolve({ start, end })
-      } catch (_) {
-        resolve(null)
-      }
-    }
-    img.onerror = () => resolve(null)
-    img.src = url
-  })
-}
-
-async function ensurePaletteFor(msg) {
-  // 约定：若消息含 avatarUrl，则尝试从图片提取主色；否则按角色回退
-  let pal = null
-  if (msg.avatarUrl) {
-    pal = await extractPaletteFromImage(msg.avatarUrl)
-  }
-  if (!pal) pal = roleFallback(msg.role)
-  palettes.value[msg.id] = pal
-}
-
-function stripeStyle(msg) {
-  const pal = palettes.value[msg.id] || roleFallback(msg.role)
-  return {
-    '--stripe-start': pal.start,
-    '--stripe-end': pal.end,
-  }
-}
+/* 智能色条：根据头像图片/角色生成渐变色（抽离为 composable） */
+const { palettes, ensurePaletteFor, stripeStyle } = usePalette()
 
 // Lucide 图标刷新（局部调用，避免 race）
 function refreshIcons() {
@@ -360,65 +298,8 @@ function cancelPending() {
   refreshIcons()
 }
 
-// 基于 DOCTYPE 检测 HTML 文档代码块（支持 ```html/```HTML/``` 或纯文本包含 <!DOCTYPE html>）
-const HTML_DOC_RE = /<!DOCTYPE\s+html/i
-const FENCE_RE = /```(?:html|HTML)?\s*([\s\S]*?)```/i
-
-function extractHtmlDocFromText(text) {
-  if (!text || typeof text !== 'string') return ''
-  const fence = text.match(FENCE_RE)
-  if (fence && fence[1] && HTML_DOC_RE.test(fence[1])) {
-    return fence[1].trim()
-  }
-  if (HTML_DOC_RE.test(text)) {
-    return text.trim()
-  }
-  return ''
-}
-function hasHtmlDoc(msg) { return !!extractHtmlDocFromText(msg.content) }
+function hasHtmlDoc(msg) { return hasHtmlDocText(msg.content) }
 function getHtmlDoc(msg) { return extractHtmlDocFromText(msg.content) }
-
-/**
- * 将消息文本拆分为 前置文本 / HTML 文档 / 后置文本 三段，仅替换中间代码块
- * 支持：
- *  - ```html ... ``` 或 ```HTML ... ``` 围栏中包含 <!DOCTYPE html>
- *  - 纯文本中包含 <!DOCTYPE html> ... </html>
- */
-function splitHtmlFromText(text) {
-  if (!text || typeof text !== 'string') return { before: '', html: '', after: '' }
-
-  // 优先匹配围栏代码块
-  const fence = text.match(/```(?:html|HTML)?\s*([\s\S]*?)```/i)
-  if (fence && fence[0]) {
-    const fenceIdx = text.indexOf(fence[0])
-    const code = fence[1] ?? ''
-    if (/<!DOCTYPE\s+html/i.test(code)) {
-      const before = text.slice(0, fenceIdx)
-      const after = text.slice(fenceIdx + fence[0].length)
-      return { before, html: code.trim(), after }
-    }
-  }
-
-  // 回退：匹配纯文本中的 <!DOCTYPE html> ... </html>
-  const doctypeRe = /<!DOCTYPE\s+html[^>]*>/i
-  const endHtmlRe = /<\/html>/i
-  const m = text.match(doctypeRe)
-  if (m) {
-    const start = m.index ?? -1
-    if (start >= 0) {
-      const tail = text.slice(start)
-      const endMatchIdx = tail.search(endHtmlRe)
-      const end = endMatchIdx >= 0 ? start + endMatchIdx + '</html>'.length : text.length
-      const before = text.slice(0, start)
-      const html = text.slice(start, end).trim()
-      const after = text.slice(end)
-      return { before, html, after }
-    }
-  }
-
-  return { before: '', html: '', after: '' }
-}
-
 function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 </script>
 
@@ -499,16 +380,12 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
                 </div>
               </header>
               <section data-part="content" class="floor-content">
-                <template v-if="splitDoc(m).html">
-                  <div v-if="splitDoc(m).before" class="floor-text">{{ splitDoc(m).before }}</div>
-                  <!-- 楼层内 iframe 舞台（宽度百分比受 --st-threaded-stage-maxw 控制，不超过消息宽度） -->
-                  <div class="floor-html-stage">
-                    <div class="floor-html-stage-inner">
-                      <HtmlIframeSandbox :html="splitDoc(m).html" />
-                    </div>
-                  </div>
-                  <div v-if="splitDoc(m).after" class="floor-text">{{ splitDoc(m).after }}</div>
-                </template>
+                <HtmlStage
+                  v-if="splitDoc(m).html"
+                  :before="splitDoc(m).before"
+                  :html="splitDoc(m).html"
+                  :after="splitDoc(m).after"
+                />
                 <template v-else>
                   {{ m.content }}
                 </template>
@@ -607,7 +484,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 .tch-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--st-message-gap, 12px);
   padding: 16px;
   height: 100%;
   min-height: 0;
@@ -639,7 +516,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 .tch-list-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--st-message-gap, 12px);
   padding-right: 4px;
   padding-bottom: 24px;
 }
@@ -647,7 +524,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 /* 楼层卡（玻璃拟态） */
 .floor-card {
   padding: 12px;
-  border-radius: var(--st-radius-lg);
+  border-radius: var(--st-card-radius, var(--st-radius-lg));
   border: 1px solid rgba(var(--st-border), 0.9);
   background: rgb(var(--st-surface) / var(--st-threaded-msg-bg-opacity, 0.82)) !important;
   backdrop-filter: blur(6px);
@@ -673,7 +550,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   content: '';
   position: absolute;
   top: 0; bottom: 0;
-  width: 8px;
+  width: var(--st-stripe-width, 8px);
   pointer-events: none;
   z-index: 1;
 }
@@ -681,8 +558,8 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 /* 主色条（渐变） - 默认左侧 */
 .floor-card::before {
   left: 0;
-  border-top-left-radius: var(--st-radius-lg);
-  border-bottom-left-radius: var(--st-radius-lg);
+  border-top-left-radius: var(--st-card-radius, var(--st-radius-lg));
+  border-bottom-left-radius: var(--st-card-radius, var(--st-radius-lg));
   background: linear-gradient(180deg,
     var(--stripe-start, rgb(var(--st-primary))),
     var(--stripe-end,   rgb(var(--st-accent))));
@@ -704,8 +581,8 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   left: auto; right: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  border-top-right-radius: var(--st-radius-lg);
-  border-bottom-right-radius: var(--st-radius-lg);
+  border-top-right-radius: var(--st-card-radius, var(--st-radius-lg));
+  border-bottom-right-radius: var(--st-card-radius, var(--st-radius-lg));
 }
 .floor-card[data-role="user"]::after {
   left: auto; right: 0;
@@ -811,7 +688,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 .floor-content {
   color: rgba(var(--st-color-text), 0.95);
   font-size: var(--st-content-font-size, 18px);
-  line-height: 1.75;
+  line-height: var(--st-content-line-height, 1.75);
   letter-spacing: .2px;
   word-break: break-word;
   white-space: pre-wrap;
@@ -1349,29 +1226,4 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(2) { transition-delay: 48ms; }
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(3) { transition-delay: 72ms; }
 
-/* 楼层内 HTML 舞台（iframe 渲染） */
-.floor-html-stage {
-  width: min(100%, calc(var(--st-threaded-stage-maxw, 100) * 1%));
-  margin: 6px 0;
-}
-.floor-html-stage-inner {
-  position: relative;
-  width: 100%;
-  aspect-ratio: var(--st-threaded-stage-aspect, 16 / 9);
-  padding: var(--st-threaded-stage-padding, 8px);
-  border-radius: var(--st-threaded-stage-radius, 12px);
-  border: 1px solid rgba(var(--st-border), 0.6);
-  background: rgb(var(--st-surface) / var(--st-threaded-stage-container-bg-opacity, 0.82)) !important;
-  box-shadow: var(--st-shadow-sm);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  overflow: hidden;
-}
-/* 让 HtmlIframeSandbox 内部 iframe 铺满舞台 */
-.floor-html-stage-inner :deep(.st-iframe) {
-  width: 100%;
-  height: 100%;
-  display: block;
-  border: 0;
-}
 </style>

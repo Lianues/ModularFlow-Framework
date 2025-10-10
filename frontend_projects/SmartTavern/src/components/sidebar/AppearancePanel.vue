@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import ThemeManager from '@/features/themes/manager'
+import ThemeManagerTab from '@/components/sidebar/tabs/ThemeManager.vue'
+import BackgroundsManagerTab from '@/components/sidebar/tabs/BackgroundsManager.vue'
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 }, // 左侧锚定像素（默认=12+280+16）
   width: { type: Number, default: 560 },      // 面板宽度
@@ -17,6 +20,43 @@ const tabs = [
   { key: 'theme', label: '主题', icon: 'palette' },
 ]
 const active = ref('threaded')
+
+// === ThemeManager 绑定（主题导入/重置最小 UI） ===
+const themeInfo = ref(null)
+let __offTheme = null
+
+onMounted(async () => {
+  try {
+    themeInfo.value = ThemeManager.getCurrentTheme?.() || null
+    __offTheme = ThemeManager.on('change', () => {
+      themeInfo.value = ThemeManager.getCurrentTheme?.() || null
+    })
+  } catch (_) {}
+})
+
+onBeforeUnmount(() => {
+  if (__offTheme) { try { __offTheme() } catch (_) {} __offTheme = null }
+})
+
+async function onThemeFileSelected(e) {
+  const file = e?.target?.files?.[0]
+  if (!file) return
+  try {
+    await ThemeManager.importFromFile(file, { persist: true })
+  } catch (err) {
+    console.warn('[AppearancePanel] Theme import failed:', err)
+  } finally {
+    try { e.target.value = '' } catch (_) {}
+  }
+}
+
+async function onThemeReset() {
+  try {
+    await ThemeManager.resetTheme({ persist: true })
+  } catch (err) {
+    console.warn('[AppearancePanel] Theme reset failed:', err)
+  }
+}
 
 const panelStyle = computed(() => ({
   position: 'fixed',
@@ -65,6 +105,12 @@ const sandboxStageBgOpacityPct = ref(82) // 全局沙盒 舞台背景不透明�
 /* Threaded 其它可见层不透明度（百分比，0~100） */
 const threadedListBgOpacityPct = ref(62)   // 对话列表容器背景不透明度（%）
 const threadedInputBgOpacityPct = ref(80)  // 底部输入框背景不透明度（%）
+
+/* 新增：常用外观配置（行距/间距/圆角/色条宽度） */
+const contentLineHeight = ref(1.75)  // 正文行距（unitless）
+const messageGap = ref(12)           // 消息间距（px）
+const cardRadius = ref(NaN)          // 消息卡圆角（px；NaN 表示使用默认 --st-radius-lg）
+const stripeWidth = ref(8)           // 左/右色条宽度（px；0 可隐藏）
 
 /* 预设比例选项 */
 const aspectPresets = [
@@ -297,6 +343,59 @@ function onThreadedInputBgOpacityRangeInput(e) {
   setRootVarUnitless('--st-threaded-input-bg-opacity', String((threadedInputBgOpacityPct.value / 100)))
 }
 
+/* 新增：常用外观配置 handlers */
+// 正文行距
+function onContentLineHeightNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 1.2 && val <= 2.0) {
+    contentLineHeight.value = val
+    setRootVarUnitless('--st-content-line-height', String(val))
+  }
+}
+function onContentLineHeightRangeInput(e) {
+  contentLineHeight.value = Number(e.target.value)
+  setRootVarUnitless('--st-content-line-height', String(contentLineHeight.value))
+}
+
+// 消息间距
+function onMessageGapNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 6 && val <= 24) {
+    messageGap.value = val
+    setRootVar('--st-message-gap', messageGap.value)
+  }
+}
+function onMessageGapRangeInput(e) {
+  messageGap.value = Number(e.target.value)
+  setRootVar('--st-message-gap', messageGap.value)
+}
+
+// 消息卡圆角
+function onCardRadiusNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 0 && val <= 24) {
+    cardRadius.value = val
+    setRootVar('--st-card-radius', cardRadius.value)
+  }
+}
+function onCardRadiusRangeInput(e) {
+  cardRadius.value = Number(e.target.value)
+  setRootVar('--st-card-radius', cardRadius.value)
+}
+
+// 色条宽度
+function onStripeWidthNumberInput(e) {
+  const val = Number(e.target.value)
+  if (val >= 0 && val <= 12) {
+    stripeWidth.value = val
+    setRootVar('--st-stripe-width', stripeWidth.value)
+  }
+}
+function onStripeWidthRangeInput(e) {
+  stripeWidth.value = Number(e.target.value)
+  setRootVar('--st-stripe-width', stripeWidth.value)
+}
+
 /* --- Sandbox handlers --- */
 function onSandboxAspectPreset(e) {
   const raw = e.target.value
@@ -471,6 +570,25 @@ onMounted(() => {
   setRootVar('--st-chat-width', chatWidth.value)
   setRootVar('--st-input-height', inputHeight.value)
 
+  // 新增：常用外观变量初始化
+  const __lh = readCssVarFloat('--st-content-line-height', 1.75)
+  contentLineHeight.value = __lh
+  setRootVarUnitless('--st-content-line-height', String(__lh))
+
+  messageGap.value = readCssVarFloat('--st-message-gap', 12)
+  setRootVar('--st-message-gap', messageGap.value)
+
+  const __cr = readCssVarFloat('--st-card-radius', NaN)
+  cardRadius.value = Number.isFinite(__cr) ? __cr : NaN
+  if (Number.isFinite(__cr)) {
+    setRootVar('--st-card-radius', __cr)
+  } else {
+    document.documentElement.style.removeProperty('--st-card-radius')
+  }
+
+  stripeWidth.value = readCssVarFloat('--st-stripe-width', 8)
+  setRootVar('--st-stripe-width', stripeWidth.value)
+
   // 初始化背景遮罩/消息背景不透明度（从 CSS 变量读取并回写）
   // 遮罩的 CSS 变量为真实 alpha 值（0~1），滑条显示为“遮罩不透明度 %”
   // 为满足“100% 时不变黑”的期望：滑条值 = (1 - 遮罩alpha) * 100
@@ -553,6 +671,147 @@ onBeforeUnmount(() => {
   document.body.classList.remove('st-live-tuning')
 })
 onMounted(() => window.lucide?.createIcons?.())
+// === 外观配置持久化（localStorage，仅浏览器端临时配置） ===
+const APPEARANCE_STORE_KEY = 'st.appearance.v1'
+let __lastSavedAppearance = ''
+let __saveInterval = null
+
+function getAppearanceSnapshot() {
+  // 将面板中的所有外观配置采集为快照（百分比型以百分比值存储）
+  return {
+    // 楼层对话/通用
+    contentFontSize: Number(contentFontSize.value),
+    nameFontSize: Number(nameFontSize.value),
+    badgeFontSize: Number(badgeFontSize.value),
+    floorFontSize: Number(floorFontSize.value),
+    avatarSize: Number(avatarSize.value),
+    chatWidth: Number(chatWidth.value),
+    inputHeight: Number(inputHeight.value),
+
+    // 透明度（以百分比 0~100 保存）
+    threadedBgOpacityPct: Number(threadedBgOpacityPct.value),
+    threadedMsgBgOpacityPct: Number(threadedMsgBgOpacityPct.value),
+    sandboxBgOpacityPct: Number(sandboxBgOpacityPct.value),
+    sandboxStageBgOpacityPct: Number(sandboxStageBgOpacityPct.value),
+    threadedListBgOpacityPct: Number(threadedListBgOpacityPct.value),
+    threadedInputBgOpacityPct: Number(threadedInputBgOpacityPct.value),
+
+    // 全屏沙盒布局
+    sandboxAspectX: Number(sandboxAspectX.value),
+    sandboxAspectY: Number(sandboxAspectY.value),
+    sandboxMaxWidth: Number(sandboxMaxWidth.value),
+    sandboxMaxWidthLimit: Number(sandboxMaxWidthLimit.value),
+    sandboxPadding: Number(sandboxPadding.value),
+    sandboxRadius: Number(sandboxRadius.value),
+
+    // 楼层内 HTML 舞台（iframe）
+    thAspectX: Number(thAspectX.value),
+    thAspectY: Number(thAspectY.value),
+    thMaxWidthPct: Number(thMaxWidthPct.value),
+    thPadding: Number(thPadding.value),
+    thRadius: Number(thRadius.value),
+
+    // 常用外观（新）
+    contentLineHeight: Number(contentLineHeight.value),
+    messageGap: Number(messageGap.value),
+    cardRadius: Number.isFinite(cardRadius.value) ? Number(cardRadius.value) : null,
+    stripeWidth: Number(stripeWidth.value),
+  }
+}
+
+function applyAppearanceState(s) {
+  if (!s || typeof s !== 'object') return
+
+  // 字号/尺寸
+  if (typeof s.contentFontSize === 'number') { contentFontSize.value = s.contentFontSize; setRootVar('--st-content-font-size', s.contentFontSize) }
+  if (typeof s.nameFontSize === 'number') { nameFontSize.value = s.nameFontSize; setRootVar('--st-name-font-size', s.nameFontSize) }
+  if (typeof s.badgeFontSize === 'number') { badgeFontSize.value = s.badgeFontSize; setRootVar('--st-badge-font-size', s.badgeFontSize) }
+  if (typeof s.floorFontSize === 'number') { floorFontSize.value = s.floorFontSize; setRootVar('--st-floor-font-size', s.floorFontSize) }
+  if (typeof s.avatarSize === 'number') { avatarSize.value = s.avatarSize; setRootVar('--st-avatar-size', s.avatarSize) }
+  if (typeof s.chatWidth === 'number') { chatWidth.value = s.chatWidth; setRootVar('--st-chat-width', s.chatWidth) }
+  if (typeof s.inputHeight === 'number') { inputHeight.value = s.inputHeight; setRootVar('--st-input-height', s.inputHeight) }
+
+  // 透明度（百分比 → 0~1 小数写入 CSS 变量）
+  if (typeof s.threadedBgOpacityPct === 'number') { threadedBgOpacityPct.value = s.threadedBgOpacityPct; setRootVarUnitless('--st-threaded-bg-opacity', String(threadedBgOpacityPct.value / 100)) }
+  if (typeof s.threadedMsgBgOpacityPct === 'number') { threadedMsgBgOpacityPct.value = s.threadedMsgBgOpacityPct; setRootVarUnitless('--st-threaded-msg-bg-opacity', String(threadedMsgBgOpacityPct.value / 100)) }
+  if (typeof s.sandboxBgOpacityPct === 'number') { sandboxBgOpacityPct.value = s.sandboxBgOpacityPct; setRootVarUnitless('--st-sandbox-bg-opacity', String(sandboxBgOpacityPct.value / 100)) }
+  if (typeof s.sandboxStageBgOpacityPct === 'number') { sandboxStageBgOpacityPct.value = s.sandboxStageBgOpacityPct; setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(sandboxStageBgOpacityPct.value / 100)) }
+  if (typeof s.threadedListBgOpacityPct === 'number') { threadedListBgOpacityPct.value = s.threadedListBgOpacityPct; setRootVarUnitless('--st-threaded-list-bg-opacity', String(threadedListBgOpacityPct.value / 100)) }
+  if (typeof s.threadedInputBgOpacityPct === 'number') { threadedInputBgOpacityPct.value = s.threadedInputBgOpacityPct; setRootVarUnitless('--st-threaded-input-bg-opacity', String(threadedInputBgOpacityPct.value / 100)) }
+
+  // 全屏沙盒布局
+  if (typeof s.sandboxAspectX === 'number') sandboxAspectX.value = s.sandboxAspectX
+  if (typeof s.sandboxAspectY === 'number') sandboxAspectY.value = s.sandboxAspectY
+  setRootVar('--st-sandbox-aspect', `${sandboxAspectX.value} / ${sandboxAspectY.value}`)
+
+  if (typeof s.sandboxMaxWidth === 'number') { sandboxMaxWidth.value = s.sandboxMaxWidth; setRootVar('--st-sandbox-max-width', sandboxMaxWidth.value) }
+  if (typeof s.sandboxMaxWidthLimit === 'number') { sandboxMaxWidthLimit.value = s.sandboxMaxWidthLimit }
+  if (typeof s.sandboxPadding === 'number') { sandboxPadding.value = s.sandboxPadding; setRootVar('--st-sandbox-padding', sandboxPadding.value) }
+  if (typeof s.sandboxRadius === 'number') { sandboxRadius.value = s.sandboxRadius; setRootVar('--st-sandbox-radius', sandboxRadius.value) }
+
+  // 楼层内 HTML 舞台
+  if (typeof s.thAspectX === 'number') thAspectX.value = s.thAspectX
+  if (typeof s.thAspectY === 'number') thAspectY.value = s.thAspectY
+  setRootVarUnitless('--st-threaded-stage-aspect', `${thAspectX.value} / ${thAspectY.value}`)
+
+  if (typeof s.thMaxWidthPct === 'number') { thMaxWidthPct.value = s.thMaxWidthPct; setRootVarUnitless('--st-threaded-stage-maxw', thMaxWidthPct.value) }
+  if (typeof s.thPadding === 'number') { thPadding.value = s.thPadding; setRootVar('--st-threaded-stage-padding', s.thPadding) }
+  if (typeof s.thRadius === 'number') { thRadius.value = s.thRadius; setRootVar('--st-threaded-stage-radius', s.thRadius) }
+
+  // 常用外观（新）
+  if (typeof s.contentLineHeight === 'number') {
+    contentLineHeight.value = s.contentLineHeight
+    setRootVarUnitless('--st-content-line-height', String(s.contentLineHeight))
+  }
+  if (typeof s.messageGap === 'number') {
+    messageGap.value = s.messageGap
+    setRootVar('--st-message-gap', s.messageGap)
+  }
+  if (typeof s.cardRadius === 'number' && Number.isFinite(s.cardRadius)) {
+    cardRadius.value = s.cardRadius
+    setRootVar('--st-card-radius', s.cardRadius)
+  } else if (s.cardRadius === null) {
+    cardRadius.value = NaN
+    document.documentElement.style.removeProperty('--st-card-radius')
+  }
+  if (typeof s.stripeWidth === 'number') {
+    stripeWidth.value = s.stripeWidth
+    setRootVar('--st-stripe-width', s.stripeWidth)
+  }
+}
+
+function loadSavedAppearance() {
+  try {
+    const raw = localStorage.getItem(APPEARANCE_STORE_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    applyAppearanceState(saved)
+    __lastSavedAppearance = raw
+  } catch (_) {}
+}
+
+function maybeSaveAppearance() {
+  try {
+    const snap = getAppearanceSnapshot()
+    const str = JSON.stringify(snap)
+    if (str !== __lastSavedAppearance) {
+      localStorage.setItem(APPEARANCE_STORE_KEY, str)
+      __lastSavedAppearance = str
+    }
+  } catch (_) {}
+}
+
+// 首次挂载：加载保存的外观配置，并启动周期性保存（节流为 1s）
+onMounted(() => {
+  loadSavedAppearance()
+  if (__saveInterval) { clearInterval(__saveInterval); __saveInterval = null }
+  __saveInterval = setInterval(maybeSaveAppearance, 1000)
+})
+
+// 卸载：清理定时器
+onBeforeUnmount(() => {
+  if (__saveInterval) { clearInterval(__saveInterval); __saveInterval = null }
+})
 </script>
 
 <template>
@@ -787,6 +1046,116 @@ onMounted(() => window.lucide?.createIcons?.())
               :value="inputHeight"
               @pointerdown="onTuningStart('inputHeight')"
               @input="onInputHeightInput"
+            />
+          </div>
+
+          <!-- 常用外观：行距/间距/圆角/色条宽度 -->
+          <div class="st-control" data-slider="contentLineHeight">
+            <label class="st-control-label">
+              <span class="label-text">正文行距</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="contentLineHeight"
+                  min="1.2"
+                  max="2.0"
+                  step="0.05"
+                  @input="onContentLineHeightNumberInput"
+                />
+                <span class="unit">×</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="1.2"
+              max="2.0"
+              step="0.05"
+              :value="contentLineHeight"
+              @pointerdown="onTuningStart('contentLineHeight')"
+              @input="onContentLineHeightRangeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="messageGap">
+            <label class="st-control-label">
+              <span class="label-text">消息间距</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="messageGap"
+                  min="6"
+                  max="24"
+                  step="1"
+                  @input="onMessageGapNumberInput"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="6"
+              max="24"
+              step="1"
+              :value="messageGap"
+              @pointerdown="onTuningStart('messageGap')"
+              @input="onMessageGapRangeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="cardRadius">
+            <label class="st-control-label">
+              <span class="label-text">消息卡圆角</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="Number.isFinite(cardRadius) ? cardRadius : ''"
+                  min="0"
+                  max="24"
+                  step="1"
+                  @input="onCardRadiusNumberInput"
+                  placeholder="默认"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="24"
+              step="1"
+              :value="Number.isFinite(cardRadius) ? cardRadius : 12"
+              @pointerdown="onTuningStart('cardRadius')"
+              @input="onCardRadiusRangeInput"
+            />
+          </div>
+
+          <div class="st-control" data-slider="stripeWidth">
+            <label class="st-control-label">
+              <span class="label-text">色条宽度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="stripeWidth"
+                  min="0"
+                  max="12"
+                  step="1"
+                  @input="onStripeWidthNumberInput"
+                />
+                <span class="unit">px</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="12"
+              step="1"
+              :value="stripeWidth"
+              @pointerdown="onTuningStart('stripeWidth')"
+              @input="onStripeWidthRangeInput"
             />
           </div>
 
@@ -1087,59 +1456,9 @@ onMounted(() => window.lucide?.createIcons?.())
           <p class="muted">提示：上述设定实时作用于页面上的"全局沙盒"舞台，并以 CSS 变量方式保存，便于主题或脚本统一接管。</p>
         </div>
 
-        <div v-else-if="active === 'backgrounds'" class="st-tab-panel">
-          <h3>背景图片</h3>
-          <p class="muted">为开始页面、楼层对话页面、沙盒页面设置背景图。可覆盖默认图片并即时预览。</p>
+        <BackgroundsManagerTab v-else-if="active === 'backgrounds'" />
 
-          <div class="bg-grid">
-            <div class="bg-card">
-              <div class="bg-title">开始页面</div>
-              <div class="bg-preview bg-start" />
-              <div class="bg-actions">
-                <label class="bg-upload">
-                  <input type="file" accept="image/*" @change="onFileChange('start', $event)" />
-                  选择图片
-                </label>
-                <button class="st-settings-close" type="button" @click="resetBg('start')">重置默认</button>
-              </div>
-            </div>
-
-            <div class="bg-card">
-              <div class="bg-title">楼层对话页面</div>
-              <div class="bg-preview bg-threaded" />
-              <div class="bg-actions">
-                <label class="bg-upload">
-                  <input type="file" accept="image/*" @change="onFileChange('threaded', $event)" />
-                  选择图片
-                </label>
-                <button class="st-settings-close" type="button" @click="resetBg('threaded')">重置默认</button>
-              </div>
-            </div>
-
-            <div class="bg-card">
-              <div class="bg-title">沙盒页面</div>
-              <div class="bg-preview bg-sandbox" />
-              <div class="bg-actions">
-                <label class="bg-upload">
-                  <input type="file" accept="image/*" @change="onFileChange('sandbox', $event)" />
-                  选择图片
-                </label>
-                <button class="st-settings-close" type="button" @click="resetBg('sandbox')">重置默认</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="active === 'theme'" class="st-tab-panel">
-          <h3>主题管理</h3>
-          <p class="muted">此为主题配置页面（占位），后续可用于主题切换、自定义主题包导入与预览。</p>
-
-          <div class="theme-placeholder">
-            <div class="theme-placeholder-icon">🎨</div>
-            <div class="theme-placeholder-title">主题系统</div>
-            <div class="theme-placeholder-desc">主题包导入、切换与预览功能即将推出</div>
-          </div>
-        </div>
+        <ThemeManagerTab v-else-if="active === 'theme'" />
 
         <div v-else class="st-tab-panel">
           <h3>未知页签</h3>
