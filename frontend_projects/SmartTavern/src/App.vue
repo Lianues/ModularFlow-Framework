@@ -636,6 +636,8 @@ function onThemeUpdate(t) {
   --st-primary-contrast: 255 255 255;
   --st-border: 225 228 236;
   --st-accent: 14 165 233;
+  /* 背景遮罩在浅色主题使用纯白，在深色主题使用纯黑（RGB三通道数值） */
+  --st-overlay-ink: 255 255 255;
 
   --st-radius-sm: 2px;
   --st-radius-md: 3px;
@@ -680,6 +682,18 @@ function onThemeUpdate(t) {
   --st-sandbox-aspect: 16 / 9;     /* 舞台宽高比（CSS aspect-ratio） */
   --st-sandbox-padding: 16px;      /* 舞台内边距 */
   --st-sandbox-radius: 18px;       /* 舞台圆角 */
+
+  /* Background opacity controls */
+  --st-threaded-bg-opacity: 0.12;            /* 楼层对话 背景图片遮罩不透明度 (0~1) */
+  --st-threaded-msg-bg-opacity: 0.82;        /* 楼层消息卡 背景不透明度 (0~1) */
+  --st-sandbox-bg-opacity: 0.12;             /* 全局沙盒 背景图片遮罩不透明度 (0~1) */
+  --st-sandbox-stage-bg-opacity: 0.82;       /* 全局沙盒 舞台背景不透明度 (0~1) */
+
+  /* Threaded chat container and input opacities */
+  --st-threaded-list-bg-opacity: 0.62;       /* 楼层对话 列表容器背景不透明度 (0~1) */
+  --st-threaded-input-bg-opacity: 0.80;      /* 楼层对话 底部输入框背景不透明度 (0~1) */
+  --st-threaded-input-bg-focus-opacity: 0.86;/* 楼层对话 底部输入框聚焦背景不透明度 (0~1) */
+  --st-threaded-stage-container-bg-opacity: 0.82; /* 楼层内 HTML 舞台容器背景不透明度 (0~1) */
 }
 
 /* 暗色主题 */
@@ -692,6 +706,7 @@ function onThemeUpdate(t) {
   --st-primary-contrast: 19 23 32;
   --st-border: 45 54 70;
   --st-accent: 94 234 212;
+  --st-overlay-ink: 0 0 0;
 }
 
 /* 页面背景 */
@@ -783,7 +798,18 @@ body.st-live-tuning[data-active-slider="sandboxRadius"] [data-scope="settings-vi
 /* NEW: Threaded HTML stage sliders */
 body.st-live-tuning[data-active-slider="threadedStageMaxWidthPct"] [data-scope="settings-view"] .st-control[data-slider="threadedStageMaxWidthPct"],
 body.st-live-tuning[data-active-slider="threadedStagePadding"] [data-scope="settings-view"] .st-control[data-slider="threadedStagePadding"],
-body.st-live-tuning[data-active-slider="threadedStageRadius"] [data-scope="settings-view"] .st-control[data-slider="threadedStageRadius"] {
+body.st-live-tuning[data-active-slider="threadedStageRadius"] [data-scope="settings-view"] .st-control[data-slider="threadedStageRadius"],
+/* NEW: Background opacity sliders */
+body.st-live-tuning[data-active-slider="threadedBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedBgOpacity"],
+body.st-live-tuning[data-active-slider="threadedMsgBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedMsgBgOpacity"],
+body.st-live-tuning[data-active-slider="sandboxBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="sandboxBgOpacity"],
+body.st-live-tuning[data-active-slider="sandboxStageBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="sandboxStageBgOpacity"] {
+  visibility: visible !important;
+}
+
+/* 新增：live-tuning 仅显示新加入的滑条（对话容器/输入框背景不透明度） */
+body.st-live-tuning[data-active-slider="threadedListBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedListBgOpacity"],
+body.st-live-tuning[data-active-slider="threadedInputBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedInputBgOpacity"] {
   visibility: visible !important;
 }
 
@@ -930,7 +956,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
-  border: 1px solid rgba(var(--st-border), 0.7);
+  border: 1px solid rgb(var(--st-border) /0.7);
   box-shadow: var(--st-shadow-sm);
 }
 [data-theme="dark"] .glass {
@@ -1016,7 +1042,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   background-clip: text;
   color: transparent;
 }
-.st-desc { margin: 0 0 12px; color: rgba(var(--st-color-text), 0.75); }
+.st-desc { margin: 0 0 12px; color: rgb(var(--st-color-text) /0.75); }
 .st-cta { display: flex; gap: 12px; margin-top: 6px; }
 .st-btn {
   appearance: none; border: 1px solid rgb(var(--st-border)); background: rgb(var(--st-surface));
@@ -1024,7 +1050,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
 }
 .st-btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-md); }
-.st-btn.st-primary { background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1)); color: var(--st-primary-contrast); border-color: transparent; }
+.st-btn.st-primary { background: linear-gradient(135deg, rgb(var(--st-primary) /1), rgb(var(--st-accent) /1)); color: var(--st-primary-contrast); border-color: transparent; }
 .st-btn.st-primary:hover { filter: saturate(1.05); }
 
 .st-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -1032,7 +1058,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .st-feature { padding: 18px; border-radius: var(--st-radius-lg); }
 .st-feature-icon { font-size: 20px; }
 .st-feature-title { margin-top: 8px; font-weight: 600; }
-.st-feature-desc { margin-top: 4px; color: rgba(var(--st-color-text), 0.7); }
+.st-feature-desc { margin-top: 4px; color: rgb(var(--st-color-text) /0.7); }
 
 /* Mythic home actions */
 .st-myth-actions {
@@ -1068,8 +1094,8 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   padding: 28px 30px;
   height: 100%;
   border-radius: var(--st-radius-lg);
-  border: 1px solid rgba(var(--st-border), 0.9);
-  background: rgba(var(--st-surface), 0.72);
+  border: 1px solid rgb(var(--st-border) /0.9);
+  background: rgb(var(--st-surface) /0.72);
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   box-shadow: var(--st-shadow-md);
@@ -1080,16 +1106,16 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .myth-action:hover {
   transform: translateY(-2px);
   box-shadow: 0 16px 40px rgba(0,0,0,0.14);
-  border-color: rgba(var(--st-primary), 0.5);
-  background: rgba(var(--st-surface), 0.78);
+  border-color: rgb(var(--st-primary) /0.5);
+  background: rgb(var(--st-surface) /0.78);
 }
 .myth-icon {
   grid-area: icon;
   width: 84px; height: 84px;
   border-radius: 9999px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, rgba(var(--st-primary),.16), rgba(var(--st-accent),.16));
-  border: 1px solid rgba(var(--st-border), 0.9);
+  background: linear-gradient(135deg, rgb(var(--st-primary) /.16), rgb(var(--st-accent) /.16));
+  border: 1px solid rgb(var(--st-border) /0.9);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 14px rgba(0,0,0,0.08);
   color: var(--menu-fg, rgb(var(--st-color-text)));
   z-index: 1;
@@ -1107,7 +1133,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .myth-sub {
   grid-area: sub;
   font-size: 14px;
-  color: rgba(var(--st-color-text), 0.78);
+  color: rgb(var(--st-color-text) /0.78);
   letter-spacing: .4px;
 }
 
@@ -1122,7 +1148,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
   -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
   padding: 1px; /* hairline */
-  border: 1px solid rgba(var(--st-border), 0.6);
+  border: 1px solid rgb(var(--st-border) /0.6);
   opacity: .65;
   pointer-events: none;
 }
@@ -1147,8 +1173,8 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   gap: 8px 12px;
   padding: 16px 18px;
   border-radius: var(--st-radius-lg);
-  border: 1px solid rgba(var(--st-border), 0.9);
-  background: rgba(var(--st-surface), 0.72);
+  border: 1px solid rgb(var(--st-border) /0.9);
+  background: rgb(var(--st-surface) /0.72);
   backdrop-filter: blur(8px) saturate(140%);
   -webkit-backdrop-filter: blur(8px) saturate(140%);
   box-shadow: var(--st-shadow-sm);
@@ -1158,15 +1184,15 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .mode-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--st-shadow-md);
-  border-color: rgba(var(--st-primary), 0.5);
+  border-color: rgb(var(--st-primary) /0.5);
 }
 .mode-icon {
   grid-area: icon;
   width: 48px; height: 48px;
   border-radius: 9999px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, rgba(var(--st-primary),.16), rgba(var(--st-accent),.16));
-  border: 1px solid rgba(var(--st-border), 0.9);
+  background: linear-gradient(135deg, rgb(var(--st-primary) /.16), rgb(var(--st-accent) /.16));
+  border: 1px solid rgb(var(--st-border) /0.9);
   color: rgb(var(--st-color-text));
 }
 .icon-24 { width: 24px; height: 24px; stroke: currentColor; }
@@ -1180,7 +1206,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .mode-sub {
   grid-area: sub;
   font-size: 12px;
-  color: rgba(var(--st-color-text), 0.75);
+  color: rgb(var(--st-color-text) /0.75);
 }
 
 /* Home vertical menu (bottom-left) */
@@ -1201,7 +1227,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   gap: 14px;
   padding: 14px 20px;
   border-radius: var(--st-radius-lg);
-  border: 1px solid var(--menu-border, rgba(var(--st-border), 0.7));
+  border: 1px solid var(--menu-border, rgb(var(--st-border) /0.7));
   background: transparent; /* no white mask on home */
   color: var(--menu-fg, rgb(var(--st-color-text)));
   text-shadow: var(--menu-shadow, none);
@@ -1218,7 +1244,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 }
 .menu-btn:hover {
   transform: translateX(4px);
-  border-color: rgba(var(--st-primary), 0.6);
+  border-color: rgb(var(--st-primary) /0.6);
   color: var(--menu-fg, rgb(var(--st-color-text)));
 }
 .home-menu .icon-20 { width: 26px; height: 26px; stroke: currentColor; }
@@ -1244,7 +1270,16 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
-  opacity: 0.12;
+  opacity: 1; /* 背景图始终全可见，遮罩由 ::after 控制 */
+  z-index: -1;
+  pointer-events: none;
+}
+.st-threaded::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  /* 主题自适应遮罩：浅色为纯白，深色为纯黑；与变量不透明度共同作用 */
+  background: rgb(var(--st-overlay-ink) / var(--st-threaded-bg-opacity, 0.12));
   z-index: -1;
   pointer-events: none;
 }
@@ -1269,7 +1304,16 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
-  opacity: 0.12;
+  opacity: 1; /* 背景图始终全可见，遮罩由 ::after 控制 */
+  z-index: -1;
+  pointer-events: none;
+}
+.st-sandbox::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  /* 主题自适应遮罩：浅色为纯白，深色为纯黑；与变量不透明度共同作用 */
+  background: rgb(var(--st-overlay-ink) / var(--st-sandbox-bg-opacity, 0.12));
   z-index: -1;
   pointer-events: none;
 }
@@ -1284,10 +1328,11 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   padding: var(--st-sandbox-padding);
   border-radius: var(--st-sandbox-radius);
   /* 舞台可见边界：淡色边框 + 半透明背景 */
-  border: 2px solid rgba(var(--st-primary), 0.25);
-  background: rgba(var(--st-surface), 0.82);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  /* 同步舞台透明度：边框/背景/玻璃强度随 --st-sandbox-stage-bg-opacity 变化 */
+  border: 2px solid rgb(var(--st-primary) / calc(var(--st-sandbox-stage-bg-opacity, 0.82) * 0.25));
+  background: rgb(var(--st-surface) / var(--st-sandbox-stage-bg-opacity, 0.82)) !important;
+  backdrop-filter: blur(calc(var(--st-sandbox-stage-bg-opacity, 0.82) * 4px)) saturate(calc(1 + var(--st-sandbox-stage-bg-opacity, 0.82) * 0.4));
+  -webkit-backdrop-filter: blur(calc(var(--st-sandbox-stage-bg-opacity, 0.82) * 4px)) saturate(calc(1 + var(--st-sandbox-stage-bg-opacity, 0.82) * 0.4));
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   overflow: hidden;
 }
@@ -1318,7 +1363,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .st-sandbox-desc {
   margin: 0;
   font-size: 13px;
-  color: rgba(var(--st-color-text), 0.7);
+  color: rgb(var(--st-color-text) /0.7);
 }
 
 .st-sandbox-body {
@@ -1330,8 +1375,8 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 }
 
 .st-sandbox-demo-box {
-  background: rgba(var(--st-surface), 0.6);
-  border: 1px solid rgba(var(--st-border), 0.6);
+  background: rgb(var(--st-surface) /0.6);
+  border: 1px solid rgb(var(--st-border) /0.6);
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -1355,7 +1400,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 .st-demo-text {
   font-size: 12px;
   line-height: 1.4;
-  color: rgba(var(--st-color-text), 0.8);
+  color: rgb(var(--st-color-text) /0.8);
 }
 
 /* ModeSwitch styles moved into src/components/common/ModeSwitch.vue */
@@ -1391,6 +1436,6 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
 
 .placeholder-desc {
   font-size: 14px;
-  color: rgba(var(--st-color-text), 0.65);
+  color: rgb(var(--st-color-text) /0.65);
 }
 </style>

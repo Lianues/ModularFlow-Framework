@@ -54,6 +54,18 @@ const thMaxWidthPct = ref(100)         // 舞台最大宽度（%），不超过�
 const thPadding = ref(8)               // 舞台内边距(px)
 const thRadius = ref(12)               // 舞台圆角(px)
 
+/* Threaded 背景与消息不透明度（百分比，0~100） */
+const threadedBgOpacityPct = ref(12)   // 楼层对话 背景图片遮罩不透明度（%）
+const threadedMsgBgOpacityPct = ref(82) // 楼层消息卡 背景不透明度（%）
+
+/* Sandbox 背景与舞台不透明度（百分比，0~100） */
+const sandboxBgOpacityPct = ref(12)    // 全局沙盒 背景图片遮罩不透明度（%）
+const sandboxStageBgOpacityPct = ref(82) // 全局沙盒 舞台背景不透明度（%）
+
+/* Threaded 其它可见层不透明度（百分比，0~100） */
+const threadedListBgOpacityPct = ref(62)   // 对话列表容器背景不透明度（%）
+const threadedInputBgOpacityPct = ref(80)  // 底部输入框背景不透明度（%）
+
 /* 预设比例选项 */
 const aspectPresets = [
   { label: '16:9', v: [16, 9] },
@@ -231,6 +243,60 @@ function onInputHeightNumberInput(e) {
   }
 }
 
+/* 楼层对话：背景图片遮罩不透明度（%）
+   修正方向：滑条显示“遮罩不透明度”，但为满足“100% 不会变黑”的期望，
+   实际写入 CSS 变量为 (1 - 百分比)，即 100% -> 0（无遮罩），0% -> 1（全遮罩）。 */
+function onThreadedBgOpacityNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 100) {
+    threadedBgOpacityPct.value = v
+    setRootVarUnitless('--st-threaded-bg-opacity', String((v / 100)))
+  }
+}
+function onThreadedBgOpacityRangeInput(e) {
+  threadedBgOpacityPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-threaded-bg-opacity', String((threadedBgOpacityPct.value / 100)))
+}
+
+/* 楼层对话：消息背景不透明度（%） */
+function onThreadedMsgBgOpacityNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 100) {
+    threadedMsgBgOpacityPct.value = v
+    setRootVarUnitless('--st-threaded-msg-bg-opacity', String((v / 100)))
+  }
+}
+function onThreadedMsgBgOpacityRangeInput(e) {
+  threadedMsgBgOpacityPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-threaded-msg-bg-opacity', String((threadedMsgBgOpacityPct.value / 100)))
+}
+
+/* 对话区容器背景不透明度（%） */
+function onThreadedListBgOpacityNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 100) {
+    threadedListBgOpacityPct.value = v
+    setRootVarUnitless('--st-threaded-list-bg-opacity', String((v / 100)))
+  }
+}
+function onThreadedListBgOpacityRangeInput(e) {
+  threadedListBgOpacityPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-threaded-list-bg-opacity', String((threadedListBgOpacityPct.value / 100)))
+}
+
+/* 底部输入框背景不透明度（%） */
+function onThreadedInputBgOpacityNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 100) {
+    threadedInputBgOpacityPct.value = v
+    setRootVarUnitless('--st-threaded-input-bg-opacity', String((v / 100)))
+  }
+}
+function onThreadedInputBgOpacityRangeInput(e) {
+  threadedInputBgOpacityPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-threaded-input-bg-opacity', String((threadedInputBgOpacityPct.value / 100)))
+}
+
 /* --- Sandbox handlers --- */
 function onSandboxAspectPreset(e) {
   const raw = e.target.value
@@ -299,6 +365,33 @@ function onSandboxRadiusNumberInput(e) {
 function onSandboxRadiusRangeInput(e) {
   sandboxRadius.value = Number(e.target.value)
   setRootVar('--st-sandbox-radius', sandboxRadius.value)
+}
+
+/* 全屏沙盒：背景图片遮罩不透明度（%）
+   修正方向：写入为 (1 - 百分比)，100% -> 0（无遮罩），0% -> 1（全遮罩）。 */
+function onSandboxBgOpacityNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 100) {
+    sandboxBgOpacityPct.value = v
+    setRootVarUnitless('--st-sandbox-bg-opacity', String((v / 100)))
+  }
+}
+function onSandboxBgOpacityRangeInput(e) {
+  sandboxBgOpacityPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-sandbox-bg-opacity', String((sandboxBgOpacityPct.value / 100)))
+}
+
+/* 全屏沙盒：舞台背景不透明度（%） */
+function onSandboxStageBgOpacityNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 100) {
+    sandboxStageBgOpacityPct.value = v
+    setRootVarUnitless('--st-sandbox-stage-bg-opacity', String((v / 100)))
+  }
+}
+function onSandboxStageBgOpacityRangeInput(e) {
+  sandboxStageBgOpacityPct.value = Number(e.target.value)
+  setRootVarUnitless('--st-sandbox-stage-bg-opacity', String((sandboxStageBgOpacityPct.value / 100)))
 }
 
 /* --- Threaded HTML 舞台 handlers --- */
@@ -377,6 +470,34 @@ onMounted(() => {
   setRootVar('--st-avatar-size', avatarSize.value)
   setRootVar('--st-chat-width', chatWidth.value)
   setRootVar('--st-input-height', inputHeight.value)
+
+  // 初始化背景遮罩/消息背景不透明度（从 CSS 变量读取并回写）
+  // 遮罩的 CSS 变量为真实 alpha 值（0~1），滑条显示为“遮罩不透明度 %”
+  // 为满足“100% 时不变黑”的期望：滑条值 = (1 - 遮罩alpha) * 100
+  const __tb = readCssVarFloat('--st-threaded-bg-opacity', 0.12)
+  threadedBgOpacityPct.value = Math.round(__tb * 100)
+  setRootVarUnitless('--st-threaded-bg-opacity', String(__tb))
+
+  const __tm = readCssVarFloat('--st-threaded-msg-bg-opacity', 0.82)
+  threadedMsgBgOpacityPct.value = Math.round(__tm * 100)
+  setRootVarUnitless('--st-threaded-msg-bg-opacity', String(__tm))
+
+  const __sb = readCssVarFloat('--st-sandbox-bg-opacity', 0.12)
+  sandboxBgOpacityPct.value = Math.round(__sb * 100)
+  setRootVarUnitless('--st-sandbox-bg-opacity', String(__sb))
+
+  const __ss = readCssVarFloat('--st-sandbox-stage-bg-opacity', 0.82)
+  sandboxStageBgOpacityPct.value = Math.round(__ss * 100)
+  setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(__ss))
+
+  // 读取：对话列表容器/输入框 背景不透明度
+  const __tl = readCssVarFloat('--st-threaded-list-bg-opacity', 0.62)
+  threadedListBgOpacityPct.value = Math.round(__tl * 100)
+  setRootVarUnitless('--st-threaded-list-bg-opacity', String(__tl))
+
+  const __ti = readCssVarFloat('--st-threaded-input-bg-opacity', 0.80)
+  threadedInputBgOpacityPct.value = Math.round(__ti * 100)
+  setRootVarUnitless('--st-threaded-input-bg-opacity', String(__ti))
 
   // 恢复背景图片自定义（若本地已保存）
   try {
@@ -669,6 +790,114 @@ onMounted(() => window.lucide?.createIcons?.())
             />
           </div>
 
+          <!-- 背景图片遮罩不透明度（100%为完全不透明，0为完全透明） -->
+          <div class="st-control" data-slider="threadedBgOpacity">
+            <label class="st-control-label">
+              <span class="label-text">背景图片遮罩不透明度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="threadedBgOpacityPct"
+                  min="0"
+                  max="100"
+                  @input="onThreadedBgOpacityNumberInput"
+                />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="threadedBgOpacityPct"
+              @pointerdown="onTuningStart('threadedBgOpacity')"
+              @input="onThreadedBgOpacityRangeInput"
+            />
+          </div>
+
+          <!-- 楼层消息背景不透明度（100%为完全不透明，0为完全透明） -->
+          <div class="st-control" data-slider="threadedMsgBgOpacity">
+            <label class="st-control-label">
+              <span class="label-text">楼层消息背景不透明度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="threadedMsgBgOpacityPct"
+                  min="0"
+                  max="100"
+                  @input="onThreadedMsgBgOpacityNumberInput"
+                />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="threadedMsgBgOpacityPct"
+              @pointerdown="onTuningStart('threadedMsgBgOpacity')"
+              @input="onThreadedMsgBgOpacityRangeInput"
+            />
+          </div>
+
+          <!-- 对话区容器背景不透明度（100%为完全不透明，0为完全透明） -->
+          <div class="st-control" data-slider="threadedListBgOpacity">
+            <label class="st-control-label">
+              <span class="label-text">对话区容器背景不透明度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="threadedListBgOpacityPct"
+                  min="0"
+                  max="100"
+                  @input="onThreadedListBgOpacityNumberInput"
+                />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="threadedListBgOpacityPct"
+              @pointerdown="onTuningStart('threadedListBgOpacity')"
+              @input="onThreadedListBgOpacityRangeInput"
+            />
+          </div>
+
+          <!-- 底部输入框背景不透明度（100%为完全不透明，0为完全透明） -->
+          <div class="st-control" data-slider="threadedInputBgOpacity">
+            <label class="st-control-label">
+              <span class="label-text">底部输入框背景不透明度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="threadedInputBgOpacityPct"
+                  min="0"
+                  max="100"
+                  @input="onThreadedInputBgOpacityNumberInput"
+                />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="threadedInputBgOpacityPct"
+              @pointerdown="onTuningStart('threadedInputBgOpacity')"
+              @input="onThreadedInputBgOpacityRangeInput"
+            />
+          </div>
+
           <!-- 楼层对话：HTML 舞台（iframe）设置 -->
           <h4 class="muted" style="margin:8px 0 0;">HTML 舞台（楼层内 iframe）</h4>
 
@@ -799,6 +1028,60 @@ onMounted(() => window.lucide?.createIcons?.())
               </div>
             </label>
             <input type="range" min="0" max="32" step="1" :value="sandboxRadius" @pointerdown="onTuningStart('sandboxRadius')" @input="onSandboxRadiusRangeInput" />
+          </div>
+
+          <!-- 背景图片遮罩不透明度（浅色=白遮罩，深色=黑遮罩；0%完全透明，100%完全不透明） -->
+          <div class="st-control" data-slider="sandboxBgOpacity">
+            <label class="st-control-label">
+              <span class="label-text">背景图片遮罩不透明度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="sandboxBgOpacityPct"
+                  min="0"
+                  max="100"
+                  @input="onSandboxBgOpacityNumberInput"
+                />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="sandboxBgOpacityPct"
+              @pointerdown="onTuningStart('sandboxBgOpacity')"
+              @input="onSandboxBgOpacityRangeInput"
+            />
+          </div>
+
+          <!-- 舞台背景不透明度（0%完全透明，100%完全不透明） -->
+          <div class="st-control" data-slider="sandboxStageBgOpacity">
+            <label class="st-control-label">
+              <span class="label-text">舞台背景不透明度</span>
+              <div class="value-group">
+                <input
+                  type="number"
+                  class="st-number-input"
+                  :value="sandboxStageBgOpacityPct"
+                  min="0"
+                  max="100"
+                  @input="onSandboxStageBgOpacityNumberInput"
+                />
+                <span class="unit">%</span>
+              </div>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              :value="sandboxStageBgOpacityPct"
+              @pointerdown="onTuningStart('sandboxStageBgOpacity')"
+              @input="onSandboxStageBgOpacityRangeInput"
+            />
           </div>
 
           <p class="muted">提示：上述设定实时作用于页面上的"全局沙盒"舞台，并以 CSS 变量方式保存，便于主题或脚本统一接管。</p>

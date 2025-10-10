@@ -164,10 +164,11 @@ const effectiveHtml = computed(() => props.html || DEFAULT_HTML)
   padding: var(--st-sandbox-padding);
   border-radius: var(--st-sandbox-radius);
   /* 可见边界与半透明底，保持与 App.vue 中样式一致 */
-  border: 2px solid rgba(var(--st-primary), 0.25);
-  background: rgba(var(--st-surface), 0.82);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  /* 同步舞台透明度：边框/背景/玻璃强度随 --st-sandbox-stage-bg-opacity 变化 */
+  border: 2px solid rgb(var(--st-primary) / calc(var(--st-sandbox-stage-bg-opacity, 0.82) * 0.25));
+  background: rgb(var(--st-surface) / var(--st-sandbox-stage-bg-opacity, 0.82)) !important;
+  backdrop-filter: blur(calc(var(--st-sandbox-stage-bg-opacity, 0.82) * 4px)) saturate(calc(1 + var(--st-sandbox-stage-bg-opacity, 0.82) * 0.4));
+  -webkit-backdrop-filter: blur(calc(var(--st-sandbox-stage-bg-opacity, 0.82) * 4px)) saturate(calc(1 + var(--st-sandbox-stage-bg-opacity, 0.82) * 0.4));
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   margin: 0 auto;
   overflow: hidden;

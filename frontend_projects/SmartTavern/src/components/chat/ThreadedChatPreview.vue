@@ -621,11 +621,18 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: 8px;
   border: 1px solid rgba(var(--st-border), 0.9);
   border-radius: var(--st-radius-lg);
-  background: rgba(var(--st-surface), 0.62);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: rgb(var(--st-surface) / var(--st-threaded-list-bg-opacity, 0.62)) !important;
+  /* 根据不透明度动态衰减玻璃效果，0 时完全无模糊/饱和 */
+  backdrop-filter: blur(calc(var(--st-threaded-list-bg-opacity, 0.62) * 18px)) saturate(calc(1 + var(--st-threaded-list-bg-opacity, 0.62) * 0.6));
+  -webkit-backdrop-filter: blur(calc(var(--st-threaded-list-bg-opacity, 0.62) * 18px)) saturate(calc(1 + var(--st-threaded-list-bg-opacity, 0.62) * 0.6));
   box-shadow: var(--st-shadow-sm);
   overflow: visible;
+}
+/* 让滚动容器包装与容器背景一致（custom-scrollbar-wrapper） */
+.tch-list :deep(.custom-scrollbar-wrapper) {
+  background: rgb(var(--st-surface) / var(--st-threaded-list-bg-opacity, 0.62)) !important;
+  backdrop-filter: blur(calc(var(--st-threaded-list-bg-opacity, 0.62) * 18px)) saturate(calc(1 + var(--st-threaded-list-bg-opacity, 0.62) * 0.6));
+  -webkit-backdrop-filter: blur(calc(var(--st-threaded-list-bg-opacity, 0.62) * 18px)) saturate(calc(1 + var(--st-threaded-list-bg-opacity, 0.62) * 0.6));
 }
 
 /* 内部容器（供过渡动画使用） */
@@ -642,7 +649,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: 12px;
   border-radius: var(--st-radius-lg);
   border: 1px solid rgba(var(--st-border), 0.9);
-  background: rgba(var(--st-surface), 0.82);
+  background: rgb(var(--st-surface) / var(--st-threaded-msg-bg-opacity, 0.82)) !important;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   box-shadow: none;
@@ -654,7 +661,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   transform: translateY(-2px);
   box-shadow: 0 16px 40px rgba(0,0,0,0.10);
   border-color: rgba(var(--st-primary), 0.35);
-  background: rgba(var(--st-surface), 0.88);
+  background: rgb(var(--st-surface) / var(--st-threaded-msg-bg-opacity, 0.82)) !important;
   z-index: 2;
 }
 
@@ -1049,7 +1056,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: 4px 10px;
   border: 1px solid rgba(var(--st-border), 0.9);
   border-radius: 9999px;
-  background: rgba(var(--st-surface), 0.86);
+  background: rgb(var(--st-surface) / 0.86);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: rgba(var(--st-color-text), 0.95);
@@ -1076,9 +1083,10 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: 10px 12px;
   border: 1px solid rgba(var(--st-border), 0.9);
   border-radius: var(--st-radius-lg);
-  background: rgba(var(--st-surface), 0.80);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: rgb(var(--st-surface) / var(--st-threaded-input-bg-opacity, 0.80)) !important;
+  /* 根据不透明度动态衰减玻璃效果，0 时完全无模糊/饱和 */
+  backdrop-filter: blur(calc(var(--st-threaded-input-bg-opacity, 0.80) * 18px)) saturate(calc(1 + var(--st-threaded-input-bg-opacity, 0.80) * 0.6));
+  -webkit-backdrop-filter: blur(calc(var(--st-threaded-input-bg-opacity, 0.80) * 18px)) saturate(calc(1 + var(--st-threaded-input-bg-opacity, 0.80) * 0.6));
   box-shadow: var(--st-shadow-sm);
   flex-shrink: 0;
   min-height: clamp(calc(var(--st-content-font-size) * 2.8 + 28px), var(--st-input-height, 100px), 100vh);
@@ -1087,7 +1095,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 .tch-input-row:focus-within {
   border-color: rgba(var(--st-primary), 0.45);
   box-shadow: 0 8px 30px rgba(0,0,0,0.08), 0 0 0 3px rgba(var(--st-primary), 0.08);
-  background: rgba(var(--st-surface), 0.86);
+  background: rgb(var(--st-surface) / var(--st-threaded-input-bg-focus-opacity, 0.86)) !important;
 }
 
 /* 工具栏按钮 */
@@ -1243,7 +1251,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: 4px 10px;
   border: 1px solid rgba(var(--st-border), 0.9);
   border-radius: 9999px;
-  background: rgba(var(--st-surface), 0.78);
+  background: rgb(var(--st-surface) / 0.78);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: rgba(var(--st-color-text), 0.9);
@@ -1277,7 +1285,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: 6px 8px;
   border: 1px solid rgba(var(--st-border), 0.9);
   border-radius: 9999px;
-  background: rgba(var(--st-surface), 0.78);
+  background: rgb(var(--st-surface) / 0.78);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: var(--st-shadow-sm);
@@ -1353,7 +1361,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   padding: var(--st-threaded-stage-padding, 8px);
   border-radius: var(--st-threaded-stage-radius, 12px);
   border: 1px solid rgba(var(--st-border), 0.6);
-  background: rgba(var(--st-surface), 0.82);
+  background: rgb(var(--st-surface) / var(--st-threaded-stage-container-bg-opacity, 0.82)) !important;
   box-shadow: var(--st-shadow-sm);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
