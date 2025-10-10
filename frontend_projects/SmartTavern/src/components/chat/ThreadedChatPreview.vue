@@ -1,8 +1,9 @@
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
-import HtmlStage from '@/components/chat/HtmlStage.vue'
-import { HTML_DOC_RE, FENCE_RE, extractHtmlDocFromText, hasHtmlDoc as hasHtmlDocText, splitHtmlFromText } from '@/features/chat/normalizer.js'
+import { splitHtmlFromText } from '@/features/chat/normalizer.js'
 import usePalette from '@/composables/usePalette.js'
+import InputRow from '@/components/chat/InputRow.vue'
+import MessageItem from '@/components/chat/MessageItem.vue'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
@@ -51,63 +52,16 @@ function refreshIcons() {
   })
 }
 
-// 选项菜单状态
-const activeMenu = ref(null)
-const copiedState = ref({})
-function isCopied(id) { return !!copiedState.value[id] }
-function markCopied(id) {
-  copiedState.value[id] = true
-  refreshIcons()
-  setTimeout(() => {
-    copiedState.value[id] = false
-    refreshIcons()
-  }, 1600)
-}
-
-function toggleMenu(msgId) {
-  activeMenu.value = activeMenu.value === msgId ? null : msgId
-  refreshIcons()
-}
-
-function copyMessage(msg) {
-  navigator.clipboard.writeText(msg.content).then(() => {
-    activeMenu.value = null
-    markCopied(msg.id)
-  })
-}
-
+/* 单条消息删除由子组件上抛，这里仅维护列表状态 */
 function deleteMessage(msgId) {
   const idx = props.messages.findIndex(m => m.id === msgId)
   if (idx >= 0) {
     props.messages.splice(idx, 1)
   }
-  activeMenu.value = null
-}
-
-// 全局点击监听：关闭菜单
-function handleGlobalClick(e) {
-  // 检查点击是否在菜单按钮或菜单内部
-  const menuWrapper = e.target.closest('.menu-wrapper')
-  if (!menuWrapper) {
-    activeMenu.value = null
-  }
-}
-
-// 监听菜单状态，添加/移除全局点击监听
-watch(activeMenu, (newVal) => {
-  if (newVal !== null) {
-    // 菜单打开，添加监听器（下一帧，避免立即触发）
-    nextTick(() => {
-      document.addEventListener('click', handleGlobalClick)
-    })
-  } else {
-    // 菜单关闭，移除监听器
-    document.removeEventListener('click', handleGlobalClick)
-  }
   refreshIcons()
-  // 初始化为现有消息生成色条调色板
-  props.messages.forEach(m => { ensurePaletteFor(m) })
-})
+}
+
+/* 菜单逻辑已下沉至 MessageItem.vue */
 
 // 组件卸载时清理
 onBeforeUnmount(() => {
@@ -131,6 +85,7 @@ function switchBranch(direction) {
 const inputText = ref('')
 const messageListRef = ref(null)
 const inputRef = ref(null)
+const inputRowRef = ref(null)
 let removeWheel = null
 
 onMounted(() => {
@@ -246,8 +201,7 @@ function onKeydown(e) {
 
 /* 快捷操作（编辑/再生），更多行为可接入后端 */
 function startEdit(msg) {
-  inputText.value = msg.content
-  nextTick(() => inputRef.value?.focus?.())
+  inputRowRef.value?.setText?.(msg.content)
 }
 function regenerateMessage(msg) {
   console.log('请求重新生成：', msg.id)
@@ -298,6 +252,59 @@ function cancelPending() {
   refreshIcons()
 }
 
+/**
+ * 提交输入（来自 InputRow），创建用户消息并触发等待占位与滚动
+ * 注意：当 pending 中时不允许再次提交
+ */
+function onSubmit(text) {
+  const t = (text ?? '').trim()
+  if (!t) return
+
+  // 若等待中则直接返回（不允许再次发送）
+  if (pendingMessageId?.value) return
+
+  // 创建新消息
+  const newMessage = {
+    id: Date.now(),
+    role: 'user',
+    content: t
+  }
+
+  // 添加到消息列表
+  props.messages.push(newMessage)
+  // 为新消息生成色条调色板（若有头像则尝试提取主色）
+  ensurePaletteFor(newMessage)
+  // 启动 10 秒等待占位
+  startPendingFor(newMessage.id)
+
+  // 滚动到底部（丝滑且自然）
+  nextTick(() => {
+    setTimeout(() => {
+      if (messageListRef.value?.$el) {
+        const container = messageListRef.value.$el.querySelector('.scroll-container')
+        if (container) {
+          try {
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+          } catch (_) {
+            // 回退：rAF 动画
+            const start = container.scrollTop
+            const end = container.scrollHeight
+            const dur = 420
+            const t0 = performance.now()
+            const ease = t => 1 - Math.pow(1 - t, 3) // easeOutCubic
+            const step = (now) => {
+              const p = Math.min(1, (now - t0) / dur)
+              container.scrollTop = start + (end - start) * ease(p)
+              if (p < 1) requestAnimationFrame(step)
+            }
+            requestAnimationFrame(step)
+          }
+        }
+      }
+    }, 60)
+  })
+}
+
 function hasHtmlDoc(msg) { return hasHtmlDocText(msg.content) }
 function getHtmlDoc(msg) { return extractHtmlDocFromText(msg.content) }
 function splitDoc(msg) { return splitHtmlFromText(msg.content) }
@@ -312,170 +319,32 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
     >
       <div data-scope="message-list" class="tch-list-inner">
         <transition-group name="msg" tag="div">
-          <article
-            v-for="(m, idx) in props.messages"
-            :key="m.id"
-            data-scope="message-item"
-            :data-role="m.role"
-            class="floor-card glass"
-            :style="stripeStyle(m)"
-          >
-          <div class="floor-layout">
-            <!-- 左侧：头像、徽章、楼层号 -->
-            <div class="floor-left">
-              <div class="avatar role-user" v-if="m.role === 'user'">
-                <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-              </div>
-              <div class="avatar role-assistant" v-else-if="m.role === 'assistant'">
-                <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-              </div>
-              <div class="avatar role-system" v-else>
-                <span class="avatar-letter">{{ nameOf(m).charAt(0) }}</span>
-              </div>
-              <div class="role-badge">{{ roleLabel(m.role) }}</div>
-              <div class="floor-index-left" :title="'楼层序号'">#{{ idx + 1 }}</div>
-            </div>
-
-            <!-- 右侧：消息内容 -->
-            <div class="floor-right">
-              <header class="floor-header">
-                <div class="name">{{ nameOf(m) }}</div>
-                <!-- 右侧区：等待chip + 更多操作按钮 -->
-                <div class="header-right">
-                  <!-- 等待占位动画：右对齐，更多操作按钮左侧 -->
-                  <div v-if="pendingMessageId === m.id" class="pending-chip" aria-live="polite">
-                    <span class="chip-spinner" aria-hidden="true"></span>
-                    <span class="chip-text">等待中...{{ pendingSeconds }}s</span>
-                  </div>
-                  <!-- 三点菜单按钮 -->
-                  <div class="menu-wrapper">
-                  <button
-                    class="menu-btn"
-                    @click.stop="toggleMenu(m.id)"
-                    :aria-expanded="activeMenu === m.id"
-                    aria-label="更多操作"
-                    title="更多操作"
-                  >
-                    <i data-lucide="more-vertical" class="icon-16" aria-hidden="true"></i>
-                    <span class="sr-only">更多</span>
-                  </button>
-                  <!-- 选项菜单（向左弹出） -->
-                  <transition name="menu-slide">
-                    <div v-if="activeMenu === m.id" class="menu-dropdown">
-                      <button class="menu-item" @click="copyMessage(m)">
-                        <i data-lucide="copy" class="icon-14" aria-hidden="true"></i>
-                        复制
-                      </button>
-                      <button
-                        v-if="idx === props.messages.length - 1"
-                        class="menu-item menu-danger"
-                        @click="deleteMessage(m.id)"
-                      >
-                        <i data-lucide="trash-2" class="icon-14" aria-hidden="true"></i>
-                        删除
-                      </button>
-                    </div>
-                  </transition>
-                  </div>
-                </div>
-              </header>
-              <section data-part="content" class="floor-content">
-                <HtmlStage
-                  v-if="splitDoc(m).html"
-                  :before="splitDoc(m).before"
-                  :html="splitDoc(m).html"
-                  :after="splitDoc(m).after"
-                />
-                <template v-else>
-                  {{ m.content }}
-                </template>
-              </section>
-              
-              <!-- 楼层页脚：左侧操作按钮 + 右侧分支切换（同一行） -->
-              <div class="floor-footer">
-                <div class="floor-actions">
-                  <transition name="copy-tip">
-                    <div v-if="isCopied(m.id)" class="copy-tip">已复制</div>
-                  </transition>
-
-                  <button class="act-btn" :class="{ success: isCopied(m.id) }" @click="copyMessage(m)" :title="isCopied(m.id) ? '已复制' : '复制'" :aria-label="isCopied(m.id) ? '已复制' : '复制'">
-                    <i :data-lucide="isCopied(m.id) ? 'check' : 'copy'" class="icon-16" aria-hidden="true"></i>
-                  </button>
-                  <button class="act-btn" @click="regenerateMessage(m)" title="重试" aria-label="重试">
-                    <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
-                  </button>
-                  <button class="act-btn" @click="startEdit(m)" title="编辑" aria-label="编辑">
-                    <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>
-                  </button>
-                </div>
-
-                <div v-if="idx === props.messages.length - 1 && totalBranches > 1" class="branch-switcher">
-                  <button
-                    class="branch-btn"
-                    @click="switchBranch('left')"
-                    :disabled="activeBranch <= 1"
-                    title="上一个分支"
-                    aria-label="上一个分支"
-                  >
-                    <i data-lucide="chevron-left" class="icon-16" aria-hidden="true"></i>
-                  </button>
-                  <span class="branch-indicator">{{ activeBranch }}/{{ totalBranches }}</span>
-                  <button
-                    class="branch-btn"
-                    @click="switchBranch('right')"
-                    :disabled="activeBranch >= totalBranches"
-                    title="下一个分支"
-                    aria-label="下一个分支"
-                  >
-                    <i data-lucide="chevron-right" class="icon-16" aria-hidden="true"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-            </div>
-
-
-          </article>
+            <MessageItem
+              v-for="(m, idx) in props.messages"
+              :key="m.id"
+              :msg="m"
+              :idx="idx"
+              :is-last="idx === props.messages.length - 1"
+              :split-before="splitDoc(m).before"
+              :split-html="splitDoc(m).html"
+              :split-after="splitDoc(m).after"
+              :pending-active="pendingMessageId === m.id"
+              :pending-seconds="pendingSeconds"
+              @delete="deleteMessage"
+              @regenerate="regenerateMessage"
+              @edit="startEdit"
+            />
         </transition-group>
       </div>
     </CustomScrollbar>
 
-    <!-- 输入区（多行文本，玻璃拟态容器 + 工具栏 + Lucide 图标） -->
-    <div class="tch-input-row glass">
-      <div class="tch-tools-left">
-        <button class="tool-btn round" title="拓展" aria-label="拓展" data-tooltip-target="tt-expand">
-          <i data-lucide="plus" class="icon-16" aria-hidden="true"></i>
-        </button>
-        <div id="tt-expand" role="tooltip" class="absolute z-10 invisible inline-block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 tooltip">
-          拓展
-          <div class="tooltip-arrow" data-popper-arrow></div>
-        </div>
-      </div>
-      <textarea
-        ref="inputRef"
-        v-model="inputText"
-        class="tch-input"
-        placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
-        @keydown="onKeydown"
-      ></textarea>
-      <div class="tch-tools-right">
-        <button
-          class="tch-send"
-          :disabled="pendingMessageId ? false : !inputText.trim()"
-          @click="pendingMessageId ? cancelPending() : sendMessage()"
-          :title="pendingMessageId ? '停止等待' : '发送 (Enter)'"
-          :aria-label="pendingMessageId ? '停止等待' : '发送'"
-          data-tooltip-target="tt-send"
-        >
-          <i :data-lucide="pendingMessageId ? 'square' : 'send'" class="icon-16" aria-hidden="true"></i>
-          <span class="tch-send-text">{{ pendingMessageId ? '停止' : '发送' }}</span>
-        </button>
-        <div id="tt-send" role="tooltip" class="absolute z-10 invisible inline-block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 tooltip">
-          发送
-          <div class="tooltip-arrow" data-popper-arrow></div>
-        </div>
-      </div>
-    </div>
+    <!-- 输入区：抽离为组件 InputRow，职责单一，便于复用与测试 -->
+    <InputRow
+      ref="inputRowRef"
+      :pending-active="!!pendingMessageId"
+      @submit="onSubmit"
+      @cancel="cancelPending"
+    />
   </div>
 </template>
 
