@@ -57,7 +57,30 @@ const initialRegexData = {
 }
 
 // 当前编辑的数据（内存中）
-const currentData = ref(JSON.parse(JSON.stringify(props.regexData || initialRegexData)))
+/** 深拷贝 */
+function deepClone(x) { return JSON.parse(JSON.stringify(x)) }
+/** 规范化 正则规则集 结构 */
+function normalizeRegexData(src) {
+  if (!src || typeof src !== 'object') return null
+  const name = src.name || '正则规则集'
+  let rules = []
+  if (Array.isArray(src.regex_rules)) rules = src.regex_rules
+  else if (Array.isArray(src.rules)) rules = src.rules
+  else if (Array.isArray(src)) rules = src
+  else if (src.find_regex || src.replace_regex || src.id) rules = [src]
+  return { name, regex_rules: rules }
+}
+const currentData = ref(
+  deepClone(
+    normalizeRegexData(props.regexData) || initialRegexData
+  )
+)
+// 外部数据变更时同步
+watch(() => props.regexData, async (v) => {
+  currentData.value = deepClone(normalizeRegexData(v) || initialRegexData)
+  await nextTick()
+  window.lucide?.createIcons?.()
+})
 
 // 新增规则
 const newId = ref('')

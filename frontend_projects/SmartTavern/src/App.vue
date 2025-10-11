@@ -25,6 +25,7 @@ import OptionsView from '@/components/home/OptionsView.vue'
 import SandboxStage from '@/components/sandbox/SandboxStage.vue'
 import { useSidebar } from '@/composables/useSidebar.js'
 import ThemeManager from '@/features/themes/manager'
+import DataCatalog from '@/services/dataCatalog'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -47,17 +48,49 @@ const charactersOpen = ref(false)
 const personaOpen = ref(false)
 const regexOpen = ref(false)
 
-// 内容查看模态框
+ // 内容查看模态框
 const viewModalOpen = ref(false)
 const viewModalTitle = ref('')
 const viewModalType = ref('') // 'preset', 'regex', 'worldbook', etc.
 const viewModalData = ref(null)
+const viewModalLoading = ref(false)
+const viewModalError = ref('')
 
-function openViewModal(type, title, data) {
+async function openViewModal(type, title, fileOrData) {
   viewModalType.value = type
   viewModalTitle.value = title
-  viewModalData.value = data
+  viewModalError.value = ''
+  viewModalLoading.value = true
+  viewModalData.value = null
   viewModalOpen.value = true
+
+  try {
+    if (fileOrData && typeof fileOrData === 'object') {
+      // 直接使用传入的数据
+      viewModalData.value = fileOrData
+    } else if (typeof fileOrData === 'string') {
+      // 按类型调用后端详情接口，并写入缓存（由服务内部处理）
+      const fetchers = {
+        preset:    (f) => DataCatalog.getPresetDetail(f),
+        worldbook: (f) => DataCatalog.getWorldBookDetail(f),
+        character: (f) => DataCatalog.getCharacterDetail(f),
+        persona:   (f) => DataCatalog.getPersonaDetail(f),
+        regex:     (f) => DataCatalog.getRegexRuleDetail(f),
+      }
+      const fn = fetchers[type]
+      if (!fn) throw new Error(`未知类型: ${type}`)
+      const res = await fn(fileOrData)
+      // 后端结构为 { file, name, description, content }
+      viewModalData.value = res && (res.content ?? res)
+    } else {
+      // 无文件参数时保持空（例如纯占位模式）
+    }
+  } catch (e) {
+    viewModalError.value = e?.message || String(e)
+  } finally {
+    viewModalLoading.value = false
+    nextTick(() => { window?.lucide?.createIcons?.() })
+  }
 }
 
 function closeViewModal() {
@@ -65,6 +98,8 @@ function closeViewModal() {
   viewModalType.value = ''
   viewModalTitle.value = ''
   viewModalData.value = null
+  viewModalLoading.value = false
+  viewModalError.value = ''
 }
 
 // 主页功能模态（Load / Gallery / Options）
@@ -502,7 +537,7 @@ function onSidebarViewUpdate(v) {
         <PresetsPanel
           v-if="showSidebar && presetsOpen"
           @close="presetsOpen = false"
-          @view="(key) => openViewModal('preset', '预设详情 - ' + key, null)"
+          @view="(key) => openViewModal('preset', '预设详情 - ' + key, key)"
         />
       </transition>
 
@@ -511,7 +546,7 @@ function onSidebarViewUpdate(v) {
         <WorldbookPanel
           v-if="showSidebar && worldbookOpen"
           @close="worldbookOpen = false"
-          @view="(key) => openViewModal('worldbook', '世界书详情 - ' + key, null)"
+          @view="(key) => openViewModal('worldbook', '世界书详情 - ' + key, key)"
         />
       </transition>
 
@@ -520,7 +555,7 @@ function onSidebarViewUpdate(v) {
         <CharactersPanel
           v-if="showSidebar && charactersOpen"
           @close="charactersOpen = false"
-          @view="(key) => openViewModal('character', '角色卡详情 - ' + key, null)"
+          @view="(key) => openViewModal('character', '角色卡详情 - ' + key, key)"
         />
       </transition>
 
@@ -529,7 +564,7 @@ function onSidebarViewUpdate(v) {
         <PersonaPanel
           v-if="showSidebar && personaOpen"
           @close="personaOpen = false"
-          @view="(key) => openViewModal('persona', '用户信息详情 - ' + key, null)"
+          @view="(key) => openViewModal('persona', '用户信息详情 - ' + key, key)"
         />
       </transition>
 
@@ -538,7 +573,7 @@ function onSidebarViewUpdate(v) {
         <RegexPanel
           v-if="showSidebar && regexOpen"
           @close="regexOpen = false"
-          @view="(key) => openViewModal('regex', '正则规则详情 - ' + key, null)"
+          @view="(key) => openViewModal('regex', '正则规则详情 - ' + key, key)"
         />
       </transition>
 
@@ -588,20 +623,27 @@ function onSidebarViewUpdate(v) {
       :title="viewModalTitle"
       @close="closeViewModal"
     >
+      <div v-if="viewModalLoading" class="modal-loading">读取中...</div>
+      <div v-else-if="viewModalError" class="modal-error">读取失败：{{ viewModalError }}</div>
       <PresetDetailView
-        v-if="viewModalType === 'preset'"
+        v-else-if="viewModalType === 'preset'"
+        :presetData="viewModalData"
       />
       <WorldbookDetailView
         v-else-if="viewModalType === 'worldbook'"
+        :worldbookData="viewModalData"
       />
       <CharacterDetailView
         v-else-if="viewModalType === 'character'"
+        :characterData="viewModalData"
       />
       <PersonaDetailView
         v-else-if="viewModalType === 'persona'"
+        :personaData="viewModalData"
       />
       <RegexDetailView
         v-else-if="viewModalType === 'regex'"
+        :regexData="viewModalData"
       />
       <div v-else class="modal-placeholder">
         <div class="placeholder-icon">📋</div>

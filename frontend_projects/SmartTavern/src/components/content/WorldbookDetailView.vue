@@ -46,8 +46,50 @@ const initialWorldbookData = {
   ]
 }
 
+/** 深拷贝工具 */
+function deepClone(x) {
+  return JSON.parse(JSON.stringify(x))
+}
+
+/** 规范化后端/外部传入的数据到本组件内部结构 */
+function normalizeWorldbookData(src) {
+  if (!src || typeof src !== 'object') return null
+  const name = src.name || '世界书'
+  // 兼容两种结构：
+  // - 内部结构：{ world_books: [...] }
+  // - 后端文件/接口：{ entries: [...] }
+  const entries = Array.isArray(src.world_books)
+    ? src.world_books
+    : Array.isArray(src.entries)
+      ? src.entries
+      : []
+  const mapped = entries.map(e => ({
+    id: e?.id ?? e?.identifier ?? '',
+    name: e?.name ?? e?.title ?? '',
+    enabled: e?.enabled !== false,
+    content: e?.content ?? e?.text ?? '',
+    mode: e?.mode ?? 'always',
+    position: e?.position ?? 'before_char',
+    order: typeof e?.order === 'number' ? e.order : 100,
+    depth: typeof e?.depth === 'number' ? e.depth : 0,
+    keys: Array.isArray(e?.keys) ? e.keys : [],
+  }))
+  return { name, world_books: mapped }
+}
+
 // 当前编辑的数据（内存中）
-const currentData = ref(JSON.parse(JSON.stringify(props.worldbookData || initialWorldbookData)))
+const currentData = ref(
+  deepClone(
+    normalizeWorldbookData(props.worldbookData) || initialWorldbookData
+  )
+)
+
+// 当外部传入的 worldbookData 变化时，重新规范化并刷新图标
+watch(() => props.worldbookData, async (v) => {
+  currentData.value = deepClone(normalizeWorldbookData(v) || initialWorldbookData)
+  await nextTick()
+  window.lucide?.createIcons?.()
+})
 
 // 新增条目
 const newId = ref('')

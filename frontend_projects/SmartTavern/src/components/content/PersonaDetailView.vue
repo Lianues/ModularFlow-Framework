@@ -11,8 +11,28 @@ const initialPersonaData = {
   description: '这是一个演示用的用户信息，可以包含用户的偏好、背景、对话风格等设定。\n\n你可以在这里描述用户的性格特点、兴趣爱好、说话方式等，帮助 AI 更好地理解和适应用户。'
 }
 
+/** 深拷贝 */
+function deepClone(x) { return JSON.parse(JSON.stringify(x)) }
+/** 规范化 Persona 结构 */
+function normalizePersonaData(src) {
+  if (!src || typeof src !== 'object') return null
+  return {
+    name: src.name || '用户',
+    description: src.description || ''
+  }
+}
 // 当前编辑的数据（内存中）
-const currentData = ref(JSON.parse(JSON.stringify(props.personaData || initialPersonaData)))
+const currentData = ref(
+  deepClone(
+    normalizePersonaData(props.personaData) || initialPersonaData
+  )
+)
+// 外部数据变更时同步
+watch(() => props.personaData, async (v) => {
+  currentData.value = deepClone(normalizePersonaData(v) || initialPersonaData)
+  await nextTick()
+  window.lucide?.createIcons?.()
+})
 
 // 本地草稿
 const nameDraft = ref(currentData.value.name || '')

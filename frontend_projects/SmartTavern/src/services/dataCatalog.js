@@ -60,7 +60,7 @@ async function postJSON(path, body = {}) {
   return data;
 }
 
-// Public API
+ // Public API
 const DataCatalog = {
   // All "list_*" endpoints ignore input and return full fields from fixed backend paths.
   listPresets() {
@@ -78,6 +78,70 @@ const DataCatalog = {
   listRegexRules() {
     return postJSON('smarttavern/data_catalog/list_regex_rules', {});
   },
+
+  // Lightweight cache (in-memory + localStorage)
+  _lsKey: 'st.datacache.v1',
+  _mem: new Map(),
+  _ensureStore() {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem(this._lsKey);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) { return {}; }
+  },
+  _saveStore(store) {
+    if (typeof window === 'undefined') return;
+    try { localStorage.setItem(this._lsKey, JSON.stringify(store)); } catch (_) {}
+  },
+  _ck(type, file) { return `${type}:${String(file || '')}`; },
+  _getCached(type, file) {
+    const key = this._ck(type, file);
+    if (this._mem.has(key)) return this._mem.get(key);
+    const store = this._ensureStore();
+    return store[key] || null;
+  },
+  _setCached(type, file, value, persist = true) {
+    const key = this._ck(type, file);
+    this._mem.set(key, value);
+    if (persist) {
+      const store = this._ensureStore();
+      // naive cap: keep last 50 entries to avoid bloat
+      store[key] = value;
+      const keys = Object.keys(store);
+      if (keys.length > 50) {
+        const toDelete = keys.length - 50;
+        for (let i = 0; i < toDelete; i++) delete store[keys[i]];
+      }
+      this._saveStore(store);
+    }
+  },
+
+  // Detail fetchers with caching
+  async _getDetail(type, file, opts = {}) {
+    const useCache = opts.useCache !== false;
+    if (useCache) {
+      const cached = this._getCached(type, file);
+      if (cached) return cached;
+    }
+    const pathMap = {
+      preset: 'smarttavern/data_catalog/get_preset_detail',
+      worldbook: 'smarttavern/data_catalog/get_world_book_detail',
+      character: 'smarttavern/data_catalog/get_character_detail',
+      persona: 'smarttavern/data_catalog/get_persona_detail',
+      regex: 'smarttavern/data_catalog/get_regex_rule_detail',
+    };
+    const path = pathMap[type];
+    if (!path) throw new Error(`[DataCatalog] Unknown detail type: ${type}`);
+    const res = await postJSON(path, { file });
+    this._setCached(type, file, res, opts.persist !== false);
+    return res;
+  },
+
+  getPresetDetail(file, opts)   { return this._getDetail('preset', file, opts); },
+  getWorldBookDetail(file, opts){ return this._getDetail('worldbook', file, opts); },
+  getCharacterDetail(file, opts){ return this._getDetail('character', file, opts); },
+  getPersonaDetail(file, opts)  { return this._getDetail('persona', file, opts); },
+  getRegexRuleDetail(file, opts){ return this._getDetail('regex', file, opts); },
 
   // Small helper to map backend items to UI cards (icon per type)
   mapToCards(items, type = 'generic') {

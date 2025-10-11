@@ -112,8 +112,40 @@ const initialPresetData = {
   ]
 }
 
+/** 深拷贝 */
+function deepClone(x) { return JSON.parse(JSON.stringify(x)) }
+/** 规范化后端/外部传入的预设结构到本组件内部期望结构 */
+function normalizePresetData(src) {
+  if (!src || typeof src !== 'object') return null
+  const name = src.name || '预设'
+  const api_config = typeof src.api_config === 'object' ? src.api_config : {
+    enabled: true, temperature: 1.0, top_p: 1.0, top_k: 0, max_context: 4095,
+    max_tokens: 300, stream: true, frequency_penalty: 0, presence_penalty: 0
+  }
+  const prompts = Array.isArray(src.prompts)
+    ? src.prompts
+    : Array.isArray(src.templates)
+      ? src.templates
+      : []
+  const regex_rules = Array.isArray(src.regex_rules)
+    ? src.regex_rules
+    : Array.isArray(src.rules)
+      ? src.rules
+      : (src.find_regex || src.replace_regex || src.id) ? [src] : []
+  return { name, api_config, prompts, regex_rules }
+}
 // 当前编辑的数据（内存中）
-const currentData = ref(JSON.parse(JSON.stringify(props.presetData || initialPresetData)))
+const currentData = ref(
+  deepClone(
+    normalizePresetData(props.presetData) || initialPresetData
+  )
+)
+// 外部数据变更时同步
+watch(() => props.presetData, async (v) => {
+  currentData.value = deepClone(normalizePresetData(v) || initialPresetData)
+  await nextTick()
+  window.lucide?.createIcons?.()
+})
 
 // API 配置
 const apiOpen = ref(true)

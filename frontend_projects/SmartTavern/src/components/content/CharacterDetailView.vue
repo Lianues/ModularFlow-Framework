@@ -57,8 +57,46 @@ const initialCharacterData = {
   ]
 }
 
+/** 深拷贝 */
+function deepClone(x) { return JSON.parse(JSON.stringify(x)) }
+/** 规范化后端/外部传入的角色卡结构到本组件内部期望结构 */
+function normalizeCharacterData(src) {
+  if (!src || typeof src !== 'object') return null
+  const name = src.name || '角色'
+  const description = src.description || ''
+  const message = Array.isArray(src.message) ? src.message
+                 : Array.isArray(src.messages) ? src.messages
+                 : []
+  // world_book 可能是对象 { name, entries } 或直接 entries 数组
+  let world_book
+  if (Array.isArray(src.entries)) {
+    world_book = { name: src.world_book?.name || '角色世界书', entries: src.entries }
+  } else if (Array.isArray(src.world_book?.entries)) {
+    world_book = { name: src.world_book.name || '角色世界书', entries: src.world_book.entries }
+  } else if (Array.isArray(src.worldbook?.entries)) {
+    world_book = { name: src.worldbook.name || '角色世界书', entries: src.worldbook.entries }
+  } else {
+    world_book = { name: src.world_book?.name || '角色世界书', entries: [] }
+  }
+  const regex_rules = Array.isArray(src.regex_rules)
+    ? src.regex_rules
+    : Array.isArray(src.rules)
+      ? src.rules
+      : (src.find_regex || src.replace_regex || src.id) ? [src] : []
+  return { name, description, message, world_book, regex_rules }
+}
 // 当前编辑的数据（内存中）
-const currentData = ref(JSON.parse(JSON.stringify(props.characterData || initialCharacterData)))
+const currentData = ref(
+  deepClone(
+    normalizeCharacterData(props.characterData) || initialCharacterData
+  )
+)
+// 外部数据变更时同步
+watch(() => props.characterData, async (v) => {
+  currentData.value = deepClone(normalizeCharacterData(v) || initialCharacterData)
+  await nextTick()
+  window.lucide?.createIcons?.()
+})
 
 // 基本信息编辑
 const nameDraft = ref(currentData.value.name || '')
