@@ -1,0 +1,375 @@
+# -*- coding: utf-8 -*-
+"""
+SmartTavern.data_catalog 实现层
+
+职责
+- 扫描 backend_projects/SmartTavern/data 下各类资源文件夹
+- 首期：实现“预设（presets）目录”的清单读取（name/description 字段提取）
+- 扩展：实现 world_books / characters / persona / regex_rules 的清单读取
+
+说明
+- 本文件仅提供纯实现函数；API 注册在同目录 data_catalog.py 中完成
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+import json
+
+
+# ---------- 路径与工具 ----------
+
+def _repo_root() -> Path:
+    """
+    返回仓库根目录（基于当前文件层级向上回溯）
+    当前文件位于: repo_root/api/modules/SmartTavern/data_catalog/impl.py
+    parents[4] => repo_root
+    """
+    return Path(__file__).resolve().parents[4]
+
+
+def _safe_read_json(p: Path) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            return json.load(f), None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def _ensure_str(x: Any) -> Optional[str]:
+    if x is None:
+        return None
+    try:
+        return str(x)
+    except Exception:
+        return None
+
+
+def _path_rel_to_root(p: Path, root: Path) -> str:
+    """
+    统一返回 POSIX 风格路径（使用 '/' 分隔），避免在 Windows 下出现 '\\' 与断言不匹配。
+    """
+    try:
+        return p.relative_to(root).as_posix()
+    except Exception:
+        # 兼容老版本 Python 无 Path.is_relative_to 或跨盘情况
+        try:
+            return p.resolve().as_posix()
+        except Exception:
+            # 最后一层保证：替换反斜杠
+            return str(p).replace("\\", "/")
+
+
+# ---------- 实现：列出 presets ----------
+
+def list_presets_impl(base_dir: Optional[str] = None,
+                      fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 presets 目录，返回文件相对路径与所需字段（name/description）
+
+    Args:
+      base_dir: 可选，覆盖默认目录（绝对路径或相对仓库根）
+      fields:   允许传入 ["name","description"] 的子集；默认两者都返回
+
+    Returns:
+      {
+        "folder": "backend_projects/SmartTavern/data/presets",
+        "total": N,
+        "items": [
+          {"file":"backend_projects/.../Default.json","name":"..","description":".."}, ...
+        ],
+        "errors": [{"file":"...","error":"..."}?]
+      }
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "presets"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out
+
+
+# ---------- 实现：列出 world_books ----------
+
+def list_world_books_impl(base_dir: Optional[str] = None,
+                          fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 world_books 目录，返回文件相对路径与所需字段（name/description）
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "world_books"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out
+
+
+# ---------- 实现：列出 characters ----------
+
+def list_characters_impl(base_dir: Optional[str] = None,
+                         fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 characters 目录，返回文件相对路径与所需字段（name/description）
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "characters"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out
+
+
+# ---------- 实现：列出 persona ----------
+
+def list_personas_impl(base_dir: Optional[str] = None,
+                       fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 persona 目录，返回文件相对路径与所需字段（name/description）
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "persona"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out
+
+
+# ---------- 实现：列出 regex_rules ----------
+
+def list_regex_rules_impl(base_dir: Optional[str] = None,
+                          fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 regex_rules 目录，返回文件相对路径与所需字段（name/description）
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "regex_rules"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import DataCatalog from '@/services/dataCatalog'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 }, // 左侧锚定像素（与外观面板一致：12+280+16）
@@ -21,16 +22,23 @@ const panelStyle = computed(() => ({
   zIndex: String(props.zIndex),
 }))
 
-// 占位数据
-const usingKey = ref('preset-2')
-const presets = ref([
-  { key:'preset-1', icon:'🧩', name:'占位预设 A', desc:'用于演示的占位预设，描述文案较短。' },
-  { key:'preset-2', icon:'🧪', name:'占位预设 B', desc:'用于演示的占位预设，当前被标记为使用中。' },
-  { key:'preset-3', icon:'🧭', name:'占位预设 C', desc:'用于演示的占位预设，描述可较长以测试多行布局效果与折行。用于演示的占位预设，描述可较长以测试多行布局效果与折行。' },
-  { key:'preset-4', icon:'📦', name:'占位预设 D', desc:'预设说明文字' },
-  { key:'preset-5', icon:'🧠', name:'占位预设 E', desc:'预设说明文字' },
-  { key:'preset-6', icon:'⚙️', name:'占位预设 F', desc:'预设说明文字' },
-])
+/** 远程数据 */
+const loading = ref(true)
+const error = ref(null)
+const usingKey = ref(null)
+const presets = ref([])
+
+async function fetchPresets() {
+  try {
+    const res = await DataCatalog.listPresets()
+    presets.value = DataCatalog.mapToCards(res.items, 'presets')
+    if (!usingKey.value && presets.value.length) usingKey.value = presets.value[0].key
+  } catch (e) {
+    error.value = e?.message || String(e)
+  } finally {
+    loading.value = false
+  }
+}
 
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
@@ -38,7 +46,11 @@ function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 /** 图标渲染：lucide 名称优先，否则回退 emoji */
 const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
-onMounted(() => window.lucide?.createIcons?.())
+
+onMounted(() => {
+  window.lucide?.createIcons?.()
+  fetchPresets()
+})
 </script>
 
 <template>
@@ -56,7 +68,9 @@ onMounted(() => window.lucide?.createIcons?.())
       </header>
 
       <CustomScrollbar class="pr-body">
-        <div class="pr-list">
+        <div v-if="loading" class="pr-loading">加载中...</div>
+        <div v-else-if="error" class="pr-error">加载失败：{{ error }}</div>
+        <div v-else class="pr-list">
           <div
             v-for="it in presets"
             :key="it.key"
@@ -246,6 +260,14 @@ onMounted(() => window.lucide?.createIcons?.())
   background: rgba(220, 38, 38, 0.1);
 }
 
+/* States */
+.pr-loading,
+.pr-error {
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(var(--st-color-text), 0.8);
+}
+.pr-error { color: rgb(220, 38, 38); }
 
 @media (max-width: 640px) {
   .pr-card { grid-template-columns: 1fr; }

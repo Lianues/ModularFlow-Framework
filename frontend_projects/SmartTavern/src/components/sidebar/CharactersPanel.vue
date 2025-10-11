@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import DataCatalog from '@/services/dataCatalog'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 },
@@ -21,16 +22,23 @@ const panelStyle = computed(() => ({
   zIndex: String(props.zIndex),
 }))
 
-// 占位数据
-const usingKey = ref('char-2')
-const characters = ref([
-  { key:'char-1', icon:'🧑‍🚀', name:'占位角色 A', desc:'示例角色卡，包含角色性格、背景与对话风格。' },
-  { key:'char-2', icon:'👤', name:'占位角色 B', desc:'示例角色卡，当前被标记为使用中。' },
-  { key:'char-3', icon:'🎭', name:'占位角色 C', desc:'示例角色卡，描述可较长以测试多行布局效果与折行。示例角色卡，描述可较长以测试多行布局效果与折行。' },
-  { key:'char-4', icon:'👨‍💼', name:'占位角色 D', desc:'角色设定与对话风格' },
-  { key:'char-5', icon:'👩‍🎨', name:'占位角色 E', desc:'角色设定与对话风格' },
-  { key:'char-6', icon:'🤖', name:'占位角色 F', desc:'角色设定与对话风格' },
-])
+/** 远程数据 */
+const loading = ref(true)
+const error = ref(null)
+const usingKey = ref(null)
+const characters = ref([])
+
+async function fetchCharacters() {
+  try {
+    const res = await DataCatalog.listCharacters()
+    characters.value = DataCatalog.mapToCards(res.items, 'characters')
+    if (!usingKey.value && characters.value.length) usingKey.value = characters.value[0].key
+  } catch (e) {
+    error.value = e?.message || String(e)
+  } finally {
+    loading.value = false
+  }
+}
 
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
@@ -38,7 +46,11 @@ function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 /** 图标渲染：lucide 名称优先，否则回退 emoji */
 const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
-onMounted(() => window.lucide?.createIcons?.())
+
+onMounted(() => {
+  window.lucide?.createIcons?.()
+  fetchCharacters()
+})
 </script>
 
 <template>
@@ -56,7 +68,9 @@ onMounted(() => window.lucide?.createIcons?.())
       </header>
 
       <CustomScrollbar class="ch-body">
-        <div class="ch-list">
+        <div v-if="loading" class="ch-loading">加载中...</div>
+        <div v-else-if="error" class="ch-error">加载失败：{{ error }}</div>
+        <div v-else class="ch-list">
           <div
             v-for="it in characters"
             :key="it.key"
@@ -244,6 +258,15 @@ onMounted(() => window.lucide?.createIcons?.())
   border-color: rgba(220, 38, 38, 0.7);
   background: rgba(220, 38, 38, 0.1);
 }
+
+/* States */
+.ch-loading,
+.ch-error {
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(var(--st-color-text), 0.8);
+}
+.ch-error { color: rgb(220, 38, 38); }
 
 @media (max-width: 640px) {
   .ch-card { grid-template-columns: 1fr; }

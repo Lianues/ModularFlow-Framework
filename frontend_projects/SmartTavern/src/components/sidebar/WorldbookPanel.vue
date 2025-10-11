@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import DataCatalog from '@/services/dataCatalog'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 },
@@ -21,15 +22,23 @@ const panelStyle = computed(() => ({
   zIndex: String(props.zIndex),
 }))
 
-// 占位数据
-const usingKey = ref('worldbook-1')
-const worldbooks = ref([
-  { key:'worldbook-1', icon:'📚', name:'占位世界书 A', desc:'示例世界观设定，包含世界观术语与背景知识。' },
-  { key:'worldbook-2', icon:'🌍', name:'占位世界书 B', desc:'示例世界观设定，当前被标记为使用中。' },
-  { key:'worldbook-3', icon:'📖', name:'占位世界书 C', desc:'示例世界观设定，描述可较长以测试多行布局效果与折行。示例世界观设定，描述可较长以测试多行布局效果与折行。' },
-  { key:'worldbook-4', icon:'🗺️', name:'占位世界书 D', desc:'世界观术语库' },
-  { key:'worldbook-5', icon:'📜', name:'占位世界书 E', desc:'世界观术语库' },
-])
+/** 远程数据 */
+const loading = ref(true)
+const error = ref(null)
+const usingKey = ref(null)
+const worldbooks = ref([])
+
+async function fetchWorldBooks() {
+  try {
+    const res = await DataCatalog.listWorldBooks()
+    worldbooks.value = DataCatalog.mapToCards(res.items, 'world_books')
+    if (!usingKey.value && worldbooks.value.length) usingKey.value = worldbooks.value[0].key
+  } catch (e) {
+    error.value = e?.message || String(e)
+  } finally {
+    loading.value = false
+  }
+}
 
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
@@ -37,7 +46,11 @@ function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 /** 图标渲染：lucide 名称优先，否则回退 emoji */
 const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
-onMounted(() => window.lucide?.createIcons?.())
+
+onMounted(() => {
+  window.lucide?.createIcons?.()
+  fetchWorldBooks()
+})
 </script>
 
 <template>
@@ -55,7 +68,9 @@ onMounted(() => window.lucide?.createIcons?.())
       </header>
 
       <CustomScrollbar class="wb-body">
-        <div class="wb-list">
+        <div v-if="loading" class="wb-loading">加载中...</div>
+        <div v-else-if="error" class="wb-error">加载失败：{{ error }}</div>
+        <div v-else class="wb-list">
           <div
             v-for="it in worldbooks"
             :key="it.key"
@@ -244,6 +259,15 @@ onMounted(() => window.lucide?.createIcons?.())
   border-color: rgba(220, 38, 38, 0.7);
   background: rgba(220, 38, 38, 0.1);
 }
+
+/* States */
+.wb-loading,
+.wb-error {
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(var(--st-color-text), 0.8);
+}
+.wb-error { color: rgb(220, 38, 38); }
 
 @media (max-width: 640px) {
   .wb-card { grid-template-columns: 1fr; }

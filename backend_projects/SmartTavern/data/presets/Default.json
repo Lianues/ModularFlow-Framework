@@ -1,4 +1,6 @@
 {
+    "name": "默认预设",
+    "description": "这是默认预设的描述",
     "setting": {
         "temperature": 1,
         "frequency_penalty": 0,

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import DataCatalog from '@/services/dataCatalog'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 },
@@ -21,15 +22,23 @@ const panelStyle = computed(() => ({
   zIndex: String(props.zIndex),
 }))
 
-// 占位数据
-const usingKey = ref('regex-2')
-const regexRules = ref([
-  { key:'regex-1', icon:'🧹', name:'占位正则 A', desc:'示例清洗规则，用于文本后处理与格式规范化。' },
-  { key:'regex-2', icon:'🔧', name:'占位正则 B', desc:'示例清洗规则，当前被标记为使用中。' },
-  { key:'regex-3', icon:'⚙️', name:'占位正则 C', desc:'示例清洗规则，描述可较长以测试多行布局效果与折行。示例清洗规则，描述可较长以测试多行布局效果与折行。' },
-  { key:'regex-4', icon:'🛠️', name:'占位正则 D', desc:'文本后处理规则' },
-  { key:'regex-5', icon:'📝', name:'占位正则 E', desc:'文本后处理规则' },
-])
+/** 远程数据 */
+const loading = ref(true)
+const error = ref(null)
+const usingKey = ref(null)
+const regexRules = ref([])
+
+async function fetchRegexRules() {
+  try {
+    const res = await DataCatalog.listRegexRules()
+    regexRules.value = DataCatalog.mapToCards(res.items, 'regex_rules')
+    if (!usingKey.value && regexRules.value.length) usingKey.value = regexRules.value[0].key
+  } catch (e) {
+    error.value = e?.message || String(e)
+  } finally {
+    loading.value = false
+  }
+}
 
 function close(){ emit('close') }
 function onUse(k){ usingKey.value = k; emit('use', k) }
@@ -37,7 +46,11 @@ function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
 /** 图标渲染：lucide 名称优先，否则回退 emoji */
 const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
-onMounted(() => window.lucide?.createIcons?.())
+
+onMounted(() => {
+  window.lucide?.createIcons?.()
+  fetchRegexRules()
+})
 </script>
 
 <template>
@@ -55,7 +68,9 @@ onMounted(() => window.lucide?.createIcons?.())
       </header>
 
       <CustomScrollbar class="rg-body">
-        <div class="rg-list">
+        <div v-if="loading" class="rg-loading">加载中...</div>
+        <div v-else-if="error" class="rg-error">加载失败：{{ error }}</div>
+        <div v-else class="rg-list">
           <div
             v-for="it in regexRules"
             :key="it.key"
@@ -244,6 +259,15 @@ onMounted(() => window.lucide?.createIcons?.())
   border-color: rgba(220, 38, 38, 0.7);
   background: rgba(220, 38, 38, 0.1);
 }
+
+/* States */
+.rg-loading,
+.rg-error {
+  padding: 12px;
+  font-size: 13px;
+  color: rgba(var(--st-color-text), 0.8);
+}
+.rg-error { color: rgb(220, 38, 38); }
 
 @media (max-width: 640px) {
   .rg-card { grid-template-columns: 1fr; }
