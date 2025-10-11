@@ -31,7 +31,6 @@ onUpdated(() => window.lucide?.createIcons?.())
     <div v-if="props.desc" class="st-preview-desc">
       {{ props.desc }}
     </div>
-    <div class="st-preview-badge">即将可配置</div>
   </button>
 </template>
 
@@ -76,15 +75,5 @@ onUpdated(() => window.lucide?.createIcons?.())
   font-size: 12px;
   color: rgba(var(--st-color-text), 0.7);
   margin-top: 2px;
-}
-.st-preview-badge {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
-  color: rgb(var(--st-color-text));
-  background: rgba(var(--st-primary),0.12);
-  border: 1px solid rgba(var(--st-primary),0.32);
-  border-radius: 9999px;
 }
 </style>

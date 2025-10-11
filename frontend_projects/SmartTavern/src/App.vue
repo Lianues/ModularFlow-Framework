@@ -13,6 +13,7 @@ import WorldbookPanel from '@/components/sidebar/WorldbookPanel.vue'
 import CharactersPanel from '@/components/sidebar/CharactersPanel.vue'
 import PersonaPanel from '@/components/sidebar/PersonaPanel.vue'
 import RegexPanel from '@/components/sidebar/RegexPanel.vue'
+import AIConfigPanel from '@/components/sidebar/AIConfigPanel.vue'
 import ContentViewModal from '@/components/common/ContentViewModal.vue'
 import PresetDetailView from '@/components/content/PresetDetailView.vue'
 import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
@@ -47,6 +48,7 @@ const worldbookOpen = ref(false)
 const charactersOpen = ref(false)
 const personaOpen = ref(false)
 const regexOpen = ref(false)
+const aiConfigOpen = ref(false)
 
  // 内容查看模态框
 const viewModalOpen = ref(false)
@@ -56,6 +58,9 @@ const viewModalData = ref(null)
 const viewModalLoading = ref(false)
 const viewModalError = ref('')
 const viewModalFile = ref('') // 详情对应的文件相对路径
+
+// 当前使用的预设数据（用于AI配置面板的覆盖提示）
+const currentPresetData = ref(null)
 
 async function openViewModal(type, title, fileOrData) {
   viewModalType.value = type
@@ -87,6 +92,10 @@ async function openViewModal(type, title, fileOrData) {
       viewModalData.value = res && (res.content ?? res)
       if (res && typeof res.file === 'string') {
         viewModalFile.value = res.file
+      }
+      // 如果是预设类型，保存为当前预设数据（用于AI配置覆盖检测）
+      if (type === 'preset' && res) {
+        currentPresetData.value = res.content ?? res
       }
     } else {
       // 无文件参数时保持空（例如纯占位模式）
@@ -165,6 +174,7 @@ watch(drawerOpen, (v) => {
     charactersOpen.value = false
     personaOpen.value = false
     regexOpen.value = false
+    aiConfigOpen.value = false
   }
 })
 
@@ -511,13 +521,14 @@ function onSidebarViewUpdate(v) {
           :theme="theme"
           @update:view="onSidebarViewUpdate"
           @update:theme="onThemeUpdate"
-          @openAppearance="(appearanceOpen = !appearanceOpen, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
-          @openAppSettings="(appSettingsOpen = !appSettingsOpen, appearanceOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
-          @openPresets="(presetsOpen = !presetsOpen, appearanceOpen = false, appSettingsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
-          @openWorldbook="(worldbookOpen = !worldbookOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
-          @openCharacters="(charactersOpen = !charactersOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, personaOpen = false, regexOpen = false)"
-          @openPersona="(personaOpen = !personaOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, regexOpen = false)"
-          @openRegex="(regexOpen = !regexOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false)"
+          @openAppearance="(appearanceOpen = !appearanceOpen, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
+          @openAppSettings="(appSettingsOpen = !appSettingsOpen, appearanceOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
+          @openPresets="(presetsOpen = !presetsOpen, appearanceOpen = false, appSettingsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
+          @openWorldbook="(worldbookOpen = !worldbookOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
+          @openCharacters="(charactersOpen = !charactersOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
+          @openPersona="(personaOpen = !personaOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, regexOpen = false, aiConfigOpen = false)"
+          @openRegex="(regexOpen = !regexOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, aiConfigOpen = false)"
+          @openAIConfig="(aiConfigOpen = !aiConfigOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
         />
       </SidebarDrawer>
 
@@ -581,6 +592,15 @@ function onSidebarViewUpdate(v) {
           v-if="showSidebar && regexOpen"
           @close="regexOpen = false"
           @view="(key) => openViewModal('regex', '正则规则详情 - ' + key, key)"
+        />
+      </transition>
+
+      <!-- AI 配置面板：同层/同位置/同过渡（占位页面） -->
+      <transition name="st-subpage">
+        <AIConfigPanel
+          v-if="showSidebar && aiConfigOpen"
+          :currentPreset="currentPresetData"
+          @close="aiConfigOpen = false"
         />
       </transition>
 

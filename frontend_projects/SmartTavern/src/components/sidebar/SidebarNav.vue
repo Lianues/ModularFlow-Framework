@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onUpdated } from 'vue'
 import PreviewCard from './PreviewCard.vue'
-const emit = defineEmits(['openAppearance','openAppSettings','openPresets','openWorldbook','openCharacters','openPersona','openRegex','update:view','update:theme'])
+const emit = defineEmits(['openAppearance','openAppSettings','openPresets','openWorldbook','openCharacters','openPersona','openRegex','openAIConfig','update:view','update:theme'])
 
 const props = defineProps({
   view: { type: String, default: 'start' },   // 'start' | 'threaded' | 'sandbox'
@@ -14,6 +14,7 @@ const items = [
   { key: 'characters', icon: 'users', title: '角色卡 Characters', desc: '管理角色信息卡' },
   { key: 'persona', icon: 'user-cog', title: '用户信息 Persona', desc: '配置用户画像与偏好' },
   { key: 'regex', icon: 'scan-text', title: '正则 Regex Rules', desc: '清洗/后处理规则' },
+  { key: 'aiconfig', icon: 'plug', title: 'AI配置 AI Config', desc: '全局AI提供商与参数' },
   { key: 'themes', icon: 'palette', title: '外观 Appearance', desc: '主题与外观设定' },
   { key: 'app', icon: 'settings', title: '应用设置 App Settings', desc: '全局应用行为与高级选项' },
 ]
@@ -26,6 +27,7 @@ function onClick(key) {
   else if (key === 'characters') emit('openCharacters')
   else if (key === 'persona') emit('openPersona')
   else if (key === 'regex') emit('openRegex')
+  else if (key === 'aiconfig') emit('openAIConfig')
 }
 
 function gotoHome() { emit('update:view', 'start') }
@@ -65,6 +67,7 @@ onUpdated(() => window.lucide?.createIcons?.())
         :key="it.key"
         :part="`preview-${it.key}`"
         :icon="it.icon"
+        :title="it.title"
         :desc="it.desc"
         @click="onClick(it.key)"
       />
