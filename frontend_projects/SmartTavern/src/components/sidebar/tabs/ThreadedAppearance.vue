@@ -43,6 +43,8 @@ const {
   chatWidth, inputHeight,
   contentLineHeight, messageGap, cardRadius, stripeWidth,
   threadedBgOpacityPct, threadedMsgBgOpacityPct, threadedListBgOpacityPct, threadedInputBgOpacityPct,
+  // 新增：背景图片遮罩模糊（px）
+  threadedBgBlurPx,
   thAspectX, thAspectY, thMaxWidthPct, thPadding, thRadius,
 } = state
 
@@ -89,9 +91,13 @@ function onCardRadiusRangeInput(e) { cardRadius.value = Number(e.target.value); 
 function onStripeWidthNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 12) { stripeWidth.value = v; setRootVar('--st-stripe-width', v) } }
 function onStripeWidthRangeInput(e) { stripeWidth.value = Number(e.target.value); setRootVar('--st-stripe-width', stripeWidth.value) }
 
-// Opacity handlers (% → 0~1)
+/* Opacity handlers (% → 0~1) */
 function onThreadedBgOpacityNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 100) { threadedBgOpacityPct.value = v; setRootVarUnitless('--st-threaded-bg-opacity', String(v / 100)) } }
 function onThreadedBgOpacityRangeInput(e) { threadedBgOpacityPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-bg-opacity', String(threadedBgOpacityPct.value / 100)) }
+
+/* Blur handlers (px) */
+function onThreadedBgBlurNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 30) { threadedBgBlurPx.value = v; setRootVar('--st-threaded-bg-blur', v) } }
+function onThreadedBgBlurRangeInput(e) { threadedBgBlurPx.value = Number(e.target.value); setRootVar('--st-threaded-bg-blur', threadedBgBlurPx.value) }
 
 function onThreadedMsgBgOpacityNumberInput(e) { const v = Number(e.target.value); if (v >= 0 && v <= 100) { threadedMsgBgOpacityPct.value = v; setRootVarUnitless('--st-threaded-msg-bg-opacity', String(v / 100)) } }
 function onThreadedMsgBgOpacityRangeInput(e) { threadedMsgBgOpacityPct.value = Number(e.target.value); setRootVarUnitless('--st-threaded-msg-bg-opacity', String(threadedMsgBgOpacityPct.value / 100)) }
@@ -270,6 +276,20 @@ onBeforeUnmount(() => {
         </div>
       </label>
       <input type="range" min="0" max="100" step="1" :value="threadedBgOpacityPct" @pointerdown="onTuningStart('threadedBgOpacity')" @input="onThreadedBgOpacityRangeInput" />
+    </div>
+
+    <div class="st-control" data-slider="threadedBgBlur">
+      <label class="st-control-label">
+        <span class="label-text">背景图片遮罩模糊</span>
+        <div class="value-group">
+          <input type="number" class="st-number-input" :value="threadedBgBlurPx" min="0" max="30" @input="onThreadedBgBlurNumberInput" />
+          <span class="unit">px</span>
+        </div>
+      </label>
+      <input type="range" min="0" max="30" step="1" :value="threadedBgBlurPx" @pointerdown="onTuningStart('threadedBgBlur')" @input="onThreadedBgBlurRangeInput" />
+      <div class="st-control-hint">
+        <span class="muted" style="font-size:12px;">通过遮罩层对背景图应用高斯模糊（性能与质感权衡建议 0~12px）</span>
+      </div>
     </div>
 
     <div class="st-control" data-slider="threadedMsgBgOpacity">

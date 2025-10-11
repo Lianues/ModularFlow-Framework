@@ -75,6 +75,10 @@
   --st-sandbox-bg-opacity: 0.12;             /* 全局沙盒 背景图片遮罩不透明度 (0~1) */
   --st-sandbox-stage-bg-opacity: 0.82;       /* 全局沙盒 舞台背景不透明度 (0~1) */
 
+  /* Background blur controls (px; used by overlay layers) */
+  --st-threaded-bg-blur: 0px;                /* 楼层对话 背景图片遮罩模糊(px) */
+  --st-sandbox-bg-blur: 0px;                 /* 全局沙盒 背景图片遮罩模糊(px) */
+
   /* Threaded chat container and input opacities */
   --st-threaded-list-bg-opacity: 0.62;       /* 楼层对话 列表容器背景不透明度 (0~1) */
   --st-threaded-input-bg-opacity: 0.80;      /* 楼层对话 底部输入框背景不透明度 (0~1) */

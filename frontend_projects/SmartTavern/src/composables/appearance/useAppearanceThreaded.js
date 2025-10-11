@@ -83,6 +83,8 @@ function createState() {
   const threadedMsgBgOpacityPct = ref(82)
   const threadedListBgOpacityPct = ref(62)
   const threadedInputBgOpacityPct = ref(80)
+  // 背景遮罩模糊（px）
+  const threadedBgBlurPx = ref(0)
 
   // 楼层内 HTML 舞台
   const thAspectX = ref(16)
@@ -96,6 +98,8 @@ function createState() {
     chatWidth, inputHeight,
     contentLineHeight, messageGap, cardRadius, stripeWidth,
     threadedBgOpacityPct, threadedMsgBgOpacityPct, threadedListBgOpacityPct, threadedInputBgOpacityPct,
+    // 新增
+    threadedBgBlurPx,
     thAspectX, thAspectY, thMaxWidthPct, thPadding, thRadius,
   }
 }
@@ -120,6 +124,8 @@ function buildSnapshot(state) {
     threadedMsgBgOpacityPct: Number(state.threadedMsgBgOpacityPct.value),
     threadedListBgOpacityPct: Number(state.threadedListBgOpacityPct.value),
     threadedInputBgOpacityPct: Number(state.threadedInputBgOpacityPct.value),
+    // 新增：背景遮罩模糊（px）
+    threadedBgBlurPx: Number(state.threadedBgBlurPx.value),
 
     thAspectX: Number(state.thAspectX.value),
     thAspectY: Number(state.thAspectY.value),
@@ -159,6 +165,9 @@ function applyState(state, s) {
   state.threadedListBgOpacityPct.value = num(s.threadedListBgOpacityPct, 62); setRootVarUnitless('--st-threaded-list-bg-opacity', String(state.threadedListBgOpacityPct.value / 100))
   state.threadedInputBgOpacityPct.value = num(s.threadedInputBgOpacityPct, 80); setRootVarUnitless('--st-threaded-input-bg-opacity', String(state.threadedInputBgOpacityPct.value / 100))
 
+  // 新增：背景遮罩模糊
+  state.threadedBgBlurPx.value = num(s.threadedBgBlurPx, 0); setRootVar('--st-threaded-bg-blur', state.threadedBgBlurPx.value)
+
   state.thAspectX.value = num(s.thAspectX, 16)
   state.thAspectY.value = num(s.thAspectY, 9)
   setRootVarUnitless('--st-threaded-stage-aspect', `${state.thAspectX.value} / ${state.thAspectY.value}`)
@@ -193,6 +202,9 @@ function initFromCSS(state) {
   state.threadedListBgOpacityPct.value = Math.round(readCssVarFloat('--st-threaded-list-bg-opacity', 0.62) * 100)
   state.threadedInputBgOpacityPct.value = Math.round(readCssVarFloat('--st-threaded-input-bg-opacity', 0.80) * 100)
 
+  // 新增：背景遮罩模糊（px）
+  state.threadedBgBlurPx.value = readCssVar('--st-threaded-bg-blur', 0)
+
   // threaded stage
   {
     const asp = getComputedStyle(document.documentElement).getPropertyValue('--st-threaded-stage-aspect')?.trim()
@@ -225,6 +237,8 @@ function initFromCSS(state) {
   setRootVarUnitless('--st-threaded-msg-bg-opacity', String(state.threadedMsgBgOpacityPct.value / 100))
   setRootVarUnitless('--st-threaded-list-bg-opacity', String(state.threadedListBgOpacityPct.value / 100))
   setRootVarUnitless('--st-threaded-input-bg-opacity', String(state.threadedInputBgOpacityPct.value / 100))
+  // 新增：写回遮罩模糊
+  setRootVar('--st-threaded-bg-blur', state.threadedBgBlurPx.value)
   setRootVarUnitless('--st-threaded-stage-aspect', `${state.thAspectX.value} / ${state.thAspectY.value}`)
   setRootVarUnitless('--st-threaded-stage-maxw', state.thMaxWidthPct.value)
   setRootVar('--st-threaded-stage-padding', state.thPadding.value)

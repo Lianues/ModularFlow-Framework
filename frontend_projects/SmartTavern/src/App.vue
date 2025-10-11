@@ -757,7 +757,10 @@ body.st-live-tuning[data-active-slider="threadedStageRadius"] [data-scope="setti
 body.st-live-tuning[data-active-slider="threadedBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedBgOpacity"],
 body.st-live-tuning[data-active-slider="threadedMsgBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedMsgBgOpacity"],
 body.st-live-tuning[data-active-slider="sandboxBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="sandboxBgOpacity"],
-body.st-live-tuning[data-active-slider="sandboxStageBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="sandboxStageBgOpacity"] {
+body.st-live-tuning[data-active-slider="sandboxStageBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="sandboxStageBgOpacity"],
+/* NEW: Background blur sliders */
+body.st-live-tuning[data-active-slider="threadedBgBlur"] [data-scope="settings-view"] .st-control[data-slider="threadedBgBlur"],
+body.st-live-tuning[data-active-slider="sandboxBgBlur"] [data-scope="settings-view"] .st-control[data-slider="sandboxBgBlur"] {
   visibility: visible !important;
 }
 
@@ -807,10 +810,27 @@ body.st-bg-anim [data-scope="start-view"]::before {
   animation: stDepthIntro 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
 /* Threaded/Sandbox 背景：两段式“0-75% 位移+模糊、75-100% 仅清晰”动画（背景只做景深，不改不透明度） */
-@keyframes stDepthIntroBg {
+/* 改为依据用户配置的“目标模糊度”作为动画终点，避免动画结束后跳变导致闪烁 */
+@keyframes stDepthIntroBgVarThreaded {
   0% {
     transform: scale(1.08) translate3d(var(--fx-shift-x), var(--fx-shift-y), 0);
-    filter: blur(20px) saturate(118%) brightness(0.96);
+    filter: blur(var(--st-bg-intro-blur-start, 20px)) saturate(118%) brightness(0.96);
+  }
+  75% {
+    transform: scale(1) translate3d(0,0,0);
+    /* 中段仍保持较小模糊，趋近自然对焦 */
+    filter: blur(2px) saturate(103%) brightness(1);
+  }
+  100% {
+    transform: scale(1) translate3d(0,0,0);
+    /* 终点严格对齐用户设置的模糊度变量 */
+    filter: blur(var(--st-threaded-bg-blur, 0px)) saturate(100%) brightness(1);
+  }
+}
+@keyframes stDepthIntroBgVarSandbox {
+  0% {
+    transform: scale(1.08) translate3d(var(--fx-shift-x), var(--fx-shift-y), 0);
+    filter: blur(var(--st-bg-intro-blur-start, 20px)) saturate(118%) brightness(0.96);
   }
   75% {
     transform: scale(1) translate3d(0,0,0);
@@ -818,7 +838,7 @@ body.st-bg-anim [data-scope="start-view"]::before {
   }
   100% {
     transform: scale(1) translate3d(0,0,0);
-    filter: blur(0px) saturate(100%) brightness(1);
+    filter: blur(var(--st-sandbox-bg-blur, 0px)) saturate(100%) brightness(1);
   }
 }
 
@@ -832,7 +852,8 @@ body.st-bg-anim [data-scope="start-view"]::before {
 body.st-bg-anim-threaded .st-threaded::before,
 body.st-bg-anim-threaded [data-scope="chat-threaded"]::before {
   will-change: transform, filter;
-  animation: stDepthIntroBg 4s cubic-bezier(.22,.61,.36,1) forwards;
+  /* 终点对齐 --st-threaded-bg-blur，避免结束后跳变 */
+  animation: stDepthIntroBgVarThreaded 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
 body.st-bg-anim-threaded .st-threaded::after,
 body.st-bg-anim-threaded [data-scope="chat-threaded"]::after {
@@ -844,7 +865,8 @@ body.st-bg-anim-threaded [data-scope="chat-threaded"]::after {
 body.st-bg-anim-sandbox .st-sandbox::before,
 body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   will-change: transform, filter;
-  animation: stDepthIntroBg 4s cubic-bezier(.22,.61,.36,1) forwards;
+  /* 终点对齐 --st-sandbox-bg-blur，避免结束后跳变 */
+  animation: stDepthIntroBgVarSandbox 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
 body.st-bg-anim-sandbox .st-sandbox::after,
 body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
@@ -1238,6 +1260,9 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
   background-position: center center;
   background-repeat: no-repeat;
   opacity: 1; /* 背景图始终全可见，遮罩由 ::after 控制 */
+  /* 直接对背景图片层应用模糊，避免 backdrop-filter 在某些栈顺序下不生效 */
+  filter: blur(var(--st-threaded-bg-blur, 0px));
+  will-change: filter;
   z-index: -1;
   pointer-events: none;
 }
@@ -1245,12 +1270,13 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
   content: '';
   position: fixed;
   inset: 0;
-  /* 主题自适应遮罩（不透明度独立为元素 opacity，避免动画终值跳跃） */
+  /* 遮罩色固定为纯墨色/纯白色，由不透明度变量控制强度 */
   background: rgb(var(--st-overlay-ink) / 1);
+  /* 终点与用户配置一致，动画也会过渡到该变量值，避免闪烁 */
   opacity: var(--st-threaded-bg-opacity, 0.12);
   z-index: -1;
   pointer-events: none;
-  /* 为 overlay 动画提供目标变量（线程页） */
+  /* 为 overlay 动画提供目标变量（线程页）：始终与不透明度变量一致 */
   --st-target-bg-opacity: var(--st-threaded-bg-opacity, 0.12);
 }
 
@@ -1275,6 +1301,9 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
   background-position: center center;
   background-repeat: no-repeat;
   opacity: 1; /* 背景图始终全可见，遮罩由 ::after 控制 */
+  /* 直接对背景图片层应用模糊（更稳定的实现） */
+  filter: blur(var(--st-sandbox-bg-blur, 0px));
+  will-change: filter;
   z-index: -1;
   pointer-events: none;
 }
@@ -1285,6 +1314,9 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
   /* 主题自适应遮罩（不透明度独立为元素 opacity，避免动画终值跳跃） */
   background: rgb(var(--st-overlay-ink) / 1);
   opacity: var(--st-sandbox-bg-opacity, 0.12);
+  /* 新增：对背景图片应用可调模糊（通过遮罩层的 backdrop-filter 实现） */
+  backdrop-filter: blur(var(--st-sandbox-bg-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--st-sandbox-bg-blur, 0px));
   z-index: -1;
   pointer-events: none;
   /* 为 overlay 动画提供目标变量（沙盒页） */

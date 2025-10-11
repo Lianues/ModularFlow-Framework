@@ -43,6 +43,8 @@ const {
   sandboxMaxWidth, sandboxMaxWidthLimit,
   sandboxPadding, sandboxRadius,
   sandboxBgOpacityPct, sandboxStageBgOpacityPct,
+  // 新增：背景图片遮罩模糊（px）
+  sandboxBgBlurPx,
 } = state
 
 // Presets (unchanged)
@@ -135,6 +137,19 @@ function onSandboxBgOpacityNumberInput(e) {
 function onSandboxBgOpacityRangeInput(e) {
   sandboxBgOpacityPct.value = Number(e.target.value)
   setRootVarUnitless('--st-sandbox-bg-opacity', String(sandboxBgOpacityPct.value / 100))
+}
+
+/* Blur handlers (px) */
+function onSandboxBgBlurNumberInput(e) {
+  const v = Number(e.target.value)
+  if (v >= 0 && v <= 30) {
+    sandboxBgBlurPx.value = v
+    setRootVar('--st-sandbox-bg-blur', v)
+  }
+}
+function onSandboxBgBlurRangeInput(e) {
+  sandboxBgBlurPx.value = Number(e.target.value)
+  setRootVar('--st-sandbox-bg-blur', sandboxBgBlurPx.value)
 }
 function onSandboxStageBgOpacityNumberInput(e) {
   const v = Number(e.target.value)
@@ -253,6 +268,36 @@ onBeforeUnmount(() => {
         @pointerdown="onTuningStart('sandboxBgOpacity')"
         @input="onSandboxBgOpacityRangeInput"
       />
+    </div>
+
+    <!-- 背景图片遮罩模糊 -->
+    <div class="st-control" data-slider="sandboxBgBlur">
+      <label class="st-control-label">
+        <span class="label-text">背景图片遮罩模糊</span>
+        <div class="value-group">
+          <input
+            type="number"
+            class="st-number-input"
+            :value="sandboxBgBlurPx"
+            min="0"
+            max="30"
+            @input="onSandboxBgBlurNumberInput"
+          />
+          <span class="unit">px</span>
+        </div>
+      </label>
+      <input
+        type="range"
+        min="0"
+        max="30"
+        step="1"
+        :value="sandboxBgBlurPx"
+        @pointerdown="onTuningStart('sandboxBgBlur')"
+        @input="onSandboxBgBlurRangeInput"
+      />
+      <div class="st-control-hint">
+        <span class="muted" style="font-size:12px;">通过遮罩层对背景图应用高斯模糊（建议 0~12px，过大可能影响性能）</span>
+      </div>
     </div>
 
     <!-- 舞台背景不透明度 -->

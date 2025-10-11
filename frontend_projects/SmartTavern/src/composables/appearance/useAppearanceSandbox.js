@@ -68,12 +68,16 @@ function createState() {
   // 透明度（%）
   const sandboxBgOpacityPct = ref(12)      // 0~100
   const sandboxStageBgOpacityPct = ref(82) // 0~100
+  // 背景遮罩模糊（px）
+  const sandboxBgBlurPx = ref(0)
 
   return {
     sandboxAspectX, sandboxAspectY,
     sandboxMaxWidth, sandboxMaxWidthLimit,
     sandboxPadding, sandboxRadius,
     sandboxBgOpacityPct, sandboxStageBgOpacityPct,
+    // 新增
+    sandboxBgBlurPx,
   }
 }
 
@@ -88,6 +92,8 @@ function buildSnapshot(state) {
     sandboxRadius: Number(state.sandboxRadius.value),
     sandboxBgOpacityPct: Number(state.sandboxBgOpacityPct.value),
     sandboxStageBgOpacityPct: Number(state.sandboxStageBgOpacityPct.value),
+    // 新增：背景遮罩模糊（px）
+    sandboxBgBlurPx: Number(state.sandboxBgBlurPx.value),
   }
 }
 
@@ -116,6 +122,10 @@ function applyState(state, s) {
 
   state.sandboxStageBgOpacityPct.value = num(s.sandboxStageBgOpacityPct, 82)
   setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(state.sandboxStageBgOpacityPct.value / 100))
+
+  // 新增：背景遮罩模糊
+  state.sandboxBgBlurPx.value = num(s.sandboxBgBlurPx, 0)
+  setRootVar('--st-sandbox-bg-blur', state.sandboxBgBlurPx.value)
 }
 
 // Initialize refs from current CSS variables and write-back to sync UI
@@ -138,6 +148,8 @@ function initFromCSS(state) {
   // opacities (css stores 0~1)
   state.sandboxBgOpacityPct.value = Math.round(readCssVarFloat('--st-sandbox-bg-opacity', 0.12) * 100)
   state.sandboxStageBgOpacityPct.value = Math.round(readCssVarFloat('--st-sandbox-stage-bg-opacity', 0.82) * 100)
+  // 新增：背景遮罩模糊（px）
+  state.sandboxBgBlurPx.value = readCssVarFloat('--st-sandbox-bg-blur', 0)
 
   // write-back
   setRootVarUnitless('--st-sandbox-aspect', `${state.sandboxAspectX.value} / ${state.sandboxAspectY.value}`)
@@ -146,6 +158,8 @@ function initFromCSS(state) {
   setRootVar('--st-sandbox-radius', state.sandboxRadius.value)
   setRootVarUnitless('--st-sandbox-bg-opacity', String(state.sandboxBgOpacityPct.value / 100))
   setRootVarUnitless('--st-sandbox-stage-bg-opacity', String(state.sandboxStageBgOpacityPct.value / 100))
+  // 新增：写回遮罩模糊
+  setRootVar('--st-sandbox-bg-blur', state.sandboxBgBlurPx.value)
 }
 
 // Auto save timer + broadcast
