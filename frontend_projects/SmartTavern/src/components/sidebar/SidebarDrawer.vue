@@ -295,7 +295,10 @@ const drawerStyle = computed(() => {
 /* Floating Action Button (收起浮标) */
 .sd-fab {
   border: 1px solid rgba(var(--st-border), 0.9);
-  background: linear-gradient(135deg, rgba(var(--st-primary),0.14), rgba(var(--st-accent),0.14));
+  /* base 半透明底 + 渐变叠加，避免在复杂背景上近乎透明 */
+  background:
+    linear-gradient(135deg, rgba(var(--st-primary),0.16), rgba(var(--st-accent),0.16)),
+    rgb(var(--st-surface) / var(--st-fab-bg-opacity, 0.62));
   color: rgb(var(--st-color-text));
   border-radius: 4px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.2);
