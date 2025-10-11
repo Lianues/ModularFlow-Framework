@@ -806,37 +806,50 @@ body.st-bg-anim [data-scope="start-view"]::before {
   /* 放慢到 4s，总时长匹配 JS 清理 4.1s */
   animation: stDepthIntro 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
-/* Threaded/Sandbox 背景：两段式“0-75% 位移+模糊、75-100% 仅清晰”动画（细腻透明度版本） */
-@keyframes stDepthIntroSubtle {
+/* Threaded/Sandbox 背景：两段式“0-75% 位移+模糊、75-100% 仅清晰”动画（背景只做景深，不改不透明度） */
+@keyframes stDepthIntroBg {
   0% {
     transform: scale(1.08) translate3d(var(--fx-shift-x), var(--fx-shift-y), 0);
     filter: blur(20px) saturate(118%) brightness(0.96);
-    opacity: 0;
   }
   75% {
     transform: scale(1) translate3d(0,0,0);
     filter: blur(2px) saturate(103%) brightness(1);
-    opacity: .12; /* 保持与基线相同的透明度 */
   }
   100% {
     transform: scale(1) translate3d(0,0,0);
     filter: blur(0px) saturate(100%) brightness(1);
-    opacity: .12;
   }
 }
 
-/* 楼层对话页（threaded）：透明度维持在 .12，使用细腻版动画 */
-body.st-bg-anim-threaded .st-threaded::before,
-body.st-bg-anim-threaded [data-scope="chat-threaded"]::before {
-  will-change: transform, filter, opacity;
-  animation: stDepthIntroSubtle 4s cubic-bezier(.22,.61,.36,1) forwards;
+/* 叠加遮罩按变量过渡到目标不透明度，避免加载完成时跳变 */
+@keyframes stDepthOverlayToVar {
+  0%   { opacity: 1; }
+  100% { opacity: var(--st-target-bg-opacity, 0.12); }
 }
 
-/* 前端沙盒页（sandbox）：透明度维持在 .12，使用细腻版动画 */
+/* 楼层对话页（threaded）：背景做景深，遮罩按变量淡入到目标不透明度 */
+body.st-bg-anim-threaded .st-threaded::before,
+body.st-bg-anim-threaded [data-scope="chat-threaded"]::before {
+  will-change: transform, filter;
+  animation: stDepthIntroBg 4s cubic-bezier(.22,.61,.36,1) forwards;
+}
+body.st-bg-anim-threaded .st-threaded::after,
+body.st-bg-anim-threaded [data-scope="chat-threaded"]::after {
+  will-change: opacity;
+  animation: stDepthOverlayToVar 4s cubic-bezier(.22,.61,.36,1) forwards;
+}
+
+/* 前端沙盒页（sandbox）：背景做景深，遮罩按变量淡入到目标不透明度 */
 body.st-bg-anim-sandbox .st-sandbox::before,
 body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
-  will-change: transform, filter, opacity;
-  animation: stDepthIntroSubtle 4s cubic-bezier(.22,.61,.36,1) forwards;
+  will-change: transform, filter;
+  animation: stDepthIntroBg 4s cubic-bezier(.22,.61,.36,1) forwards;
+}
+body.st-bg-anim-sandbox .st-sandbox::after,
+body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
+  will-change: opacity;
+  animation: stDepthOverlayToVar 4s cubic-bezier(.22,.61,.36,1) forwards;
 }
 
 /* 禁止侧边栏按钮与展开面板文本被选中复制（保留表单可编辑） */
@@ -1232,10 +1245,13 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   content: '';
   position: fixed;
   inset: 0;
-  /* 主题自适应遮罩：浅色为纯白，深色为纯黑；与变量不透明度共同作用 */
-  background: rgb(var(--st-overlay-ink) / var(--st-threaded-bg-opacity, 0.12));
+  /* 主题自适应遮罩（不透明度独立为元素 opacity，避免动画终值跳跃） */
+  background: rgb(var(--st-overlay-ink) / 1);
+  opacity: var(--st-threaded-bg-opacity, 0.12);
   z-index: -1;
   pointer-events: none;
+  /* 为 overlay 动画提供目标变量（线程页） */
+  --st-target-bg-opacity: var(--st-threaded-bg-opacity, 0.12);
 }
 
 /* Sandbox container */
@@ -1266,10 +1282,13 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::before {
   content: '';
   position: fixed;
   inset: 0;
-  /* 主题自适应遮罩：浅色为纯白，深色为纯黑；与变量不透明度共同作用 */
-  background: rgb(var(--st-overlay-ink) / var(--st-sandbox-bg-opacity, 0.12));
+  /* 主题自适应遮罩（不透明度独立为元素 opacity，避免动画终值跳跃） */
+  background: rgb(var(--st-overlay-ink) / 1);
+  opacity: var(--st-sandbox-bg-opacity, 0.12);
   z-index: -1;
   pointer-events: none;
+  /* 为 overlay 动画提供目标变量（沙盒页） */
+  --st-target-bg-opacity: var(--st-sandbox-bg-opacity, 0.12);
 }
 
 /* Sandbox stage: 控制舞台尺寸与比例 */
