@@ -43,6 +43,13 @@ export interface ThemePackV1 {
   tokens?: ThemeTokens;
   /** Optional CSS text injected globally after tokens */
   css?: string;
+
+  /** Optional per-mode overrides. When present, they take precedence over base tokens/css for the selected mode. */
+  tokensLight?: ThemeTokens;
+  tokensDark?: ThemeTokens;
+  cssLight?: string;
+  cssDark?: string;
+
   /** Reserved, not executed by default */
   script?: ThemeScript;
 }
@@ -99,6 +106,9 @@ export interface ThemeManagerAPI {
   getVersion(): string;
   on(event: ThemeEvent, cb: ThemeListener): () => void;
   off(event: ThemeEvent, cb: ThemeListener): void;
+
+  /** Set color mode preference to drive mode-specific tokens/css ('system' | 'light' | 'dark') */
+  setColorMode(mode: 'system' | 'light' | 'dark'): void;
 
   /** Theme extensions (beautification hooks; no scripts executed by default) */
   registerExtension(ext: ThemeExtension): () => void;

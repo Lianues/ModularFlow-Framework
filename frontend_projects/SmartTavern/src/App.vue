@@ -24,6 +24,7 @@ import GalleryView from '@/components/home/GalleryView.vue'
 import OptionsView from '@/components/home/OptionsView.vue'
 import SandboxStage from '@/components/sandbox/SandboxStage.vue'
 import { useSidebar } from '@/composables/useSidebar.js'
+import ThemeManager from '@/features/themes/manager'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -338,14 +339,31 @@ try {
   }
 } catch (_) {}
 
+let __themeMql = null
+let __onSchemeChange = null
 function applyTheme(t) {
   const root = document.documentElement
-  if (t === 'dark') {
-    root.setAttribute('data-theme', 'dark')
-  } else if (t === 'light') {
-    root.setAttribute('data-theme', 'light')
-  } else {
-    root.removeAttribute('data-theme')
+  // detach previous system watcher if any
+  if (__themeMql && t !== 'system' && __onSchemeChange) {
+    try { __themeMql.removeEventListener('change', __onSchemeChange) } catch (_) {}
+    __themeMql = null
+  }
+  if (t === 'dark' || t === 'light') {
+    root.setAttribute('data-theme', t)
+    return
+  }
+  // system: follow OS prefers-color-scheme (and react to changes)
+  const mql = window.matchMedia?.('(prefers-color-scheme: dark)')
+  const setByMql = (mq) => {
+    try {
+      root.setAttribute('data-theme', mq?.matches ? 'dark' : 'light')
+    } catch (_) {}
+  }
+  setByMql(mql)
+  if (mql) {
+    __onSchemeChange = (e) => setByMql(e)
+    try { mql.addEventListener('change', __onSchemeChange) } catch (_) {}
+    __themeMql = mql
   }
 }
 
@@ -390,6 +408,8 @@ function refreshIcons() {
 
 onMounted(() => {
   applyTheme(theme.value)
+  try { ThemeManager.setColorMode?.(theme.value) } catch (_) {}
+
   ensureUIAssets().finally(() => {
     try {
       if (view.value === 'start') {
@@ -409,7 +429,19 @@ onMounted(() => {
 function onThemeUpdate(t) {
   theme.value = t
   applyTheme(t)
+  try { ThemeManager.setColorMode?.(t) } catch (_) {}
   try { localStorage.setItem('st.theme', t) } catch (_) {}
+  refreshIcons()
+}
+
+// 修复：通过显式方法更新 ref，避免模板内对 ref 直接赋值导致的响应性异常
+function onSidebarViewUpdate(v) {
+  if (v === 'threaded' || v === 'sandbox' || v === 'start') {
+    view.value = v
+  } else {
+    view.value = 'start'
+  }
+  // 视图切换后刷新图标/交互组件
   refreshIcons()
 }
 
@@ -435,7 +467,7 @@ function onThemeUpdate(t) {
         <SidebarNav
           :view="view"
           :theme="theme"
-          @update:view="(v) => (view = v)"
+          @update:view="onSidebarViewUpdate"
           @update:theme="onThemeUpdate"
           @openAppearance="(appearanceOpen = !appearanceOpen, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
           @openAppSettings="(appSettingsOpen = !appSettingsOpen, appearanceOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"

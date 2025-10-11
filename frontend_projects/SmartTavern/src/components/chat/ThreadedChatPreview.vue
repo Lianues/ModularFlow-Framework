@@ -63,9 +63,15 @@ function deleteMessage(msgId) {
 
 /* 菜单逻辑已下沉至 MessageItem.vue */
 
-// 组件卸载时清理
+/* 组件卸载时清理（历史遗留：全局点击关闭菜单已下沉至 MessageItem）
+ * 保守处理：若存在旧的全局处理器则移除，否则忽略（避免 ReferenceError）
+ */
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleGlobalClick)
+  try {
+    if (typeof handleGlobalClick === 'function') {
+      document.removeEventListener('click', handleGlobalClick)
+    }
+  } catch (_) {}
 })
 
 // 分支切换（演示功能）

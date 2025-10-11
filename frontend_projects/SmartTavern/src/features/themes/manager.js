@@ -224,6 +224,11 @@ async function importFromFile(file, options = {}) {
 function on(event, cb) { return ThemeStore.on(event, cb) }
 function off(event, cb) { return ThemeStore.off(event, cb) }
 
+// Color mode control (system/light/dark) forwarded to store
+function setColorMode(mode) {
+  try { ThemeStore?.setColorMode?.(mode) } catch (_) {}
+}
+
 const ThemeManager = {
   init,
   applyThemePack,
@@ -243,6 +248,8 @@ const ThemeManager = {
   getVersion: ThemeStore.getVersion,
   // expose underlying store for advanced usages (e.g., setToken)
   store: ThemeStore,
+  // Color mode control
+  setColorMode,
 }
 
 export default ThemeManager

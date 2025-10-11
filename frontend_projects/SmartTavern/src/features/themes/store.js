@@ -102,11 +102,15 @@ const ThemeStore = (() => {
   let state = {
     version: VERSION,
     // current theme pack (null = none)
-    pack: null,            // { id, name, version, tokens, css, script? }
+    pack: null,            // { id, name, version, tokens, css, tokensLight?, tokensDark?, cssLight?, cssDark?, script? }
     // bookkeeping for DOM cleanup
     styleId: STYLE_TAG_ID,
     metaId: META_TAG_ID,
+    // color mode preference: 'system' | 'light' | 'dark'
+    currentMode: 'system',
   }
+  // media query listener for system mode
+  let __mql = null
 
   function getVersion() { return state.version }
 
@@ -129,6 +133,11 @@ const ThemeStore = (() => {
           version: state.pack.version ?? null,
           tokens: state.pack.tokens ?? null,
           css: state.pack.css ?? null,
+          // Persist per-mode overrides if present
+          tokensLight: state.pack.tokensLight ?? null,
+          tokensDark: state.pack.tokensDark ?? null,
+          cssLight: state.pack.cssLight ?? null,
+          cssDark: state.pack.cssDark ?? null,
           // DO NOT persist script by default for safety
         }
       } : null
@@ -181,6 +190,79 @@ const ThemeStore = (() => {
     removeElementById(state.styleId)
   }
 
+  // Resolve system mode via prefers-color-scheme
+  function resolveSystemMode() {
+    try {
+      const mql = window.matchMedia?.('(prefers-color-scheme: dark)')
+      return mql?.matches ? 'dark' : 'light'
+    } catch (_) {
+      return 'light'
+    }
+  }
+
+  function clearMql() {
+    if (__mql) {
+      try { __mql.removeEventListener('change', onSystemSchemeChange) } catch (_) {}
+      __mql = null
+    }
+  }
+
+  function onSystemSchemeChange() {
+    // Re-apply tokens/CSS according to new system scheme
+    reapplyForCurrentMode()
+  }
+
+  function ensureMql() {
+    try {
+      __mql = window.matchMedia?.('(prefers-color-scheme: dark)') || null
+      if (__mql) {
+        __mql.addEventListener('change', onSystemSchemeChange)
+      }
+    } catch (_) {
+      __mql = null
+    }
+  }
+
+  // Apply base + mode-specific tokens and CSS
+  function reapplyForCurrentMode() {
+    const pack = state.pack || {}
+    const modePref = state.currentMode || 'system'
+    const effMode = modePref === 'system' ? resolveSystemMode() : modePref
+
+    // 1) Apply base tokens
+    if (pack.tokens) applyTokens(pack.tokens)
+
+    // 2) Apply mode-specific tokens (if provided by pack)
+    const modeTokens = effMode === 'dark' ? (pack.tokensDark || null) : (pack.tokensLight || null)
+    if (modeTokens) applyTokens(modeTokens)
+
+    // 3) Inject CSS: base + mode-specific CSS appended
+    const cssCombined =
+      (pack.css ? String(pack.css) + '\n' : '') +
+      (effMode === 'dark'
+        ? (pack.cssDark ? String(pack.cssDark) : '')
+        : (pack.cssLight ? String(pack.cssLight) : ''))
+    if (cssCombined.trim()) injectCSS(cssCombined)
+    else clearCSS()
+
+    // manage system watcher
+    clearMql()
+    if (state.currentMode === 'system') ensureMql()
+  }
+
+  // Public: set color mode preference
+  function setColorMode(mode = 'system') {
+    const next = (mode === 'dark' || mode === 'light') ? mode : 'system'
+    if (state.currentMode === next) {
+      // still ensure system listener if needed
+      if (next === 'system' && !__mql) ensureMql()
+      return
+    }
+    state.currentMode = next
+    reapplyForCurrentMode()
+    emitter.emit('change', getState())
+  }
+
   // Public API
 
   async function init() {
@@ -201,11 +283,11 @@ const ThemeStore = (() => {
     const { persist = true, allowScript = false } = options
     const nextPack = { ...pack }
 
-    // Apply tokens first
-    if (nextPack.tokens) applyTokens(nextPack.tokens)
-    // Apply CSS next
-    if (nextPack.css) injectCSS(nextPack.css)
-    else clearCSS()
+    // Store first so reapplyForCurrentMode can read pack and decide light/dark overrides
+    state.pack = nextPack
+
+    // Apply tokens/CSS according to current color mode (base + mode-specific overrides)
+    reapplyForCurrentMode()
 
     // Reserved: script execution (disabled)
     if (nextPack.script && allowScript) {
@@ -216,8 +298,6 @@ const ThemeStore = (() => {
     setMeta('st-theme-id', String(nextPack.id ?? ''))
     setMeta('st-theme-name', String(nextPack.name ?? ''))
     setMeta('st-theme-version', String(nextPack.version ?? ''))
-
-    state.pack = nextPack
 
     if (persist) saveToStorage()
 
@@ -232,6 +312,7 @@ const ThemeStore = (() => {
     // Clear tokens we know? We cannot know all keys; avoid mass removal.
     // Rely on app defaults and AppearancePanel overrides to take precedence.
     clearCSS()
+    clearMql()
 
     state.pack = null
     if (persist) saveToStorage()
@@ -274,6 +355,8 @@ const ThemeStore = (() => {
     getVersion,
     // tokens
     setToken,
+    // color mode
+    setColorMode,
     // events
     on, off, subscribe,
     // low-level helpers (exported for advanced usage)
