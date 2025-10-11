@@ -143,6 +143,23 @@ const DataCatalog = {
   getPersonaDetail(file, opts)  { return this._getDetail('persona', file, opts); },
   getRegexRuleDetail(file, opts){ return this._getDetail('regex', file, opts); },
 
+  // Update APIs (create/update)
+  updatePresetFile(file, content, name, description) {
+    return postJSON('smarttavern/data_catalog/update_preset_file', { file, content, name, description });
+  },
+  updateWorldBookFile(file, content, name, description) {
+    return postJSON('smarttavern/data_catalog/update_world_book_file', { file, content, name, description });
+  },
+  updateCharacterFile(file, content, name, description) {
+    return postJSON('smarttavern/data_catalog/update_character_file', { file, content, name, description });
+  },
+  updatePersonaFile(file, content, name, description) {
+    return postJSON('smarttavern/data_catalog/update_persona_file', { file, content, name, description });
+  },
+  updateRegexRuleFile(file, content, name, description) {
+    return postJSON('smarttavern/data_catalog/update_regex_rule_file', { file, content, name, description });
+  },
+
   // Small helper to map backend items to UI cards (icon per type)
   mapToCards(items, type = 'generic') {
     const iconMap = {

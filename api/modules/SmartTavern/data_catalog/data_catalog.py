@@ -456,3 +456,200 @@ def get_persona_detail(file: str) -> Dict[str, Any]:
 def get_regex_rule_detail(file: str) -> Dict[str, Any]:
     from .impl import get_regex_rule_detail_impl
     return get_regex_rule_detail_impl(file=file)
+
+
+# ---------- 保存（创建/更新）文件接口：按类型 ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/update_preset_file",
+    name="保存预设文件",
+    description="在 presets 目录创建或更新指定 JSON 文件。若提供 name/description，将写入 content 顶层。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string", "description": "相对仓库根的 POSIX 路径，如 backend_projects/SmartTavern/data/presets/Your.json"},
+            "content": {"type": ["object","array"]},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]}
+        },
+        "required": ["file", "content"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]},
+            "content": {"type": ["object","array","null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def update_preset_file(file: str, content: dict, name: str = None, description: str = None) -> Dict[str, Any]:
+    from .impl import update_preset_file_impl
+    payload: Dict[str, Any] = {"content": content}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    return update_preset_file_impl(file=file, payload=payload)
+
+
+@core.register_api(
+    path="smarttavern/data_catalog/update_world_book_file",
+    name="保存世界书文件",
+    description="在 world_books 目录创建或更新指定 JSON 文件。若提供 name/description，将写入 content 顶层。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "content": {"type": ["object","array"]},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]}
+        },
+        "required": ["file", "content"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]},
+            "content": {"type": ["object","array","null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def update_world_book_file(file: str, content: dict, name: str = None, description: str = None) -> Dict[str, Any]:
+    from .impl import update_world_book_file_impl
+    payload: Dict[str, Any] = {"content": content}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    return update_world_book_file_impl(file=file, payload=payload)
+
+
+@core.register_api(
+    path="smarttavern/data_catalog/update_character_file",
+    name="保存角色卡文件",
+    description="在 characters 目录创建或更新指定 JSON 文件。若提供 name/description，将写入 content 顶层。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "content": {"type": ["object","array"]},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]}
+        },
+        "required": ["file", "content"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]},
+            "content": {"type": ["object","array","null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def update_character_file(file: str, content: dict, name: str = None, description: str = None) -> Dict[str, Any]:
+    from .impl import update_character_file_impl
+    payload: Dict[str, Any] = {"content": content}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    return update_character_file_impl(file=file, payload=payload)
+
+
+@core.register_api(
+    path="smarttavern/data_catalog/update_persona_file",
+    name="保存用户画像文件",
+    description="在 persona 目录创建或更新指定 JSON 文件。若提供 name/description，将写入 content 顶层。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "content": {"type": ["object","array"]},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]}
+        },
+        "required": ["file", "content"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]},
+            "content": {"type": ["object","array","null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def update_persona_file(file: str, content: dict, name: str = None, description: str = None) -> Dict[str, Any]:
+    from .impl import update_persona_file_impl
+    payload: Dict[str, Any] = {"content": content}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    return update_persona_file_impl(file=file, payload=payload)
+
+
+@core.register_api(
+    path="smarttavern/data_catalog/update_regex_rule_file",
+    name="保存正则规则文件",
+    description="在 regex_rules 目录创建或更新指定 JSON 文件。若提供 name/description，将写入 content 顶层。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "content": {"type": ["object","array"]},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]}
+        },
+        "required": ["file", "content"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]},
+            "content": {"type": ["object","array","null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def update_regex_rule_file(file: str, content: dict, name: str = None, description: str = None) -> Dict[str, Any]:
+    from .impl import update_regex_rule_file_impl
+    payload: Dict[str, Any] = {"content": content}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    return update_regex_rule_file_impl(file=file, payload=payload)

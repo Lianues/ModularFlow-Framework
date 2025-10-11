@@ -1,14 +1,17 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import WorldBookCard from './cards/WorldBookCard.vue'
+import DataCatalog from '@/services/dataCatalog'
 
 const props = defineProps({
-  worldbookData: { type: Object, default: null }
+  worldbookData: { type: Object, default: null },
+  file: { type: String, default: '' }
 })
 
-// 初始演示数据
+ // 初始演示数据
 const initialWorldbookData = {
   name: '演示世界书 - 完整示例',
+  description: '',
   world_books: [
     {
       id: 'location_1',
@@ -55,6 +58,7 @@ function deepClone(x) {
 function normalizeWorldbookData(src) {
   if (!src || typeof src !== 'object') return null
   const name = src.name || '世界书'
+  const description = src.description || ''
   // 兼容两种结构：
   // - 内部结构：{ world_books: [...] }
   // - 后端文件/接口：{ entries: [...] }
@@ -74,7 +78,7 @@ function normalizeWorldbookData(src) {
     depth: typeof e?.depth === 'number' ? e.depth : 0,
     keys: Array.isArray(e?.keys) ? e.keys : [],
   }))
-  return { name, world_books: mapped }
+  return { name, description, world_books: mapped }
 }
 
 // 当前编辑的数据（内存中）
@@ -257,6 +261,39 @@ watch(() => currentData.value.world_books, async () => {
   await nextTick()
   window.lucide?.createIcons?.()
 }, { flush: 'post' })
+
+// 保存到后端
+async function save() {
+  const file = props.file
+  if (!file) {
+    try { alert('缺少文件路径，无法保存'); } catch (_) {}
+    return
+  }
+  // 将内部 world_books 转换为 entries
+  const entries = (currentData.value.world_books || []).map(w => ({
+    id: w?.id ?? '',
+    name: w?.name ?? '',
+    content: w?.content ?? '',
+    enabled: w?.enabled !== false,
+    mode: w?.mode ?? 'always',
+    position: w?.position ?? 'before_char',
+    order: typeof w?.order === 'number' ? w.order : 100,
+    depth: typeof w?.depth === 'number' ? w.depth : 0,
+    keys: Array.isArray(w?.keys) ? w.keys : [],
+  }))
+  const content = {
+    name: currentData.value.name || '',
+    description: currentData.value.description || '',
+    entries
+  }
+  try {
+    const res = await DataCatalog.updateWorldBookFile(file, content, content.name, content.description)
+    console.log('[WorldbookDetailView] 保存成功', res)
+  } catch (e) {
+    console.error('[WorldbookDetailView] 保存失败', e)
+    try { alert('保存失败：' + (e?.message || e)) } catch (_) {}
+  }
+}
 </script>
 
 <template>
@@ -268,11 +305,44 @@ watch(() => currentData.value.world_books, async () => {
           <i data-lucide="book-open" class="w-5 h-5 text-black"></i>
           <h2 class="text-lg font-bold text-black">{{ currentData.name || '世界书详情' }}</h2>
         </div>
-        <div class="px-3 py-1 rounded-4 bg-gray-100 border border-gray-300 text-black text-sm">
-          编辑模式
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft"
+            @click="save"
+            title="保存到后端"
+          >保存</button>
+          <div class="px-3 py-1 rounded-4 bg-gray-100 border border-gray-300 text-black text-sm">
+            编辑模式
+          </div>
         </div>
       </div>
       <p class="mt-2 text-xs text-black/60">此页面支持完整编辑、新增、删除和拖拽排序功能</p>
+    </div>
+
+    <!-- 基本信息（名称/描述） -->
+    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="id-card" class="w-4 h-4 text-black"></i>
+        <h3 class="text-base font-semibold text-black">基本信息</h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-black mb-2">名称</label>
+          <input
+            v-model="currentData.name"
+            class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-black mb-2">描述</label>
+          <textarea
+            v-model="currentData.description"
+            rows="2"
+            class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+          ></textarea>
+        </div>
+      </div>
     </div>
 
     <!-- 工具栏：新增 -->

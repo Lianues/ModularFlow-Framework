@@ -547,3 +547,109 @@ def get_regex_rule_detail_impl(file: str) -> Dict[str, Any]:
         "description": desc,
         "content": doc,
     }
+
+
+# ---------- 写入与更新（保存）通用工具 ----------
+
+def _write_json_atomic(target: Path, data: Any) -> Optional[str]:
+    """
+    将 JSON 原子化写入目标路径（UTF-8, ensure_ascii=False, indent=2）。
+    返回 None 表示成功；返回错误字符串表示失败。
+    """
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        tmp.replace(target)
+        return None
+    except Exception as e:
+        return f"{type(e).__name__}: {e}"
+
+
+def _update_json_in_dir(file: str, allowed_dir: Path, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    在指定 allowed_dir 范围内创建/更新一个 JSON 文件。
+    约定：
+    - payload.content 为完整 JSON（object 或 array）
+    - 若 payload.name / payload.description 传入，则写入 content['name'/'description']（覆盖）
+    - 若文件不存在则创建；存在则完全覆盖为 content
+    - 返回与 *detail_impl 同构的结构：{ file, name, description, content } 或 { error, message }
+    """
+    root = _repo_root()
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+    if not isinstance(payload, dict):
+        return {"error": "INVALID_INPUT", "message": "payload 必须为对象"}
+
+    content = payload.get("content")
+    name = payload.get("name", None)
+    desc = payload.get("description", None)
+
+    # 允许 content 为对象或数组
+    if not (isinstance(content, dict) or isinstance(content, list)):
+        return {"error": "INVALID_INPUT", "message": "content 必须为 object 或 array"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, allowed_dir):
+        return {"error": "OUT_OF_SCOPE", "message": f"仅允许写入 {allowed_dir.as_posix()} 目录下的文件"}
+
+    # 将 name/description（若提供）回写到 content 顶层（仅当 content 是对象时）
+    if isinstance(content, dict):
+        if name is not None:
+            content["name"] = name
+        if desc is not None:
+            content["description"] = desc
+
+    err = _write_json_atomic(target, content)
+    if err:
+        return {"error": "WRITE_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    # 规范化返回
+    if isinstance(content, dict):
+        out_name = _ensure_str(content.get("name"))
+        out_desc = _ensure_str(content.get("description"))
+    else:
+        out_name = None
+        out_desc = None
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": out_name,
+        "description": out_desc,
+        "content": content,
+    }
+
+
+# ---------- 实现：按类型保存（创建/更新） ----------
+
+def update_preset_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    root = _repo_root()
+    presets_dir = root / "backend_projects" / "SmartTavern" / "data" / "presets"
+    return _update_json_in_dir(file, presets_dir, payload)
+
+
+def update_world_book_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    root = _repo_root()
+    world_dir = root / "backend_projects" / "SmartTavern" / "data" / "world_books"
+    return _update_json_in_dir(file, world_dir, payload)
+
+
+def update_character_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    root = _repo_root()
+    char_dir = root / "backend_projects" / "SmartTavern" / "data" / "characters"
+    return _update_json_in_dir(file, char_dir, payload)
+
+
+def update_persona_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    root = _repo_root()
+    persona_dir = root / "backend_projects" / "SmartTavern" / "data" / "persona"
+    return _update_json_in_dir(file, persona_dir, payload)
+
+
+def update_regex_rule_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    root = _repo_root()
+    regex_dir = root / "backend_projects" / "SmartTavern" / "data" / "regex_rules"
+    return _update_json_in_dir(file, regex_dir, payload)

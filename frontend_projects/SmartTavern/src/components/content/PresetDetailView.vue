@@ -2,9 +2,11 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import PresetPromptCard from './cards/PresetPromptCard.vue'
 import RegexRuleCard from './cards/RegexRuleCard.vue'
+import DataCatalog from '@/services/dataCatalog'
 
 const props = defineProps({
-  presetData: { type: Object, default: null }
+  presetData: { type: Object, default: null },
+  file: { type: String, default: '' }
 })
 
 // 特殊 Relative 模板（一次性组件）
@@ -46,9 +48,10 @@ const SPECIAL_RELATIVE_TEMPLATES = [
   },
 ]
 
-// 初始演示数据
+ // 初始演示数据
 const initialPresetData = {
   name: '演示预设 - 完整示例',
+  description: '',
   api_config: {
     enabled: true,
     temperature: 1.0,
@@ -118,6 +121,7 @@ function deepClone(x) { return JSON.parse(JSON.stringify(x)) }
 function normalizePresetData(src) {
   if (!src || typeof src !== 'object') return null
   const name = src.name || '预设'
+  const description = src.description || ''
   const api_config = typeof src.api_config === 'object' ? src.api_config : {
     enabled: true, temperature: 1.0, top_p: 1.0, top_k: 0, max_context: 4095,
     max_tokens: 300, stream: true, frequency_penalty: 0, presence_penalty: 0
@@ -132,7 +136,7 @@ function normalizePresetData(src) {
     : Array.isArray(src.rules)
       ? src.rules
       : (src.find_regex || src.replace_regex || src.id) ? [src] : []
-  return { name, api_config, prompts, regex_rules }
+  return { name, description, api_config, prompts, regex_rules }
 }
 // 当前编辑的数据（内存中）
 const currentData = ref(
@@ -143,6 +147,8 @@ const currentData = ref(
 // 外部数据变更时同步
 watch(() => props.presetData, async (v) => {
   currentData.value = deepClone(normalizePresetData(v) || initialPresetData)
+  // 同步 per-field 开关
+  syncApiTogglesFromData()
   await nextTick()
   window.lucide?.createIcons?.()
 })
@@ -153,6 +159,28 @@ const promptsOpen = ref(true)
 const regexOpen = ref(true)
 const relativeOpen = ref(true)
 const inChatOpen = ref(true)
+
+// API 配置：每项启用开关（默认全关；由 enabled_fields 初始化）
+const API_KEYS = ['temperature','top_p','top_k','max_context','max_tokens','stream','frequency_penalty','presence_penalty']
+const apiToggles = ref(Object.fromEntries(API_KEYS.map(k => [k, false])))
+function syncApiTogglesFromData() {
+  try {
+    const ef = Array.isArray(currentData.value?.api_config?.enabled_fields)
+      ? currentData.value.api_config.enabled_fields
+      : []
+    for (const k of API_KEYS) apiToggles.value[k] = ef.includes(k)
+  } catch {
+    for (const k of API_KEYS) apiToggles.value[k] = false
+  }
+}
+function computeEnabledFields() {
+  return API_KEYS.filter(k => apiToggles.value[k])
+}
+
+// 保存状态提示
+const saving = ref(false)
+const savedOk = ref(false)
+let __saveTimer = null
 
 // 计算属性
 const relativePrompts = computed(() => 
@@ -524,12 +552,53 @@ function onRegexDragEnd() {
 // 初始化 Lucide 图标
 onMounted(() => {
   window.lucide?.createIcons?.()
+  // 初次挂载时根据当前数据同步 per-field 开关
+  try { syncApiTogglesFromData() } catch {}
 })
 
 watch([() => currentData.value.prompts, () => currentData.value.regex_rules], async () => {
   await nextTick()
   window.lucide?.createIcons?.()
 }, { flush: 'post' })
+
+/** 保存：将当前编辑内容写回后端文件
+  * - 在 api_config 中写入 enabled_fields（由各项开关生成）
+  * - 保存期间显示旋转动画；成功后短暂显示“已保存！”
+  */
+async function save() {
+  const file = props.file
+  if (!file) {
+    try { alert('缺少文件路径，无法保存'); } catch (_) {}
+    return
+  }
+  // 生成 api_config（含 enabled_fields）
+  const apiConf = { ...(currentData.value.api_config || {}) }
+  apiConf.enabled_fields = computeEnabledFields()
+  const payloadContent = {
+    name: currentData.value.name || '',
+    description: currentData.value.description || '',
+    api_config: apiConf,
+    prompts: Array.isArray(currentData.value.prompts) ? currentData.value.prompts : [],
+    regex_rules: Array.isArray(currentData.value.regex_rules) ? currentData.value.regex_rules : [],
+  }
+  // 可视提示
+  saving.value = true
+  savedOk.value = false
+  if (__saveTimer) { try { clearTimeout(__saveTimer) } catch {} __saveTimer = null }
+  try {
+    const res = await DataCatalog.updatePresetFile(file, payloadContent, payloadContent.name, payloadContent.description)
+    console.log('[PresetDetailView] 保存成功', res)
+    savedOk.value = true
+  } catch (e) {
+    console.error('[PresetDetailView] 保存失败', e)
+    try { alert('保存失败：' + (e?.message || e)) } catch (_) {}
+  } finally {
+    saving.value = false
+    if (savedOk.value) {
+      __saveTimer = setTimeout(() => { savedOk.value = false }, 1800)
+    }
+  }
+}
 </script>
 
 <template>
@@ -541,11 +610,50 @@ watch([() => currentData.value.prompts, () => currentData.value.regex_rules], as
           <i data-lucide="settings-2" class="w-5 h-5 text-black"></i>
           <h2 class="text-lg font-bold text-black">{{ currentData.name || '预设详情' }}</h2>
         </div>
-        <div class="px-3 py-1 rounded-4 bg-gray-100 border border-gray-300 text-black text-sm">
-          编辑模式
+        <div class="flex items-center gap-2">
+          <!-- 保存状态：左侧提示区 -->
+          <div class="save-indicator min-w-[72px] h-7 flex items-center justify-center">
+            <span v-if="saving" class="save-spinner" aria-label="保存中"></span>
+            <span v-else-if="savedOk" class="save-done"><strong>已保存！</strong></span>
+          </div>
+          <button
+            type="button"
+            class="px-3 py-1 rounded-4 bg-transparent border border-gray-900 text-black text-sm hover:bg-gray-100 active:bg-gray-200 transition-all duration-200 ease-soft disabled:opacity-50"
+            :disabled="saving"
+            @click="save"
+            title="保存到后端"
+          >保存</button>
+          <div class="px-3 py-1 rounded-4 bg-gray-100 border border-gray-300 text-black text-sm">
+            编辑模式
+          </div>
         </div>
       </div>
       <p class="mt-2 text-xs text-black/60">此页面支持完整编辑、新增、删除和拖拽排序功能</p>
+    </div>
+
+    <!-- 基本信息（名称/描述） -->
+    <div class="bg-white rounded-4 border border-gray-200 p-5 transition-all duration-200 ease-soft hover:shadow-elevate">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="id-card" class="w-4 h-4 text-black"></i>
+        <h3 class="text-base font-semibold text-black">基本信息</h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-black mb-2">名称</label>
+          <input
+            v-model="currentData.name"
+            class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+          />
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-black mb-2">描述</label>
+          <textarea
+            v-model="currentData.description"
+            rows="2"
+            class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+          ></textarea>
+        </div>
+      </div>
     </div>
 
     <!-- API 配置 -->
@@ -583,65 +691,107 @@ watch([() => currentData.value.prompts, () => currentData.value.regex_rules], as
         <!-- 参数编辑 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Temperature</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Temperature</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.temperature" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="0"
               max="2"
               step="0.01"
               v-model.number="currentData.api_config.temperature"
+              :disabled="!currentData.api_config.enabled || !apiToggles.temperature"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Top P</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Top P</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.top_p" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="0"
               max="1"
               step="0.01"
               v-model.number="currentData.api_config.top_p"
+              :disabled="!currentData.api_config.enabled || !apiToggles.top_p"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Top K</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Top K</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.top_k" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="0"
               v-model.number="currentData.api_config.top_k"
+              :disabled="!currentData.api_config.enabled || !apiToggles.top_k"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Max Context</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Max Context</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.max_context" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="1"
               v-model.number="currentData.api_config.max_context"
+              :disabled="!currentData.api_config.enabled || !apiToggles.max_context"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Max Tokens</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Max Tokens</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.max_tokens" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="1"
               v-model.number="currentData.api_config.max_tokens"
+              :disabled="!currentData.api_config.enabled || !apiToggles.max_tokens"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">流式输出（stream）</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">流式输出（stream）</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.stream" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <label class="inline-flex items-center space-x-2">
               <input
                 type="checkbox"
                 v-model="currentData.api_config.stream"
+                :disabled="!currentData.api_config.enabled || !apiToggles.stream"
                 class="w-5 h-5 border border-gray-400 rounded-4 accent-black"
               />
               <span class="text-sm text-black/80">开启</span>
@@ -649,21 +799,35 @@ watch([() => currentData.value.prompts, () => currentData.value.regex_rules], as
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Frequency Penalty</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Frequency Penalty</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.frequency_penalty" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="0"
               v-model.number="currentData.api_config.frequency_penalty"
+              :disabled="!currentData.api_config.enabled || !apiToggles.frequency_penalty"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-black mb-2">Presence Penalty</label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-sm font-medium text-black">Presence Penalty</label>
+              <label class="inline-flex items-center gap-2 select-none">
+                <input type="checkbox" v-model="apiToggles.presence_penalty" class="w-4 h-4 border border-gray-400 rounded-4 accent-black" />
+                <span class="text-xs text-black/60">启用</span>
+              </label>
+            </div>
             <input
               type="number"
               min="0"
               v-model.number="currentData.api_config.presence_penalty"
+              :disabled="!currentData.api_config.enabled || !apiToggles.presence_penalty"
               class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
             />
           </div>
@@ -1078,6 +1242,22 @@ watch([() => currentData.value.prompts, () => currentData.value.regex_rules], as
 [data-theme="dark"] .drag-over-end::after {
   background: rgb(232, 236, 244);
 }
+
+/* 保存状态样式 */
+.save-indicator { min-width: 72px; }
+.save-spinner {
+  width: 16px; height: 16px; display: inline-block;
+  border: 2px solid rgba(17,17,17,0.2);
+  border-top-color: #111; border-radius: 9999px;
+  animation: st-spin 0.8s linear infinite;
+}
+[data-theme="dark"] .save-spinner {
+  border: 2px solid rgba(232,236,244,0.25);
+  border-top-color: rgb(232,236,244);
+}
+.save-done { font-size: 12px; color: #111; }
+[data-theme="dark"] .save-done { color: rgb(232,236,244); }
+@keyframes st-spin { to { transform: rotate(360deg); } }
 
 /* 深色主题适配 */
 [data-theme="dark"] .bg-white {

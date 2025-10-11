@@ -251,6 +251,111 @@ def test_get_regex_rule_detail_sample():
     print("✓ get_regex_rule_detail 读取 remove_xml_tags.json 正确")
 
 
+# ---------- 保存（创建/更新）端到端测试（仅对部分类型做回归） ----------
+
+def _cleanup_file(rel_path: str):
+    try:
+        (ROOT / rel_path).unlink()
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[cleanup_warning] {e}")
+
+
+def test_update_preset_file_roundtrip():
+    rel = "backend_projects/SmartTavern/data/presets/__tmp_update_preset.json"
+    _cleanup_file(rel)
+
+    payload_v1 = {
+        "file": rel,
+        "name": "保存测试-预设",
+        "description": "v1 描述",
+        "content": {
+            "name": "should be overridden",  # 将被 name 覆盖
+            "description": "should be overridden",  # 将被 description 覆盖
+            "prompts": []
+        }
+    }
+    res1 = core.call_api("smarttavern/data_catalog/update_preset_file", payload_v1, method="POST", namespace="modules")
+    assert res1.get("file") == rel
+    assert res1.get("name") == "保存测试-预设"
+    assert res1.get("description") == "v1 描述"
+    assert isinstance(res1.get("content"), dict)
+
+    # 读取详情确认
+    d1 = core.call_api("smarttavern/data_catalog/get_preset_detail", {"file": rel}, method="POST", namespace="modules")
+    assert d1.get("name") == "保存测试-预设"
+    assert d1.get("description") == "v1 描述"
+
+    # 更新 v2
+    payload_v2 = {
+        "file": rel,
+        "name": "保存测试-预设-v2",
+        "description": "v2 描述",
+        "content": {
+            "prompts": [{"identifier": "main", "name": "Main", "position": "relative", "enabled": True, "role": "system", "content": "hi"}]
+        }
+    }
+    res2 = core.call_api("smarttavern/data_catalog/update_preset_file", payload_v2, method="POST", namespace="modules")
+    assert res2.get("name") == "保存测试-预设-v2"
+    d2 = core.call_api("smarttavern/data_catalog/get_preset_detail", {"file": rel}, method="POST", namespace="modules")
+    assert d2.get("name") == "保存测试-预设-v2"
+
+    _cleanup_file(rel)
+
+
+def test_update_world_book_file_roundtrip():
+    rel = "backend_projects/SmartTavern/data/world_books/__tmp_update_world.json"
+    _cleanup_file(rel)
+
+    payload_v1 = {
+        "file": rel,
+        "name": "保存测试-世界书",
+        "description": "world v1",
+        "content": {
+            "entries": [
+                {"id": "w1", "name": "条目1", "content": "内容", "enabled": True, "mode": "always", "position": "before_char", "order": 1}
+            ]
+        }
+    }
+    res1 = core.call_api("smarttavern/data_catalog/update_world_book_file", payload_v1, method="POST", namespace="modules")
+    assert res1.get("file") == rel
+    assert res1.get("name") == "保存测试-世界书"
+
+    d1 = core.call_api("smarttavern/data_catalog/get_world_book_detail", {"file": rel}, method="POST", namespace="modules")
+    assert d1.get("name") == "保存测试-世界书"
+    assert "entries" in (d1.get("content") or {})
+
+    _cleanup_file(rel)
+
+
+def test_update_regex_rule_file_roundtrip():
+    rel = "backend_projects/SmartTavern/data/regex_rules/__tmp_update_regex.json"
+    _cleanup_file(rel)
+
+    payload = {
+        "file": rel,
+        "name": "保存测试-正则",
+        "description": "regex v1",
+        "content": {
+            "name": "xx",
+            "description": "yy",
+            "regex_rules": [
+                {"id": "r1", "name": "rule1", "enabled": True, "find_regex": "a+", "replace_regex": "a", "targets": [], "placement": "after_macro", "views": []}
+            ]
+        }
+    }
+    res = core.call_api("smarttavern/data_catalog/update_regex_rule_file", payload, method="POST", namespace="modules")
+    assert res.get("file") == rel
+    assert res.get("name") == "保存测试-正则"
+
+    d1 = core.call_api("smarttavern/data_catalog/get_regex_rule_detail", {"file": rel}, method="POST", namespace="modules")
+    assert d1.get("name") == "保存测试-正则"
+    assert isinstance((d1.get("content") or {}).get("regex_rules"), list)
+
+    _cleanup_file(rel)
+
+
 def main():
     _ensure_gateway()
     test_list_presets_basic_and_contains_default()
@@ -263,6 +368,10 @@ def main():
     test_get_character_detail_sample()
     test_get_persona_detail_sample()
     test_get_regex_rule_detail_sample()
+    # new: update tests
+    test_update_preset_file_roundtrip()
+    test_update_world_book_file_roundtrip()
+    test_update_regex_rule_file_roundtrip()
     print("OK: data_catalog all tests passed")
 
 

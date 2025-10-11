@@ -55,6 +55,7 @@ const viewModalType = ref('') // 'preset', 'regex', 'worldbook', etc.
 const viewModalData = ref(null)
 const viewModalLoading = ref(false)
 const viewModalError = ref('')
+const viewModalFile = ref('') // 详情对应的文件相对路径
 
 async function openViewModal(type, title, fileOrData) {
   viewModalType.value = type
@@ -62,26 +63,31 @@ async function openViewModal(type, title, fileOrData) {
   viewModalError.value = ''
   viewModalLoading.value = true
   viewModalData.value = null
+  // 先记录 file（如果传入的是字符串）
+  viewModalFile.value = typeof fileOrData === 'string' ? fileOrData : ''
   viewModalOpen.value = true
 
   try {
     if (fileOrData && typeof fileOrData === 'object') {
-      // 直接使用传入的数据
+      // 直接使用传入的数据（可能没有 file）
       viewModalData.value = fileOrData
     } else if (typeof fileOrData === 'string') {
       // 按类型调用后端详情接口，并写入缓存（由服务内部处理）
       const fetchers = {
-        preset:    (f) => DataCatalog.getPresetDetail(f),
-        worldbook: (f) => DataCatalog.getWorldBookDetail(f),
-        character: (f) => DataCatalog.getCharacterDetail(f),
-        persona:   (f) => DataCatalog.getPersonaDetail(f),
-        regex:     (f) => DataCatalog.getRegexRuleDetail(f),
+        preset:    (f) => DataCatalog.getPresetDetail(f, { useCache: false, persist: false }),
+        worldbook: (f) => DataCatalog.getWorldBookDetail(f, { useCache: false, persist: false }),
+        character: (f) => DataCatalog.getCharacterDetail(f, { useCache: false, persist: false }),
+        persona:   (f) => DataCatalog.getPersonaDetail(f, { useCache: false, persist: false }),
+        regex:     (f) => DataCatalog.getRegexRuleDetail(f, { useCache: false, persist: false }),
       }
       const fn = fetchers[type]
       if (!fn) throw new Error(`未知类型: ${type}`)
       const res = await fn(fileOrData)
       // 后端结构为 { file, name, description, content }
       viewModalData.value = res && (res.content ?? res)
+      if (res && typeof res.file === 'string') {
+        viewModalFile.value = res.file
+      }
     } else {
       // 无文件参数时保持空（例如纯占位模式）
     }
@@ -100,6 +106,7 @@ function closeViewModal() {
   viewModalData.value = null
   viewModalLoading.value = false
   viewModalError.value = ''
+  viewModalFile.value = ''
 }
 
 // 主页功能模态（Load / Gallery / Options）
@@ -628,22 +635,27 @@ function onSidebarViewUpdate(v) {
       <PresetDetailView
         v-else-if="viewModalType === 'preset'"
         :presetData="viewModalData"
+        :file="viewModalFile"
       />
       <WorldbookDetailView
         v-else-if="viewModalType === 'worldbook'"
         :worldbookData="viewModalData"
+        :file="viewModalFile"
       />
       <CharacterDetailView
         v-else-if="viewModalType === 'character'"
         :characterData="viewModalData"
+        :file="viewModalFile"
       />
       <PersonaDetailView
         v-else-if="viewModalType === 'persona'"
         :personaData="viewModalData"
+        :file="viewModalFile"
       />
       <RegexDetailView
         v-else-if="viewModalType === 'regex'"
         :regexData="viewModalData"
+        :file="viewModalFile"
       />
       <div v-else class="modal-placeholder">
         <div class="placeholder-icon">📋</div>
