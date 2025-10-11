@@ -67,6 +67,9 @@ const form = reactive({
     thinking_budget: 16000
   }
 })
+// 请求参数启用开关（默认启用）
+const apiToggleKeys = ['max_tokens', 'temperature', 'top_p', 'presence_penalty', 'frequency_penalty', 'stream']
+const apiToggles = reactive(Object.fromEntries(apiToggleKeys.map(k => [k, true])))
 
 const showGemini = computed(() => form.provider === 'gemini')
 const showAnthropic = computed(() => form.provider === 'anthropic')
@@ -142,17 +145,17 @@ const previewPayload = computed(() => {
     api_key: form.api_key || '••••••',
     base_url: form.base_url,
     messages: [{ role: 'user', content: '示例输入' }],
-    stream: form.stream,
     model: form.model_id || undefined,
-    max_tokens: form.max_tokens,
-    temperature: form.temperature,
     timeout: form.timeout,
     connect_timeout: form.connect_timeout,
     enable_logging: form.enable_logging
   }
-  if (form.top_p != null) payload.top_p = form.top_p
-  if (form.presence_penalty != null) payload.presence_penalty = form.presence_penalty
-  if (form.frequency_penalty != null) payload.frequency_penalty = form.frequency_penalty
+  if (apiToggles.max_tokens) payload.max_tokens = form.max_tokens
+  if (apiToggles.temperature) payload.temperature = form.temperature
+  if (apiToggles.stream) payload.stream = form.stream
+  if (apiToggles.top_p && form.top_p != null) payload.top_p = form.top_p
+  if (apiToggles.presence_penalty && form.presence_penalty != null) payload.presence_penalty = form.presence_penalty
+  if (apiToggles.frequency_penalty && form.frequency_penalty != null) payload.frequency_penalty = form.frequency_penalty
 
   // 通用自定义参数
   const baseCustomParams = parseJSONSafe(form.custom_params_json) || {}
@@ -279,32 +282,68 @@ const previewPayload = computed(() => {
         <div class="ai-card">
           <div class="ai-card-title">
             <i data-lucide="sliders-horizontal" class="icon-16"></i>
-            <span>解码参数</span>
+            <span>请求参数</span>
           </div>
           <div class="ai-grid-2">
-            <div class="ai-row">
-              <label class="ai-label">max_tokens</label>
-              <input v-model.number="form.max_tokens" type="number" min="1" class="ai-input" />
+            <div class="ai-row ai-row-col">
+              <div class="ai-row-head">
+                <label class="ai-label">max_tokens</label>
+                <label class="ai-toggle">
+                  <input type="checkbox" v-model="apiToggles.max_tokens" />
+                  <span>启用</span>
+                </label>
+              </div>
+              <input v-model.number="form.max_tokens" type="number" min="1" class="ai-input" :disabled="!apiToggles.max_tokens" />
             </div>
-            <div class="ai-row">
-              <label class="ai-label">temperature</label>
-              <input v-model.number="form.temperature" type="number" step="0.01" min="0" class="ai-input" />
+            <div class="ai-row ai-row-col">
+              <div class="ai-row-head">
+                <label class="ai-label">temperature</label>
+                <label class="ai-toggle">
+                  <input type="checkbox" v-model="apiToggles.temperature" />
+                  <span>启用</span>
+                </label>
+              </div>
+              <input v-model.number="form.temperature" type="number" step="0.01" min="0" class="ai-input" :disabled="!apiToggles.temperature" />
             </div>
-            <div class="ai-row">
-              <label class="ai-label">top_p</label>
-              <input v-model.number="form.top_p" type="number" step="0.01" min="0" max="1" class="ai-input" />
+            <div class="ai-row ai-row-col">
+              <div class="ai-row-head">
+                <label class="ai-label">top_p</label>
+                <label class="ai-toggle">
+                  <input type="checkbox" v-model="apiToggles.top_p" />
+                  <span>启用</span>
+                </label>
+              </div>
+              <input v-model.number="form.top_p" type="number" step="0.01" min="0" max="1" class="ai-input" :disabled="!apiToggles.top_p" />
             </div>
-            <div class="ai-row">
-              <label class="ai-label">presence_penalty</label>
-              <input v-model.number="form.presence_penalty" type="number" step="0.01" class="ai-input" />
+            <div class="ai-row ai-row-col">
+              <div class="ai-row-head">
+                <label class="ai-label">presence_penalty</label>
+                <label class="ai-toggle">
+                  <input type="checkbox" v-model="apiToggles.presence_penalty" />
+                  <span>启用</span>
+                </label>
+              </div>
+              <input v-model.number="form.presence_penalty" type="number" step="0.01" class="ai-input" :disabled="!apiToggles.presence_penalty" />
             </div>
-            <div class="ai-row">
-              <label class="ai-label">frequency_penalty</label>
-              <input v-model.number="form.frequency_penalty" type="number" step="0.01" class="ai-input" />
+            <div class="ai-row ai-row-col">
+              <div class="ai-row-head">
+                <label class="ai-label">frequency_penalty</label>
+                <label class="ai-toggle">
+                  <input type="checkbox" v-model="apiToggles.frequency_penalty" />
+                  <span>启用</span>
+                </label>
+              </div>
+              <input v-model.number="form.frequency_penalty" type="number" step="0.01" class="ai-input" :disabled="!apiToggles.frequency_penalty" />
             </div>
-            <div class="ai-row">
-              <label class="ai-label">流式输出</label>
-              <input type="checkbox" v-model="form.stream" />
+            <div class="ai-row ai-row-col">
+              <div class="ai-row-head">
+                <label class="ai-label">流式输出</label>
+                <label class="ai-toggle">
+                  <input type="checkbox" v-model="apiToggles.stream" />
+                  <span>启用</span>
+                </label>
+              </div>
+              <input type="checkbox" v-model="form.stream" :disabled="!apiToggles.stream" />
             </div>
           </div>
         </div>
@@ -673,6 +712,47 @@ const previewPayload = computed(() => {
   font-size: 12px;
   font-weight: 600;
   color: rgb(var(--st-color-text));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ai-model-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(var(--st-color-text), 0.6);
+}
+.ai-model-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: rgb(var(--st-color-text));
+  transition: background 0.15s ease;
+  border-bottom: 1px solid rgba(var(--st-border), 0.5);
+}
+.ai-model-item:last-child {
+  border-bottom: none;
+}
+.ai-model-item:hover {
+  background: rgba(var(--st-primary), 0.1);
+}
+
+[data-theme="dark"] .ai-input { background: rgb(var(--st-surface)); }
+[data-theme="dark"] .ai-model-dropdown-btn { background: rgb(var(--st-surface)); }
+
+/* 请求参数启用头 */
+.ai-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.ai-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgb(var(--st-color-text));
+}
 
 /* 预设覆盖警告样式 */
 .ai-card-warning {
@@ -702,31 +782,5 @@ const previewPayload = computed(() => {
   font-size: 13px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.ai-model-hint {
-  font-size: 11px;
-  font-weight: 400;
-  color: rgba(var(--st-color-text), 0.6);
-}
-.ai-model-item {
-  padding: 10px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  color: rgb(var(--st-color-text));
-  transition: background 0.15s ease;
-  border-bottom: 1px solid rgba(var(--st-border), 0.5);
-}
-.ai-model-item:last-child {
-  border-bottom: none;
-}
-.ai-model-item:hover {
-  background: rgba(var(--st-primary), 0.1);
-}
-
-[data-theme="dark"] .ai-input { background: rgb(var(--st-surface)); }
-[data-theme="dark"] .ai-model-dropdown-btn { background: rgb(var(--st-surface)); }
 
 </style>
