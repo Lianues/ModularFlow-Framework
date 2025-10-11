@@ -165,6 +165,92 @@ def test_list_regex_rules_contains_sample():
     print("✓ list_regex_rules 包含 remove_xml_tags.json 且字段正确")
 
 
+# ---------- 读取单个预设详情 ----------
+
+def test_get_preset_detail_default():
+    res = core.call_api(
+        "smarttavern/data_catalog/get_preset_detail",
+        {"file": "backend_projects/SmartTavern/data/presets/Default.json"},
+        method="POST",
+        namespace="modules",
+    )
+    assert isinstance(res, dict), "返回结果应为 dict"
+    assert res.get("file") == "backend_projects/SmartTavern/data/presets/Default.json"
+    assert "content" in res and isinstance(res["content"], dict), "应返回完整 JSON 内容至 content 字段"
+    assert res.get("name") == "默认预设", "name 字段不匹配"
+    assert res.get("description") == "这是默认预设的描述", "description 字段不匹配"
+    _print_section("get_preset_detail response", res)
+    print("✓ get_preset_detail 读取 Default.json 正确")
+
+
+# ---------- 读取其他类型详情 ----------
+
+def test_get_world_book_detail_sample():
+    res = core.call_api(
+        "smarttavern/data_catalog/get_world_book_detail",
+        {"file": "backend_projects/SmartTavern/data/world_books/参考用main_world.json"},
+        method="POST",
+        namespace="modules",
+    )
+    assert isinstance(res, dict)
+    assert res.get("file") == "backend_projects/SmartTavern/data/world_books/参考用main_world.json"
+    assert "content" in res and isinstance(res["content"], dict)
+    assert res.get("name") == "参考用main_world"
+    assert res.get("description") == "这是世界书的描述"
+    _print_section("get_world_book_detail response", res)
+    print("✓ get_world_book_detail 读取参考用main_world.json 正确")
+
+
+def test_get_character_detail_sample():
+    res = core.call_api(
+        "smarttavern/data_catalog/get_character_detail",
+        {"file": "backend_projects/SmartTavern/data/characters/许莲笙.json"},
+        method="POST",
+        namespace="modules",
+    )
+    assert isinstance(res, dict)
+    assert res.get("file") == "backend_projects/SmartTavern/data/characters/许莲笙.json"
+    assert "content" in res and isinstance(res["content"], dict)
+    assert res.get("name") == "许莲笙"
+    desc = res.get("description")
+    assert isinstance(desc, str) and len(desc) > 0
+    _print_section("get_character_detail response", res)
+    print("✓ get_character_detail 读取 许莲笙.json 正确")
+
+
+def test_get_persona_detail_sample():
+    res = core.call_api(
+        "smarttavern/data_catalog/get_persona_detail",
+        {"file": "backend_projects/SmartTavern/data/persona/用户2.json"},
+        method="POST",
+        namespace="modules",
+    )
+    assert isinstance(res, dict)
+    assert res.get("file") == "backend_projects/SmartTavern/data/persona/用户2.json"
+    assert "content" in res and isinstance(res["content"], dict)
+    assert res.get("name") == "用户2"
+    assert res.get("description") == "新建的用户角色"
+    _print_section("get_persona_detail response", res)
+    print("✓ get_persona_detail 读取 用户2.json 正确")
+
+
+def test_get_regex_rule_detail_sample():
+    res = core.call_api(
+        "smarttavern/data_catalog/get_regex_rule_detail",
+        {"file": "backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json"},
+        method="POST",
+        namespace="modules",
+    )
+    assert isinstance(res, dict)
+    assert res.get("file") == "backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json"
+    assert "content" in res and isinstance(res["content"], dict)
+    # 注：样例中的 name/description 使用世界书文案
+    assert res.get("name") == "参考用main_world"
+    assert res.get("description") == "这是世界书的描述"
+    _print_section("get_regex_rule_detail response", res)
+    print("✓ get_regex_rule_detail 读取 remove_xml_tags.json 正确")
+
+
 def main():
     _ensure_gateway()
     test_list_presets_basic_and_contains_default()
@@ -172,6 +258,11 @@ def main():
     test_list_characters_contains_sample()
     test_list_personas_contains_sample()
     test_list_regex_rules_contains_sample()
+    test_get_preset_detail_default()
+    test_get_world_book_detail_sample()
+    test_get_character_detail_sample()
+    test_get_persona_detail_sample()
+    test_get_regex_rule_detail_sample()
     print("OK: data_catalog all tests passed")
 
 

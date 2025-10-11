@@ -373,3 +373,177 @@ def list_regex_rules_impl(base_dir: Optional[str] = None,
     if errors:
         out["errors"] = errors
     return out
+
+
+# ---------- 实现：读取单个 preset 详情 ----------
+
+def _is_within(child: Path, parent: Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def get_preset_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/presets 下指定 JSON 文件，返回基础字段与完整内容。
+
+    入参:
+      - file: POSIX 风格相对路径（来自 list_presets 的 items[*].file），例如：
+              "backend_projects/SmartTavern/data/presets/Default.json"
+
+    返回:
+      {
+        "file": "...",
+        "name": "...|null",
+        "description": "...|null",
+        "content": {...}
+      }
+    """
+    root = _repo_root()
+    presets_dir = root / "backend_projects" / "SmartTavern" / "data" / "presets"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, presets_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 presets 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }
+
+# ---------- 实现：读取单个 world_book 详情 ----------
+
+def get_world_book_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/world_books 下指定 JSON 文件，返回完整内容与基础字段。
+    """
+    root = _repo_root()
+    world_dir = root / "backend_projects" / "SmartTavern" / "data" / "world_books"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, world_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 world_books 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }
+
+
+# ---------- 实现：读取单个 character 详情 ----------
+
+def get_character_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/characters 下指定 JSON 文件，返回完整内容与基础字段。
+    """
+    root = _repo_root()
+    char_dir = root / "backend_projects" / "SmartTavern" / "data" / "characters"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, char_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 characters 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }
+
+
+# ---------- 实现：读取单个 persona 详情 ----------
+
+def get_persona_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/persona 下指定 JSON 文件，返回完整内容与基础字段。
+    """
+    root = _repo_root()
+    persona_dir = root / "backend_projects" / "SmartTavern" / "data" / "persona"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, persona_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 persona 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }
+
+
+# ---------- 实现：读取单个 regex_rules 详情 ----------
+
+def get_regex_rule_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/regex_rules 下指定 JSON 文件，返回完整内容与基础字段。
+    """
+    root = _repo_root()
+    regex_dir = root / "backend_projects" / "SmartTavern" / "data" / "regex_rules"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, regex_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 regex_rules 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }

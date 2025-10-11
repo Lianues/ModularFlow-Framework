@@ -276,3 +276,183 @@ def list_personas(base_dir: Optional[str] = None,
 def list_regex_rules(base_dir: Optional[str] = None,
                      fields: Optional[List[str]] = None) -> Dict[str, Any]:
     return list_regex_rules_impl()
+
+
+# ---------- 获取预设详情（读取单个文件） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/get_preset_detail",
+    name="获取预设详情",
+    description="读取 backend_projects/SmartTavern/data/presets 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/presets/Default.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_preset_detail(file: str) -> Dict[str, Any]:
+    # 延迟导入，避免在顶层修改 import 列表导致潜在循环
+    from .impl import get_preset_detail_impl
+    return get_preset_detail_impl(file=file)
+
+# ---------- 获取世界书详情（读取单个文件） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/get_world_book_detail",
+    name="获取世界书详情",
+    description="读取 backend_projects/SmartTavern/data/world_books 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/world_books/参考用main_world.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_world_book_detail(file: str) -> Dict[str, Any]:
+    from .impl import get_world_book_detail_impl
+    return get_world_book_detail_impl(file=file)
+
+
+# ---------- 获取角色卡详情（读取单个文件） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/get_character_detail",
+    name="获取角色卡详情",
+    description="读取 backend_projects/SmartTavern/data/characters 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/characters/许莲笙.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_character_detail(file: str) -> Dict[str, Any]:
+    from .impl import get_character_detail_impl
+    return get_character_detail_impl(file=file)
+
+
+# ---------- 获取用户画像详情（读取单个文件） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/get_persona_detail",
+    name="获取用户画像详情",
+    description="读取 backend_projects/SmartTavern/data/persona 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/persona/用户2.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_persona_detail(file: str) -> Dict[str, Any]:
+    from .impl import get_persona_detail_impl
+    return get_persona_detail_impl(file=file)
+
+
+# ---------- 获取正则规则详情（读取单个文件） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/get_regex_rule_detail",
+    name="获取正则规则详情",
+    description="读取 backend_projects/SmartTavern/data/regex_rules 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_regex_rule_detail(file: str) -> Dict[str, Any]:
+    from .impl import get_regex_rule_detail_impl
+    return get_regex_rule_detail_impl(file=file)
