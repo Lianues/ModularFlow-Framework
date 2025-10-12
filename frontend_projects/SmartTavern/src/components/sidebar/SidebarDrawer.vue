@@ -287,7 +287,7 @@ const drawerStyle = computed(() => {
 .sd-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(var(--st-overlay-ink), 0.18);
+  background: rgba(0,0,0,0.18);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: 58; /* 低于抽屉(59)，高于内容 */
