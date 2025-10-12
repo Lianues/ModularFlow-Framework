@@ -25,20 +25,28 @@ import core
 from .impl import (
     openai_messages_from_doc as _openai_messages_from_doc,
     branch_table_from_doc as _branch_table_from_doc,
+    get_latest_message_from_doc as _get_latest_message_from_doc,
+    update_message_content as _update_message_content,
+    truncate_after_node as _truncate_after_node,
+    append_new_message as _append_new_message,
 )
 
 
 @core.register_api(
     path="smarttavern/chat_branches/openai_messages",
     name="OpenAI 消息导出（无状态）",
-    description="从最小分支树文件 doc 导出 OpenAI Chat messages 数组",
+    description="从最小分支树文件导出 OpenAI Chat messages 数组。支持传入 doc（JSON 对象）或 file（文件路径）二选一",
     input_schema={
         "type": "object",
         "properties": {
-            "doc": {"type": "object", "additionalProperties": True}
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
         },
-        "required": ["doc"],
         "additionalProperties": False,
+        "oneOf": [
+            {"required": ["doc"]},
+            {"required": ["file"]}
+        ]
     },
     output_schema={
         "type": "object",
@@ -57,21 +65,25 @@ from .impl import (
         "additionalProperties": True,
     },
 )
-def openai_messages(doc: Dict[str, Any]) -> Dict[str, Any]:
-    return _openai_messages_from_doc(doc=doc)
+def openai_messages(doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _openai_messages_from_doc(doc=doc, file=file)
 
 
 @core.register_api(
     path="smarttavern/chat_branches/branch_table",
     name="分支情况表（无状态）",
-    description="从最小分支树文件 doc 计算分支情况表（含最新层 j/n）",
+    description="从最小分支树文件计算分支情况表（含最新层 j/n）。支持传入 doc（JSON 对象）或 file（文件路径）二选一",
     input_schema={
         "type": "object",
         "properties": {
-            "doc": {"type": "object", "additionalProperties": True}
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
         },
-        "required": ["doc"],
         "additionalProperties": False,
+        "oneOf": [
+            {"required": ["doc"]},
+            {"required": ["file"]}
+        ]
     },
     output_schema={
         "type": "object",
@@ -83,5 +95,122 @@ def openai_messages(doc: Dict[str, Any]) -> Dict[str, Any]:
         "additionalProperties": True,
     },
 )
-def branch_table(doc: Dict[str, Any]) -> Dict[str, Any]:
-    return _branch_table_from_doc(doc=doc)
+def branch_table(doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _branch_table_from_doc(doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/get_latest_message",
+    name="获取最后一条消息（无状态）",
+    description="根据 active_path 提取最后一条消息。支持传入 doc（JSON 对象）或 file（文件路径）二选一",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["doc"]},
+            {"required": ["file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "node_id": {"type": "string"},
+            "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+            "content": {"type": "string"},
+            "depth": {"type": "integer"}
+        },
+        "required": ["node_id", "role", "content", "depth"],
+        "additionalProperties": False,
+    },
+)
+def get_latest_message(doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _get_latest_message_from_doc(doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/update_message",
+    name="修改消息内容",
+    description="修改指定节点的 content，返回更新后的完整 doc（含 updated_at）",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "node_id": {"type": "string"},
+            "content": {"type": "string"},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["node_id", "content"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["node_id", "content", "doc"]},
+            {"required": ["node_id", "content", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "additionalProperties": True
+    },
+)
+def update_message(node_id: str, content: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _update_message_content(node_id=node_id, content=content, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/truncate_after",
+    name="修剪消息树",
+    description="保留到指定节点，删除其所有子孙；更新 nodes/children/active_path/updated_at",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "node_id": {"type": "string"},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["node_id"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["node_id", "doc"]},
+            {"required": ["node_id", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "additionalProperties": True
+    },
+)
+def truncate_after(node_id: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _truncate_after_node(node_id=node_id, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/append_message",
+    name="追加新消息",
+    description="创建新节点，更新父节点 children 与 active_path，返回完整 doc（含 updated_at）",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "node_id": {"type": "string"},
+            "pid": {"type": "string"},
+            "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+            "content": {"type": "string"},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["node_id", "pid", "role", "content"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["node_id", "pid", "role", "content", "doc"]},
+            {"required": ["node_id", "pid", "role", "content", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "additionalProperties": True
+    },
+)
+def append_message(node_id: str, pid: str, role: str, content: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _append_new_message(node_id=node_id, pid=pid, role=role, content=content, doc=doc, file=file)

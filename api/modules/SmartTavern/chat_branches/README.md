@@ -1,107 +1,197 @@
-# SmartTavern.chat_branches 模块说明（分支重试对话）
+# SmartTavern.chat_branches 模块说明（无状态版）
 
 位置：api/modules/SmartTavern/chat_branches/
 
-本模块提供“分支重试对话（chat-branches）”能力：以不可变消息树 + 可变会话路径方式管理对话，支持创建对话、追加消息、修剪路径、左右切换分支（归档旧会话并新建新会话）、导入/导出标准聊天文件（chat-branches v2），并可导出当前分支为 OpenAI messages 与分支情况表（j/n）。
+本模块提供"分支对话"的无状态视图计算能力，仅负责从单个对话文件（最小分支树结构）导出 OpenAI messages 与分支情况表（j/n），不管理会话状态。
 
 相关代码
 - 注册封装层（API 定义/Schema）：[filename](api/modules/SmartTavern/chat_branches/chat_branches.py:1)
-  - 创建对话：[python.function(create_conversation)](api/modules/SmartTavern/chat_branches/chat_branches.py:46)
-  - 获取路径：[python.function(get_path)](api/modules/SmartTavern/chat_branches/chat_branches.py:61)
-  - 追加消息：[python.function(append_message)](api/modules/SmartTavern/chat_branches/chat_branches.py:80)
-  - 修剪路径：[python.function(truncate_after)](api/modules/SmartTavern/chat_branches/chat_branches.py:98)
-  - 切换分支并新会话：[python.function(switch_branch_and_start_new_session)](api/modules/SmartTavern/chat_branches/chat_branches.py:117)
-  - 分支 j/n 指示：[python.function(branch_indicator)](api/modules/SmartTavern/chat_branches/chat_branches.py:142)
-  - 列出对话/会话：[python.function(list_conversations)](api/modules/SmartTavern/chat_branches/chat_branches.py:155), [python.function(list_sessions)](api/modules/SmartTavern/chat_branches/chat_branches.py:170)
-  - 派生视图：OpenAI 消息：[python.function(openai_messages)](api/modules/SmartTavern/chat_branches/chat_branches.py:207)，分支情况表：[python.function(branch_table)](api/modules/SmartTavern/chat_branches/chat_branches.py:222)
-  - 导出/导入别名（稳定路径）：[python.function(export)](api/modules/SmartTavern/chat_branches/chat_branches.py:237), [python.function(import_chat)](api/modules/SmartTavern/chat_branches/chat_branches.py:260)
-- 实现层（内存引擎）：[filename](api/modules/SmartTavern/chat_branches/impl.py:1)
-  - 创建对话：[python.function(create_conversation)](api/modules/SmartTavern/chat_branches/impl.py:121)
-  - 追加消息：[python.function(append_message)](api/modules/SmartTavern/chat_branches/impl.py:154)
-  - 修剪路径：[python.function(truncate_after)](api/modules/SmartTavern/chat_branches/impl.py:175)
-  - 切换分支并新会话：[python.function(switch_branch_and_start_new_session)](api/modules/SmartTavern/chat_branches/impl.py:187)
-  - 分支 j/n 指示：[python.function(branch_indicator)](api/modules/SmartTavern/chat_branches/impl.py:241)
-  - 列出对话/会话：[python.function(list_conversations)](api/modules/SmartTavern/chat_branches/impl.py:255), [python.function(list_sessions)](api/modules/SmartTavern/chat_branches/impl.py:277)
-  - 导出/导入（最小文件）：导出仅包含 root/nodes/children/active_path → [python.function(export_v2)](api/modules/SmartTavern/chat_branches/impl.py:297)，导入支持最小文件且 schema/meta 可省略 → [python.function(import_v2)](api/modules/SmartTavern/chat_branches/impl.py:337)；稳定别名：[python.function(export)](api/modules/SmartTavern/chat_branches/impl.py:455), [python.function(import_chat)](api/modules/SmartTavern/chat_branches/impl.py:459)
-  - 派生视图：OpenAI 消息：[python.function(openai_messages)](api/modules/SmartTavern/chat_branches/impl.py:463)，分支情况表：[python.function(branch_table)](api/modules/SmartTavern/chat_branches/impl.py:478)
+  - OpenAI 消息导出（无状态）：[python.function(openai_messages)](api/modules/SmartTavern/chat_branches/chat_branches.py:31)
+  - 分支情况表（无状态）：[python.function(branch_table)](api/modules/SmartTavern/chat_branches/chat_branches.py:64)
+- 实现层（无状态视图计算）：[filename](api/modules/SmartTavern/chat_branches/impl.py:1)
+  - 文件/对象加载工具：[python.function(_load_doc_from_file_or_obj)](api/modules/SmartTavern/chat_branches/impl.py:51)
+  - OpenAI 消息导出：[python.function(openai_messages_from_doc)](api/modules/SmartTavern/chat_branches/impl.py:142)
+  - 分支情况表计算：[python.function(branch_table_from_doc)](api/modules/SmartTavern/chat_branches/impl.py:168)
+  - 辅助工具：[python.function(_buckets_from_doc)](api/modules/SmartTavern/chat_branches/impl.py:86), [python.function(_normalize_path_from_doc)](api/modules/SmartTavern/chat_branches/impl.py:111)
 - 测试脚本：[filename](api/modules/SmartTavern/chat_branches/test_chat_branches.py:1)
-- 示例数据（chat-branches 文件）：[filename](backend_projects/SmartTavern/data/conversations/branch_demo.json:1)
+- 示例数据（最小分支树文件）：[filename](backend_projects/SmartTavern/data/conversations/branch_demo.json:1)
 
-模块职责与数据模型
-- 不可变消息树（Node）：
-  - 字段：id, conversation_id, parent_id, depth, role, content, sibling_ord（同父下的子序，用于 j/n）, created_at
-- 会话（Session）：
-  - 字段：id, conversation_id, status(active/archived), path（当前所选分支的节点 id 列表）, created_at, closed_at
-- 会话路径可变：仅 active 会话允许修改；切分支时归档旧会话、新建新会话，path 在 at_depth 处左右切换或新建子节点
+最小分支树文件结构
+```json
+{
+  "root": "node_id",
+  "nodes": {
+    "node_id": { "pid": "parent_id|null", "role": "system|user|assistant", "content": "..." }
+  },
+  "children": { "parent_id": ["child_id1", "child_id2"] },  // 可选
+  "active_path": ["root", "...", "leafId"]                  // 可选
+}
+```
 
 API 列表（modules 命名空间）
-- smarttavern/chat_branches/create_conversation
-  - 输入：{ user_id?: string|null, title?: string|null }
-  - 输出：{ conversation_id: string, session_id: string, path: object[] }
-- smarttavern/chat_branches/get_path
-  - 输入：{ session_id: string }
-  - 输出：{ session_id, status, path: [{ id, depth, role, content, branch_j, branch_n }] }
-- smarttavern/chat_branches/append
-  - 输入：{ session_id: string, role: "user"|"assistant"|"system", content: string }
-  - 输出：{ session_id, status, path: [...] }
-- smarttavern/chat_branches/truncate
-  - 输入：{ session_id: string, keep_depth: integer (>=1) }
-  - 输出：{ session_id, status, path: [...] }
-- smarttavern/chat_branches/switch
-  - 输入：{ session_id: string, at_depth: integer (>=2), direction: "left"|"right" }
-  - 输出：{ old_session_id, new_session_id, path: [...] }
-- smarttavern/chat_branches/branch_indicator
-  - 输入：{ session_id: string, depth: integer (>=2) }
-  - 输出：{ j: integer|null, n: integer|null }
-- smarttavern/chat_branches/list_conversations
-  - 输入：{}（空对象）
-  - 输出：{ items: [{ id, title, user_id, root_node_id, created_at, sessions_count, active_session_id }] }
-- smarttavern/chat_branches/list_sessions
-  - 输入：{ conversation_id: string }
-  - 输出：{ items: [{ id, status, rev, path_length, created_at, closed_at }] }
-- smarttavern/chat_branches/openai_messages
-  - 输入：{ session_id: string }
-  - 输出：{ conversation_id, session_id, messages: [{ role, content }] }
-- smarttavern/chat_branches/branch_table
-  - 输入：{ session_id: string }
-  - 输出：{ session_id, latest: { depth, j, n, node_id }, levels: [{ depth, node_id, j, n }, ...] }
-- smarttavern/chat_branches/export（稳定别名）
-  - 输入：{ conversation_id: string }
-  - 输出：最小分支树文件对象：{ root, nodes:{id:{pid,role,content}}, children:{pid:[cid...]}, active_path:[...] }
-- smarttavern/chat_branches/import（稳定别名）
-  - 输入：{ doc: 最小分支树文件（可省略 schema/meta） }
-  - 输出：{ conversation_id: string, active_session_id: string }
+
+1. smarttavern/chat_branches/openai_messages（无状态）
+   - 输入（二选一）：
+     - doc: object（最小分支树 JSON 对象）
+     - file: string（对话文件路径，相对仓库根，如 "backend_projects/SmartTavern/data/conversations/branch_demo.json"）
+   - 输出：{ messages: [{role, content}], path: ["node_id", ...] }
+   
+2. smarttavern/chat_branches/branch_table（无状态）
+   - 输入（二选一）：
+     - doc: object（最小分支树 JSON 对象）
+     - file: string（对话文件路径）
+   - 输出：{ latest: {depth, j, n, node_id}, levels: [{depth, node_id, j, n}] }
+
+3. smarttavern/chat_branches/get_latest_message（无状态）
+   - 输入（二选一）：
+     - doc: object（最小分支树 JSON 对象）
+     - file: string（对话文件路径）
+   - 输出：{ node_id: "...", role: "system|user|assistant", content: "...", depth: number }
+   - 说明：根据 active_path 提取最后一条消息；若 active_path 为空或无效，返回 root 节点
+
+4. smarttavern/chat_branches/update_message（修改消息内容）
+   - 输入：
+     - node_id: string（要修改的节点 ID）
+     - content: string（新内容）
+     - doc/file: 二选一
+   - 输出：更新后的完整 doc（含 updated_at 时间戳）
+
+5. smarttavern/chat_branches/truncate_after（修剪消息树）
+   - 输入：
+     - node_id: string（保留到此节点，删除其所有子孙）
+     - doc/file: 二选一
+   - 输出：更新后的完整 doc（nodes 删除子树，children 清理，active_path 截断，updated_at 更新）
+   - 说明：级联删除所有子孙节点；若 node_id 在 active_path 中，截断到该节点
+
+6. smarttavern/chat_branches/append_message（追加新消息）
+   - 输入：
+     - node_id: string（新节点 ID，必须唯一）
+     - pid: string（父节点 ID，必须存在）
+     - role: string（system|user|assistant）
+     - content: string（消息内容）
+     - doc/file: 二选一
+   - 输出：更新后的完整 doc（nodes 新增，children 更新父节点，active_path 追加新节点，updated_at 更新）
+   - 说明：若 pid 是 active_path 的最后一个节点，新消息会自动追加到 active_path 末尾
 
 使用示例（Python SDK）
-- 初始化与导入
-  - 参考测试脚本：[filename](api/modules/SmartTavern/chat_branches/test_chat_branches.py:39)
-  - 典型流程：
-    1) 启动网关与模块加载
-    2) 读取 branch_demo.json 并调用 import
-    3) 获取 active_session_id，随后进行路径/派生视图/分支操作
-- 追加/修剪/切分支
-  - 追加：core.call_api("smarttavern/chat_branches/append", {"session_id": sid, "role":"user","content":"..."},"POST","modules")
-  - 修剪：core.call_api("smarttavern/chat_branches/truncate", {"session_id": sid, "keep_depth": 2},"POST","modules")
-  - 切分支：core.call_api("smarttavern/chat_branches/switch", {"session_id": sid, "at_depth": 2, "direction": "right"},"POST","modules")
+
+方式1：传入 doc 对象
+```python
+import json
+from pathlib import Path
+
+# 读取对话文件
+with open("backend_projects/SmartTavern/data/conversations/branch_demo.json") as f:
+    doc = json.load(f)
+
+# 导出 OpenAI messages
+msgs = core.call_api(
+    "smarttavern/chat_branches/openai_messages",
+    {"doc": doc},
+    method="POST",
+    namespace="modules"
+)
+
+# 计算分支情况表
+table = core.call_api(
+    "smarttavern/chat_branches/branch_table",
+    {"doc": doc},
+    method="POST",
+    namespace="modules"
+)
+```
+
+方式2：传入 file 路径（推荐，避免手动读取）
+```python
+# 导出 OpenAI messages
+msgs = core.call_api(
+    "smarttavern/chat_branches/openai_messages",
+    {"file": "backend_projects/SmartTavern/data/conversations/branch_demo.json"},
+    method="POST",
+    namespace="modules"
+)
+
+# 计算分支情况表
+table = core.call_api(
+    "smarttavern/chat_branches/branch_table",
+    {"file": "backend_projects/SmartTavern/data/conversations/branch_demo.json"},
+    method="POST",
+    namespace="modules"
+)
+
+# 获取最后一条消息
+latest = core.call_api(
+    "smarttavern/chat_branches/get_latest_message",
+    {"file": "backend_projects/SmartTavern/data/conversations/branch_demo.json"},
+    method="POST",
+    namespace="modules"
+)
+# 返回：{"node_id": "n_ass3", "role": "assistant", "content": "...", "depth": 5}
+
+# 修改消息内容
+updated = core.call_api(
+    "smarttavern/chat_branches/update_message",
+    {
+        "file": "backend_projects/SmartTavern/data/conversations/branch_demo.json",
+        "node_id": "n_ass1",
+        "content": "修改后的内容"
+    },
+    method="POST",
+    namespace="modules"
+)
+# 返回：完整 doc（含 updated_at）
+
+# 修剪消息树（删除 n_ass1 的所有子孙）
+truncated = core.call_api(
+    "smarttavern/chat_branches/truncate_after",
+    {
+        "file": "backend_projects/SmartTavern/data/conversations/branch_demo.json",
+        "node_id": "n_ass1"
+    },
+    method="POST",
+    namespace="modules"
+)
+# 返回：完整 doc（n_user2、n_ass3 已删除，active_path 截断到 n_ass1）
+
+# 追加新消息
+appended = core.call_api(
+    "smarttavern/chat_branches/append_message",
+    {
+        "file": "backend_projects/SmartTavern/data/conversations/branch_demo.json",
+        "node_id": "n_new_user",
+        "pid": "n_ass3",
+        "role": "user",
+        "content": "这是新追加的用户消息"
+    },
+    method="POST",
+    namespace="modules"
+)
+# 返回：完整 doc（新节点已创建，children 已更新，active_path 已追加）
+```
 
 行为细节与边界
-- 仅 active 会话允许 append/truncate/switch（见 [python.function(_ensure_active_session)](api/modules/SmartTavern/chat_branches/impl.py:75)）
-- 分支指示 j/n 由父节点的 children 顺序与 sibling_ord 决定（见 [python.function(_branch_indicator)](api/modules/SmartTavern/chat_branches/impl.py:91)）
-- 切分支策略：
-  - at_depth≥2；left/right 会在当前子序左右寻找目标；必要时新建子节点（role="assistant"，content=None）（见 [python.function(switch_branch_and_start_new_session)](api/modules/SmartTavern/chat_branches/impl.py:187)）
-- 导入行为：
-  - 若传入的 conversation_id 已存在，将清空旧会话/节点并以文件内容重建（见 [python.function(import_v2)](api/modules/SmartTavern/chat_branches/impl.py:337)）
-  - active_path 会被规范化：确保从 root 连通，否则回退/截断
-- 导出行为：
-  - 仅导出 pid/role/content 和有序 children，active_path 选取当前 active 或最近创建的会话路径（见 [python.function(export_v2)](api/modules/SmartTavern/chat_branches/impl.py:297)）
+- 输入模式（二选一）：
+  - doc: 直接传入最小分支树 JSON 对象
+  - file: 传入对话文件路径（相对仓库根），模块自动读取并验证范围（仅允许 conversations 目录）
+- active_path 规范化：
+  - 若缺省或不连通，自动从 root 开始规范化路径（见 [python.function(_normalize_path_from_doc)](api/modules/SmartTavern/chat_branches/impl.py:111)）
+- children 构建：
+  - 优先采用显式 doc.children；若缺省则从 nodes[*].pid 反向推导（见 [python.function(_buckets_from_doc)](api/modules/SmartTavern/chat_branches/impl.py:86)）
+- 分支指示 j/n：
+  - j = 当前子节点在父节点 children 中的位置（1-based）
+  - n = 父节点 children 总数
+  - 若无法判定则为 null
 
 测试
-- 内置测试脚本会自动启动网关、加载模块并调用全量接口：
+- 内置测试脚本验证 doc 与 file 两种输入方式：
   - [filename](api/modules/SmartTavern/chat_branches/test_chat_branches.py:1)
 - 运行（仓库根目录）：
   ```bash
   python api/modules/SmartTavern/chat_branches/test_chat_branches.py
   ```
+- 预期输出：
+  - 验证 openai_messages(doc) 与 openai_messages(file) 结果一致
+  - 验证 branch_table(doc) 与 branch_table(file) 结果一致
 
 参考
 - API 封装层： [filename](api/modules/SmartTavern/chat_branches/chat_branches.py:1)
