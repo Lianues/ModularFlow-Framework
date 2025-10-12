@@ -163,7 +163,7 @@ const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
   grid-template-rows: auto 1fr;
   border-radius: var(--st-radius-lg);
   border: 1px solid rgba(var(--st-border), 0.9);
-  background: rgba(var(--st-surface), 0.92);
+  background: rgb(var(--st-surface));
   backdrop-filter: blur(8px) saturate(130%);
   -webkit-backdrop-filter: blur(8px) saturate(130%);
   box-shadow: var(--st-shadow-md);
