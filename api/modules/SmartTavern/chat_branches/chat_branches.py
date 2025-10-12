@@ -30,6 +30,8 @@ from .impl import (
     truncate_after_node as _truncate_after_node,
     append_new_message as _append_new_message,
     create_conversation_impl as _create_conversation_impl,
+    update_conversation_settings_impl as _update_conversation_settings_impl,
+    variables_impl as _variables_impl,
 )
 
 
@@ -275,3 +277,74 @@ def create_conversation(
         worldbook_file=worldbook_file,
         chat_type=type or "threaded",
     )
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/update_conversation_settings",
+    name="更新对话设置（settings.json）",
+    description="更新 conversations/{name}.settings.json 指定字段。仅允许：type、preset_file、character_file、persona_file、regex_file、worldbook_file。使用 file 或 slug 二选一定位。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "patch": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"},
+            "slug": {"type": "string"}
+        },
+        "required": ["patch"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["patch", "file"]},
+            {"required": ["patch", "slug"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "settings_file": {"type": "string"},
+            "settings": {"type": "object", "additionalProperties": True},
+            "slug": {"type": "string"},
+        },
+        "required": ["settings_file", "settings", "slug"],
+        "additionalProperties": False,
+    },
+)
+def update_conversation_settings(patch: Dict[str, Any], file: str = None, slug: str = None) -> Dict[str, Any]:
+    return _update_conversation_settings_impl(patch=patch, file=file, slug=slug)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/variables",
+    name="对话变量管理（variables.json）",
+    description="管理 conversations/{name}.variables.json：action=get|set|merge|reset。set/merge 需 data 对象。使用 file 或 slug 二选一定位。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["get", "set", "merge", "reset"]},
+            "data": {"type": "object"},
+            "file": {"type": "string"},
+            "slug": {"type": "string"}
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["action", "file"]},
+            {"required": ["action", "slug"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "variables_file": {"type": "string"},
+            "variables": {"type": "object", "additionalProperties": True},
+            "slug": {"type": "string"},
+        },
+        "required": ["variables_file", "variables", "slug"],
+        "additionalProperties": False,
+    },
+)
+def variables(action: str, file: str = None, slug: str = None, data: Dict[str, Any] = None) -> Dict[str, Any]:
+    return _variables_impl(action=action, file=file, slug=slug, data=data)
+
+
+
+

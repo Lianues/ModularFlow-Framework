@@ -110,6 +110,30 @@ const ChatBranches = {
       worldbook_file: worldbook ?? null,
     });
   },
+
+  // 更新对话 settings：仅允许 type / preset_file / character_file / persona_file / regex_file / worldbook_file
+  // 使用 file 或 slug 二选一定位
+  // 后端实现见：[python.function(update_conversation_settings)](api/modules/SmartTavern/chat_branches/chat_branches.py:215)
+  async updateConversationSettings({ patch, file, slug }) {
+    if (!patch || typeof patch !== 'object') {
+      throw new Error('[ChatBranches] updateConversationSettings: patch must be object');
+    }
+    const body = { patch };
+    if (file) body.file = file;
+    if (slug) body.slug = slug;
+    return postJSON('smarttavern/chat_branches/update_conversation_settings', body);
+  },
+
+  // 管理 variables：action=get|set|merge|reset；set/merge 需提供 data 对象
+  // 使用 file 或 slug 二选一定位
+  // 后端实现见：[python.function(variables)](api/modules/SmartTavern/chat_branches/chat_branches.py:215)
+  async variables({ action, data, file, slug }) {
+    const body = { action };
+    if (data !== undefined) body.data = data;
+    if (file) body.file = file;
+    if (slug) body.slug = slug;
+    return postJSON('smarttavern/chat_branches/variables', body);
+  },
 };
 
 export default ChatBranches;

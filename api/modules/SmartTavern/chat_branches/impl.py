@@ -527,30 +527,14 @@ def create_conversation_impl(
     # 校验并读取角色卡，提取 messages[0]（兼容 message 与 messages）
     char_doc = _read_json_allowlisted(character_file)
 
-    # 兼容两种字段：message（数组）/ messages（数组）
-    msgs = None
-    if isinstance(char_doc, dict):
-        if isinstance(char_doc.get("messages"), list):
-            msgs = char_doc["messages"]
-        elif isinstance(char_doc.get("message"), list):
-            msgs = char_doc["message"]
+    # 取角色卡 message（字符串数组），首条作为根消息内容（不再兼容其他格式）
+    msgs = char_doc.get("message") if isinstance(char_doc, dict) else None
 
     if not isinstance(msgs, list) or len(msgs) == 0:
-        # 允许角色卡无 message(s)，使用默认根消息
         root_role, root_content = "assistant", "（空）"
     else:
-        m0 = msgs[0]
-        if isinstance(m0, dict):
-            root_role = m0.get("role") or "assistant"
-            root_content = str(m0.get("content") or "").strip()
-        else:
-            # 若为纯文本，按 assistant 文本处理
-            root_role = "assistant"
-            root_content = str(m0 or "").strip()
-        if not root_content:
-            root_content = "（空）"
-        if root_role not in ("system", "user", "assistant"):
-            root_role = "assistant"
+        root_role = "assistant"
+        root_content = str(msgs[0] or "").strip() or "（空）"
 
     # 生成文件名（直接使用用户输入名称作为基名，做最小安全处理）
     base_name = _sanitize_filename(name) or "conversation"
@@ -603,4 +587,179 @@ def create_conversation_impl(
         "nodes_count": 1,
         "updated_at": updated_at,
         "slug": filename_base,
+    }
+
+
+# ---------- 后续管理 API：更新 settings 与管理 variables ----------
+
+def _resolve_conversation_files(
+    file: Optional[str] = None,
+    slug: Optional[str] = None,
+) -> Tuple[Path, Path, Path, str]:
+    """
+    根据 file（相对仓库根的路径）或 slug（文件基名）解析三件套路径。
+    返回 (main_path, settings_path, variables_path, base_name)
+    """
+    root = _repo_root()
+    conv_dir = _conversations_dir()
+
+    if file and isinstance(file, str):
+        target = (root / Path(file)).resolve()
+        if not _is_within(target, conv_dir):
+            raise ValueError(f"File must be within conversations directory: {file}")
+        base_name = target.stem
+        main_path = target
+        settings_path = conv_dir / f"{base_name}.settings.json"
+        variables_path = conv_dir / f"{base_name}.variables.json"
+        return main_path, settings_path, variables_path, base_name
+
+    if slug and isinstance(slug, str) and slug.strip():
+        base_name = slug.strip()
+        main_path = conv_dir / f"{base_name}.json"
+        settings_path = conv_dir / f"{base_name}.settings.json"
+        variables_path = conv_dir / f"{base_name}.variables.json"
+        return main_path, settings_path, variables_path, base_name
+
+    raise ValueError("Either 'file' or 'slug' must be provided")
+
+
+def _safe_read_json_default(p: Path, default: Dict[str, Any]) -> Dict[str, Any]:
+    if not p.exists():
+        return dict(default)
+    data, err = _safe_read_json(p)
+    if err:
+        raise ValueError(f"Failed to read json: {p}: {err}")
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid JSON object: {p}")
+    return data
+
+
+def _validate_allowlisted_path_opt(val: Optional[str], field_name: str) -> Optional[str]:
+    """
+    若 val 非空，校验其是否位于允许的数据目录；通过则返回原值，否则抛出错误。
+    """
+    if val is None or val == "":
+        return val
+    root = _repo_root()
+    target = (root / Path(val)).resolve()
+    if not _is_under_any(target, _allowed_data_dirs()):
+        raise ValueError(f"Invalid {field_name}, outside allowed data dirs: {val}")
+    return val
+
+
+def update_conversation_settings_impl(
+    patch: Dict[str, Any],
+    file: Optional[str] = None,
+    slug: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    更新 {base}.settings.json 指定键值。仅允许以下字段：
+      - type
+      - preset_file, character_file, persona_file, regex_file, worldbook_file
+    不维护时间戳（按约定，settings/variables 不记录时间）。
+    """
+    if not isinstance(patch, dict):
+        raise ValueError("patch must be an object")
+
+    main_path, settings_path, variables_path, base_name = _resolve_conversation_files(file=file, slug=slug)
+
+    # 读取/初始化 settings
+    settings = _safe_read_json_default(settings_path, default={})
+
+    allowed_keys = {"type", "preset_file", "character_file", "persona_file", "regex_file", "worldbook_file"}
+    for k in patch.keys():
+        if k not in allowed_keys:
+            raise ValueError(f"Unsupported settings field: {k}")
+
+    # 校验路径型字段
+    preset_file = _validate_allowlisted_path_opt(patch.get("preset_file"), "preset_file") if "preset_file" in patch else settings.get("preset_file")
+    character_file = _validate_allowlisted_path_opt(patch.get("character_file"), "character_file") if "character_file" in patch else settings.get("character_file")
+    persona_file = _validate_allowlisted_path_opt(patch.get("persona_file"), "persona_file") if "persona_file" in patch else settings.get("persona_file")
+    regex_file = _validate_allowlisted_path_opt(patch.get("regex_file"), "regex_file") if "regex_file" in patch else settings.get("regex_file")
+    worldbook_file = _validate_allowlisted_path_opt(patch.get("worldbook_file"), "worldbook_file") if "worldbook_file" in patch else settings.get("worldbook_file")
+
+    # 合并（只覆盖传入键）
+    for k in allowed_keys:
+        if k in patch:
+            if k == "preset_file":
+                settings[k] = preset_file
+            elif k == "character_file":
+                settings[k] = character_file
+            elif k == "persona_file":
+                settings[k] = persona_file
+            elif k == "regex_file":
+                settings[k] = regex_file
+            elif k == "worldbook_file":
+                settings[k] = worldbook_file
+            else:
+                settings[k] = patch[k]
+
+    _safe_write_json(settings_path, settings)
+
+    rel_settings = str(settings_path.relative_to(_repo_root()).as_posix())
+    return {
+        "settings_file": rel_settings,
+        "settings": settings,
+        "slug": base_name,
+    }
+
+
+def variables_impl(
+    action: str,
+    file: Optional[str] = None,
+    slug: Optional[str] = None,
+    data: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    管理 {base}.variables.json：
+      - action=get:    读取并返回 variables
+      - action=set:    全量替换为 data（data 必须为对象）
+      - action=merge:  与 data 浅合并（键覆盖）
+      - action=reset:  重置为 {}
+    """
+    main_path, settings_path, variables_path, base_name = _resolve_conversation_files(file=file, slug=slug)
+    rel_variables = str(variables_path.relative_to(_repo_root()).as_posix())
+
+    action = (action or "").strip().lower()
+    if action not in {"get", "set", "merge", "reset"}:
+        raise ValueError(f"Unsupported action: {action}")
+
+    if action == "get":
+        variables = _safe_read_json_default(variables_path, default={})
+        return {
+            "variables_file": rel_variables,
+            "variables": variables,
+            "slug": base_name,
+        }
+
+    if action in {"set", "merge"}:
+        if not isinstance(data, dict):
+            raise ValueError("data must be an object for set/merge")
+
+    if action == "set":
+        variables = dict(data or {})
+        _safe_write_json(variables_path, variables)
+        return {
+            "variables_file": rel_variables,
+            "variables": variables,
+            "slug": base_name,
+        }
+
+    if action == "merge":
+        variables = _safe_read_json_default(variables_path, default={})
+        variables.update(data or {})
+        _safe_write_json(variables_path, variables)
+        return {
+            "variables_file": rel_variables,
+            "variables": variables,
+            "slug": base_name,
+        }
+
+    # reset
+    variables = {}
+    _safe_write_json(variables_path, variables)
+    return {
+        "variables_file": rel_variables,
+        "variables": variables,
+        "slug": base_name,
     }

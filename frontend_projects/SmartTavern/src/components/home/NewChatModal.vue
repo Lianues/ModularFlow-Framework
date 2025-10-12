@@ -16,6 +16,14 @@ const newChatName = ref('')
 const newChatDesc = ref('')
 const nameReplaced = ref(false)
 const newChatType = ref('threaded') // 'threaded' | 'sandbox'
+
+// 已存在的对话：文件基名（不含扩展名）与内部 name
+const existingFileBases = ref(new Set())
+const existingTitles = ref(new Set())
+
+// 重名检测状态
+const nameDupByFile = ref(false)
+const nameDupByTitle = ref(false)
  
 // 下拉选项（运行时从后端装载）
 const presetOptions = ref([])
@@ -47,12 +55,27 @@ function resetForm() {
   selectedWorldbook.value = ''
   newGameError.value = ''
   fetchError.value = ''
+  existingFileBases.value = new Set()
+  existingTitles.value = new Set()
+  nameDupByFile.value = false
+  nameDupByTitle.value = false
 }
  
 /**
  * 名称输入最小化清洗：禁止 / \ : * ? " < > |，避免路径问题
  * 其余字符保留，后端仍做最终安全处理与唯一化
  */
+function toFileBase(n) {
+  const s = String(n ?? '');
+  return s.replace(/[\\/:*?"<>|]/g, '-').replace(/[ \.]+$/g, '').trim();
+}
+function validateName(n) {
+  const base = toFileBase(n);
+  nameDupByFile.value = !!base && existingFileBases.value?.has(base);
+  const title = String(n ?? '').trim();
+  nameDupByTitle.value = !!title && existingTitles.value?.has(title);
+}
+
 watch(newChatName, (v) => {
   if (v == null) return;
   const s = String(v);
@@ -62,6 +85,7 @@ watch(newChatName, (v) => {
     .replace(/[ \.]+$/g, '');        // 结尾空格与点移除
   nameReplaced.value = nv !== s;
   if (nv !== s) newChatName.value = nv;
+  validateName(newChatName.value);
 });
 
 function baseName(file) {
@@ -74,12 +98,13 @@ async function loadLists() {
   loadingLists.value = true
   fetchError.value = ''
   try {
-    const [presets, chars, personas, regex, worlds] = await Promise.all([
+    const [presets, chars, personas, regex, worlds, convs] = await Promise.all([
       DataCatalog.listPresets(),
       DataCatalog.listCharacters(),
       DataCatalog.listPersonas(),
       DataCatalog.listRegexRules(),
       DataCatalog.listWorldBooks(),
+      DataCatalog.listConversations(), // 新增：获取现有对话列表，用于重名检测
     ])
     const mapOpts = (res, required, placeholder) => {
       const items = Array.isArray(res?.items) ? res.items : []
@@ -96,7 +121,22 @@ async function loadLists() {
     personaOptions.value   = mapOpts(personas, true, '请选择用户信息')
     regexOptions.value     = mapOpts(regex, false, '（可不选）')
     worldbookOptions.value = mapOpts(worlds, false, '（可不选）')
- 
+
+    // 组装重名检测集合
+    const bases = new Set()
+    const titles = new Set()
+    const convItems = Array.isArray(convs?.items) ? convs.items : []
+    convItems.forEach(it => {
+      const f = String(it?.file || '')
+      const bn = baseName(f).replace(/\.json$/i, '')
+      if (bn) bases.add(bn)
+      const nm = (it?.name ?? '').trim()
+      if (nm) titles.add(nm)
+    })
+    existingFileBases.value = bases
+    existingTitles.value = titles
+    validateName(newChatName.value)
+
     nextTick(() => {
       try { window?.lucide?.createIcons?.() } catch (_) {}
       if (typeof window.initFlowbite === 'function') {
@@ -121,6 +161,10 @@ async function onSubmit() {
   const name = (newChatName.value ?? '').trim() || '未命名会话'
   if (!selectedPreset.value || !selectedCharacter.value || !selectedPersona.value) {
     newGameError.value = '请先选择：预设、角色卡、用户信息（必选）'
+    return
+  }
+  if (nameDupByFile.value || nameDupByTitle.value) {
+    newGameError.value = '对话名称重复：请更换一个名称（文件名或内部 name 不可重复）'
     return
   }
   newGameError.value = ''
@@ -197,6 +241,12 @@ function onCancel() {
         <div id="name-warn" class="form-hint warn" aria-live="polite" v-if="nameReplaced">
           已替换不允许的字符为“-”以确保文件名安全。
         </div>
+        <div class="form-hint warn" v-if="nameDupByFile">
+          文件名已占用：{{ toFileBase(newChatName) }}.json 已存在，请更换名称。
+        </div>
+        <div class="form-hint warn" v-if="!nameDupByFile && nameDupByTitle">
+          内部名称已占用：已有对话的 name 与“{{ (newChatName || '').trim() }}”重复，请更换名称。
+        </div>
       </div>
 
       <div class="form-row">
@@ -258,7 +308,7 @@ function onCancel() {
       <div v-if="newGameError" class="form-error">{{ newGameError }}</div>
 
       <div class="form-actions">
-        <button type="submit" class="btn primary" :disabled="submitting">
+        <button type="submit" class="btn primary" :disabled="submitting || nameDupByFile || nameDupByTitle">
           <span v-if="!submitting">确认</span>
           <span v-else class="btn-loading"><span class="spinner spinner-sm" aria-hidden="true"></span> 正在创建…</span>
         </button>
