@@ -380,6 +380,8 @@ def append_new_message(
     
     返回：
       更新后的完整 doc（nodes 新增，children 更新父节点，active_path 追加，updated_at 更新）
+      
+    注意：当传入 file 参数时，会自动保存更新后的文档到文件
     """
     loaded_doc = _load_doc_from_file_or_obj(doc, file)
     nodes = loaded_doc.get("nodes") or {}
@@ -416,6 +418,17 @@ def append_new_message(
     loaded_doc["children"] = children_map
     loaded_doc["active_path"] = active_path
     _update_timestamp(loaded_doc)
+    
+    # 如果传入了 file 参数，保存更新后的文档到文件
+    if file is not None and isinstance(file, str) and file.strip():
+        root = _repo_root()
+        conversations_dir = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+        target = (root / Path(file)).resolve()
+        
+        if not _is_within(target, conversations_dir):
+            raise ValueError(f"File must be within conversations directory: {file}")
+        
+        _safe_write_json(target, loaded_doc)
     
     return loaded_doc
 

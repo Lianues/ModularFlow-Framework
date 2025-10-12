@@ -131,6 +131,9 @@ watch(view, (v) => {
  
  // 当前打开的对话文件路径（用于侧边栏settings联动）
  const currentConversationFile = ref(null)
+ 
+ // 当前对话的完整文档（用于消息操作）
+ const currentConversationDoc = ref(null)
 
 
 onMounted(() => {
@@ -170,30 +173,46 @@ function onSidebarViewUpdate(v) {
 
 /**
  * 处理 LoadGame 的确认：
- * - 调用后端 openai_messages，传入文件路径
- * - 将返回的 {role, content} 映射为楼层对话的消息结构
- * - 关闭模态并切换到 threaded 视图
+ * - 调用 getConversationDetail 获取完整对话文件
+ * - 根据 active_path 提取并显示消息
+ * - 保存完整文档用于后续操作
  */
 async function onLoadGameConfirm(file) {
   try {
-    // 拉取 OAI 消息
-    const result = await ChatBranches.openaiMessagesByFile(file)
-    const arr = Array.isArray(result?.messages) ? result.messages : []
-    // 映射为 ThreadedChatPreview 所需的消息结构（带 id）
-    const mapped = arr.map((m, idx) => ({
-      id: Date.now() + idx,
-      role: (m.role === 'user' || m.role === 'assistant' || m.role === 'system') ? m.role : 'system',
-      content: String(m.content ?? '')
-    }))
-    // 更新并切换视图
-    currentThreadMessages.value = mapped.length ? mapped : [{ id: Date.now(), role: 'system', content: '（空对话）' }]
-    currentConversationFile.value = file // 记录当前对话文件路径
+    // 导入 DataCatalog（如果还没导入）
+    const DataCatalog = (await import('@/services/dataCatalog.js')).default
+    
+    // 获取完整对话文件
+    const result = await DataCatalog.getConversationDetail(file, { useCache: false })
+    
+    if (!result || !result.content) {
+      throw new Error('获取对话内容失败')
+    }
+    
+    const doc = result.content
+    const nodes = doc.nodes || {}
+    const activePath = Array.isArray(doc.active_path) ? doc.active_path : []
+    
+    // 根据 active_path 提取消息
+    const mapped = activePath.map((nodeId, idx) => {
+      const node = nodes[nodeId] || {}
+      return {
+        id: nodeId, // 使用节点ID作为消息ID
+        role: node.role || 'system',
+        content: node.content || ''
+      }
+    })
+    
+    // 更新状态
+    currentThreadMessages.value = mapped.length ? mapped : [{ id: 'empty', role: 'system', content: '（空对话）' }]
+    currentConversationFile.value = file
+    currentConversationDoc.value = doc // 保存完整文档
+    
     closeHomeModal()
     view.value = 'threaded'
     nextTick(() => refreshIcons())
   } catch (e) {
-    // 失败时保底：保持原消息并提示
-    console.error('openai_messages 调用失败:', e)
+    console.error('加载对话失败:', e)
     closeHomeModal()
   }
 }
@@ -333,7 +352,12 @@ async function onNewChatConfirm(payload) {
     />
 
     
-    <ThreadedView v-else-if="view === 'threaded'" :messages="currentThreadMessages" />
+    <ThreadedView
+      v-else-if="view === 'threaded'"
+      :messages="currentThreadMessages"
+      :conversationFile="currentConversationFile"
+      :conversationDoc="currentConversationDoc"
+    />
 
     
     <SandboxView v-else />

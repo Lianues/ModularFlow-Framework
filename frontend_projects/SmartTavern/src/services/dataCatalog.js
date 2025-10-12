@@ -132,6 +132,7 @@ const DataCatalog = {
       character: 'smarttavern/data_catalog/get_character_detail',
       persona: 'smarttavern/data_catalog/get_persona_detail',
       regex: 'smarttavern/data_catalog/get_regex_rule_detail',
+      conversation: 'smarttavern/data_catalog/get_conversation_detail',
     };
     const path = pathMap[type];
     if (!path) throw new Error(`[DataCatalog] Unknown detail type: ${type}`);
@@ -145,6 +146,7 @@ const DataCatalog = {
   getCharacterDetail(file, opts){ return this._getDetail('character', file, opts); },
   getPersonaDetail(file, opts)  { return this._getDetail('persona', file, opts); },
   getRegexRuleDetail(file, opts){ return this._getDetail('regex', file, opts); },
+  getConversationDetail(file, opts){ return this._getDetail('conversation', file, opts); },
 
   // Update APIs (create/update)
   updatePresetFile(file, content, name, description) {

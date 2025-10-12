@@ -139,6 +139,24 @@ const ChatBranches = {
     if (slug) body.slug = slug;
     return postJSON('smarttavern/chat_branches/variables', body);
   },
+
+  // 追加新消息：创建新节点并更新父节点 children 与 active_path
+  // 后端实现见：[python.function(append_message)](api/modules/SmartTavern/chat_branches/chat_branches.py:192)
+  async appendMessage({ file, node_id, pid, role, content }) {
+    if (!file) {
+      throw new Error('[ChatBranches] appendMessage: file is required');
+    }
+    if (!node_id || !pid || !role || !content) {
+      throw new Error('[ChatBranches] appendMessage: node_id, pid, role, content are required');
+    }
+    return postJSON('smarttavern/chat_branches/append_message', {
+      file,
+      node_id,
+      pid,
+      role,
+      content
+    });
+  },
 };
 
 export default ChatBranches;

@@ -3,12 +3,18 @@ import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
+  conversationFile: { type: String, default: null },
+  conversationDoc: { type: Object, default: null },
 })
 </script>
 
 <template>
   <section data-scope="chat-threaded" class="st-threaded">
-    <ThreadedChatPreview :messages="messages" />
+    <ThreadedChatPreview
+      :messages="messages"
+      :conversationFile="conversationFile"
+      :conversationDoc="conversationDoc"
+    />
   </section>
 </template>
 

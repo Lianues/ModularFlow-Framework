@@ -612,6 +612,35 @@ def get_regex_rule_detail_impl(file: str) -> Dict[str, Any]:
     }
 
 
+def get_conversation_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/conversations 下指定 JSON 文件，返回完整内容与基础字段。
+    """
+    root = _repo_root()
+    conv_dir = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, conv_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 conversations 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }
+
+
 # ---------- 写入与更新（保存）通用工具 ----------
 
 def _write_json_atomic(target: Path, data: Any) -> Optional[str]:

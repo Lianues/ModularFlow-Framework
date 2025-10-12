@@ -329,6 +329,40 @@ def list_conversations(base_dir: Optional[str] = None,
     return list_conversations_impl()
 
 
+# ---------- 获取对话详情（读取单个文件） ----------
+@core.register_api(
+    path="smarttavern/data_catalog/get_conversation_detail",
+    name="获取对话详情",
+    description="读取 backend_projects/SmartTavern/data/conversations 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/conversations/branch_demo.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_conversation_detail(file: str) -> Dict[str, Any]:
+    from .impl import get_conversation_detail_impl
+    return get_conversation_detail_impl(file=file)
+
 # ---------- 获取预设详情（读取单个文件） ----------
 
 @core.register_api(

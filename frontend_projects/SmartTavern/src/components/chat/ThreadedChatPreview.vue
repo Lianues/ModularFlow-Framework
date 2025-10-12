@@ -16,6 +16,14 @@ const props = defineProps({
   messages: {
     type: Array,
     default: () => []
+  },
+  conversationFile: {
+    type: String,
+    default: null
+  },
+  conversationDoc: {
+    type: Object,
+    default: null
   }
 })
 
@@ -258,53 +266,95 @@ function cancelPending() {
  * 提交输入（来自 InputRow），创建用户消息并触发等待占位与滚动
  * 注意：当 pending 中时不允许再次提交
  */
-function onSubmit(text) {
+async function onSubmit(text) {
   const t = (text ?? '').trim()
   if (!t) return
 
   // 若等待中则直接返回（不允许再次发送）
   if (pendingMessageId?.value) return
 
-  // 创建新消息
-  const newMessage = {
-    id: Date.now(),
-    role: 'user',
-    content: t
+  // 检查是否有对话文件和文档
+  if (!props.conversationFile || !props.conversationDoc) {
+    console.error('没有对话文件或文档，无法发送消息')
+    return
   }
 
-  // 添加到消息列表
-  props.messages.push(newMessage)
-  // 为新消息生成色条调色板（若有头像则尝试提取主色）
-  ensurePaletteFor(newMessage)
-  // 启动 10 秒等待占位
-  startPendingFor(newMessage.id)
+  try {
+    // 获取当前 active_path 的最后一个节点作为父节点
+    const activePath = props.conversationDoc.active_path || []
+    const parentId = activePath[activePath.length - 1]
+    
+    if (!parentId) {
+      console.error('无法确定父节点ID')
+      return
+    }
 
-  // 滚动到底部（丝滑且自然）
-  nextTick(() => {
-    setTimeout(() => {
-      if (messageListRef.value?.$el) {
-        const container = messageListRef.value.$el.querySelector('.scroll-container')
-        if (container) {
-          try {
-            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-          } catch (_) {
-            // 回退：rAF 动画
-            const start = container.scrollTop
-            const end = container.scrollHeight
-            const dur = 420
-            const t0 = performance.now()
-            const ease = t => 1 - Math.pow(1 - t, 3) // easeOutCubic
-            const step = (now) => {
-              const p = Math.min(1, (now - t0) / dur)
-              container.scrollTop = start + (end - start) * ease(p)
-              if (p < 1) requestAnimationFrame(step)
+    // 生成新节点ID（n_user + 时间戳）
+    const newNodeId = `n_user${Date.now()}`
+
+    // 导入 ChatBranches API
+    const ChatBranches = (await import('@/services/chatBranches.js')).default
+
+    // 调用后端 append_message API
+    const updatedDoc = await ChatBranches.appendMessage({
+      file: props.conversationFile,
+      node_id: newNodeId,
+      pid: parentId,
+      role: 'user',
+      content: t
+    })
+
+    // 创建新消息用于显示
+    const newMessage = {
+      id: newNodeId,
+      role: 'user',
+      content: t
+    }
+
+    // 添加到消息列表
+    props.messages.push(newMessage)
+    // 为新消息生成色条调色板
+    ensurePaletteFor(newMessage)
+    // 启动等待占位（模拟AI回复）
+    startPendingFor(newMessage.id)
+
+    // 更新本地文档（可选，如果需要保持同步）
+    if (updatedDoc && props.conversationDoc) {
+      Object.assign(props.conversationDoc, updatedDoc)
+    }
+
+    // 滚动到底部（丝滑且自然）
+    nextTick(() => {
+      setTimeout(() => {
+        if (messageListRef.value?.$el) {
+          const container = messageListRef.value.$el.querySelector('.scroll-container')
+          if (container) {
+            try {
+              container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+            } catch (_) {
+              // 回退：rAF 动画
+              const start = container.scrollTop
+              const end = container.scrollHeight
+              const dur = 420
+              const t0 = performance.now()
+              const ease = t => 1 - Math.pow(1 - t, 3) // easeOutCubic
+              const step = (now) => {
+                const p = Math.min(1, (now - t0) / dur)
+                container.scrollTop = start + (end - start) * ease(p)
+                if (p < 1) requestAnimationFrame(step)
+              }
+              requestAnimationFrame(step)
             }
-            requestAnimationFrame(step)
           }
         }
-      }
-    }, 60)
-  })
+      }, 60)
+    })
+
+    console.log('消息发送成功:', newNodeId)
+  } catch (error) {
+    console.error('发送消息失败:', error)
+    // 可以在这里显示错误提示
+  }
 }
 
 function hasHtmlDoc(msg) { return hasHtmlDocText(msg.content) }
