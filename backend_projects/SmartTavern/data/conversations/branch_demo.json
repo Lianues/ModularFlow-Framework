@@ -8,7 +8,7 @@
     "n_ass1":   { "pid": "n_user1",  "role": "assistant", "content": "分支机制允许你在任意楼层（通过修剪）切换分支并生成新的对话会话。" },
     "n_ass2":   { "pid": "n_user1",  "role": "assistant", "content": "另一种解释：你可以回到某层，向左/向右切换已存在或新建分支，旧会话归档，新会话继续。" },
     "n_user2":  { "pid": "n_ass1",   "role": "user",      "content": "那怎么导出当前分支为 OpenAI messages 呢？" },
-    "n_ass3":   { "pid": "n_user2",  "role": "assistant", "content": "可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。" }
+    "n_ass3":   { "pid": "n_user2",  "role": "assistant", "content": "可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。" }
   },
   "children": {
     "n_root":  ["n_user1"],

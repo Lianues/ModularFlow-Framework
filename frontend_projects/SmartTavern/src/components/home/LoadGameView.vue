@@ -52,9 +52,10 @@ async function loadData() {
 
     // 一次性获取每个文件的最新消息（并发）
     // 若单个失败，不影响整体
+    // 刷新时跳过缓存，确保获取最新数据
     const promises = combined.map(async (row, idx) => {
       try {
-        const latest = await ChatBranches.getLatestMessageByFile(row.file) // 后端定义见：[python.function(get_latest_message)](api/modules/SmartTavern/chat_branches/chat_branches.py:130)
+        const latest = await ChatBranches.getLatestMessageByFile(row.file, { useCache: false }) // 后端定义见：[python.function(get_latest_message)](api/modules/SmartTavern/chat_branches/chat_branches.py:130)
         combined[idx].latest = latest
       } catch (e) {
         combined[idx].error = e?.message || '获取最新消息失败'
@@ -131,23 +132,11 @@ onMounted(() => {
             <div class="media-ph" aria-label="封面占位"></div>
           </div>
           <div class="lgv-main">
-            <div class="lgv-card-head">
-              <div class="lgv-card-title">
-                <span class="lgv-file">{{ it.name }}</span>
-                <small class="lgv-file-path">{{ it.file }}</small>
-                <div class="lgv-desc" v-if="it.description">
-                  {{ it.description }}
-                </div>
-              </div>
-              <div class="lgv-card-actions">
-                <button class="btn primary" :disabled="!!it.error" title="确认">
-                  <i data-lucide="check" class="icon-16" aria-hidden="true"></i>
-                  确认
-                </button>
-                <button class="btn danger" title="删除">
-                  <i data-lucide="trash-2" class="icon-16" aria-hidden="true"></i>
-                  删除
-                </button>
+            <div class="lgv-card-title">
+              <span class="lgv-file">{{ it.name }}</span>
+              <small class="lgv-file-path">{{ it.file }}</small>
+              <div class="lgv-desc" v-if="it.description">
+                {{ it.description }}
               </div>
             </div>
 
@@ -165,6 +154,14 @@ onMounted(() => {
               </div>
             </div>
             <div v-else class="lgv-latest muted">无最新消息</div>
+          </div>
+          <div class="lgv-card-actions">
+            <button class="btn primary" :disabled="!!it.error" title="确认">
+              确认
+            </button>
+            <button class="btn danger" title="删除">
+              删除
+            </button>
           </div>
         </div>
       </div>
@@ -214,27 +211,38 @@ onMounted(() => {
   background: rgb(var(--st-surface));
   color: rgb(var(--st-color-text));
   border-radius: var(--st-radius-md);
-  padding: 8px 12px;
+  padding: 12px 16px; /* 增大内边距提升高度 */
+  min-height: 48px; /* 最小高度满足触摸区域 */
+  width: 100%; /* 确保按钮撑满容器宽度 */
   cursor: pointer;
   display: inline-flex;
   gap: 8px;
   align-items: center;
+  justify-content: center; /* 内容水平居中 */
+  text-align: center; /* 文字居中 */
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
 }
 .btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-sm); }
 .btn.primary {
-  background: linear-gradient(135deg, rgb(var(--st-primary) / 1), rgb(var(--st-accent) / 1));
-  color: var(--st-primary-contrast);
-  border-color: transparent;
+  /* Outline style per UI spec: no solid colored background */
+  background: transparent;
+  color: rgb(var(--st-primary));
+  border-color: rgba(var(--st-primary), 0.55);
+}
+.btn.primary:hover {
+  background: rgba(var(--st-primary), 0.08);
+  border-color: rgba(var(--st-primary), 0.7);
 }
 .btn.ghost { background: rgba(var(--st-surface-2), 0.6); }
 .btn.danger {
-  background: linear-gradient(135deg, rgba(220,38,38,0.95), rgba(239,68,68,0.95));
-  color: white;
-  border-color: transparent;
+  /* Outline danger style (no solid fill) */
+  background: transparent;
+  color: rgb(220, 38, 38);
+  border-color: rgba(220, 38, 38, 0.6);
 }
 .btn.danger:hover {
-  background: linear-gradient(135deg, rgba(220,38,38,1), rgba(239,68,68,1));
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.8);
 }
 
 /* 加载与错误 */
@@ -299,6 +307,10 @@ onMounted(() => {
   -webkit-mask:
     linear-gradient(#000 0 0) padding-box,
     linear-gradient(#000 0 0);
+  /* Add standard mask for compatibility */
+  mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
           mask-composite: exclude;
 }
@@ -311,12 +323,12 @@ onMounted(() => {
   border-color: rgba(var(--st-primary), 0.45);
 }
 
-/* 卡片内部两列布局：左 media 右内容，右侧内容高度与图片一致 */
+/* 卡片内部三列布局：左 media、中 content、右 actions */
 .lgv-row {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: 420px 1fr auto;
   gap: 16px;
-  align-items: stretch; /* 确保两列等高 */
+  align-items: center; /* 垂直居中所有列，按钮列自然居中于图片高度 */
 }
 .lgv-media { width: 100%; }
 .media-ph {
@@ -333,10 +345,18 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  justify-content: space-between; /* 顶部内容+底部最新消息，撑满高度 */
+  align-self: start; /* 内容区从顶部开始，不再stretch */
 }
 @media (max-width: 980px) {
-  .lgv-row { grid-template-columns: 1fr; }
+  .lgv-row {
+    grid-template-columns: 1fr;
+    align-items: start; /* 移动端恢复顶对齐 */
+  }
+  .lgv-card-actions {
+    flex-direction: row; /* 移动端按钮改为水平排列 */
+    justify-content: flex-end;
+    align-self: auto;
+  }
 }
 
 /* sheen 效果已移除 */
@@ -431,17 +451,14 @@ onMounted(() => {
   transform: translateY(0);
 }
 
-.lgv-card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
-}
 .lgv-card-actions {
   display: flex;
-  gap: 8px;
+  flex-direction: column; /* 垂直排列按钮 */
+  gap: 12px; /* 增大按钮间距 */
+  align-items: stretch; /* 按钮等宽 */
+  justify-content: center; /* 垂直居中 */
   flex-shrink: 0;
+  min-width: 120px; /* 按钮最小宽度 */
 }
 .lgv-card-title {
   display: flex;
