@@ -10,14 +10,42 @@ import useAppearanceSandbox from '@/composables/appearance/useAppearanceSandbox'
  * - 定时广播给主题扩展（ThemeManager.applyAppearanceSnapshot）
  */
 
-// live tuning indicator
+// live tuning indicator + overlay suppression
 const tuning = ref(false)
 const activeTuningSlider = ref(null)
+
+/* 强制隐藏半透明背板/浮标（行内样式最高优先级），结束时恢复 */
+let __tuningHiddenEls = []
+function __hideOverlaysForTuning() {
+  const selectors = ['.st-panel-backdrop', '.sd-backdrop', '.sd-fab']
+  __tuningHiddenEls = []
+  selectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      __tuningHiddenEls.push({ el, style: el.getAttribute('style') })
+      try {
+        el.style.setProperty('display', 'none', 'important')
+        el.style.setProperty('visibility', 'hidden', 'important')
+        el.style.setProperty('pointer-events', 'none', 'important')
+      } catch (_) {}
+    })
+  })
+}
+function __restoreOverlaysForTuning() {
+  __tuningHiddenEls.forEach(({ el, style }) => {
+    try {
+      if (style != null) el.setAttribute('style', style)
+      else el.removeAttribute('style')
+    } catch (_) {}
+  })
+  __tuningHiddenEls = []
+}
+
 function onTuningStart(sliderName) {
   tuning.value = true
   activeTuningSlider.value = sliderName
   document.body.classList.add('st-live-tuning')
   document.body.setAttribute('data-active-slider', sliderName)
+  __hideOverlaysForTuning()
   window.addEventListener('pointerup', onTuningEndOnce, { once: true })
   window.addEventListener('touchend', onTuningEndOnce, { once: true })
 }
@@ -26,6 +54,7 @@ function onTuningEndOnce() {
   activeTuningSlider.value = null
   document.body.classList.remove('st-live-tuning')
   document.body.removeAttribute('data-active-slider')
+  __restoreOverlaysForTuning()
 }
 
 // Composable: state + helpers

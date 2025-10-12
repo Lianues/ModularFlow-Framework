@@ -238,6 +238,111 @@ onMounted(() => {
 [data-scope="settings-view"] .st-control input[type="range"]:active::-moz-range-thumb {
   transform: scale(1.05);
 }
+
+/* =========================
+   Live Tuning (实时预览聚焦态)
+   触发：Threaded/Sandbox 外观 Tab 在滑条 pointerdown 时
+   行为：
+   - 隐藏侧边栏及所有悬浮 UI，仅保留外观面板中的“当前滑条”控件
+   - 背板/模态/浮标均不干扰页面预览
+   - 通过 body[data-active-slider] 与 .st-control[data-slider] 对应
+   ========================= */
+
+/* 隐藏侧边栏/背板/顶部条/模态等悬浮 UI（不影响主内容预览）
+   背板需彻底 display:none，否则即使透明仍可能产生叠层或混合效果 */
+body.st-live-tuning [data-scope="sidebar"],
+body.st-live-tuning .sd-backdrop,
+body.st-live-tuning .sd-fab,
+body.st-live-tuning .st-panel-backdrop,
+body.st-live-tuning [data-scope="topbar"],
+body.st-live-tuning .modal-overlay {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  display: none !important;
+}
+
+/* 外观面板内部：隐藏标题、页签与非控件内容，仅保留控件区
+   注意：仅隐藏 Tab 面板的非控件子节点，保留容器结构，避免把控件祖先一并隐藏 */
+/* 保留占位但不可见，避免高度塌陷导致滑条上移 */
+body.st-live-tuning [data-scope="settings-view"] .st-settings-header,
+body.st-live-tuning [data-scope="settings-view"] .st-settings-tabs {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* 只隐藏面板内 .st-tab-panel 的非 .st-control 子节点（不影响控件本身） */
+/* 只隐藏视觉但保留空间，确保当前滑条“保持原位置” */
+body.st-live-tuning [data-scope="settings-view"] .st-settings-body .st-tab-panel > :not(.st-control) {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* 控件内部的提示说明隐藏（只保留左侧文字/数值/滑条本体） */
+body.st-live-tuning [data-scope="settings-view"] .st-control .st-control-hint {
+  display: none !important;
+}
+/* 实时预览时，让面板容器透明化，避免遮挡视觉；仍保留控件互动 */
+body.st-live-tuning [data-scope="settings-view"].st-settings {
+  background: transparent !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 默认隐藏所有控件，仅展示当前激活的那一个（隐藏但保留原本占位） */
+body.st-live-tuning [data-scope="settings-view"] .st-control {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 展示与 body[data-active-slider] 对应的控件（左侧文字 + 右侧数值 + 滑条） */
+/* 激活项：恢复可见性与交互（保留原 display:grid 来自 scoped 样式） */
+body[data-active-slider="contentFontSize"]        [data-scope="settings-view"] .st-control[data-slider="contentFontSize"],
+body[data-active-slider="nameFontSize"]           [data-scope="settings-view"] .st-control[data-slider="nameFontSize"],
+body[data-active-slider="badgeFontSize"]          [data-scope="settings-view"] .st-control[data-slider="badgeFontSize"],
+body[data-active-slider="floorFontSize"]          [data-scope="settings-view"] .st-control[data-slider="floorFontSize"],
+body[data-active-slider="avatarSize"]             [data-scope="settings-view"] .st-control[data-slider="avatarSize"],
+body[data-active-slider="chatWidth"]              [data-scope="settings-view"] .st-control[data-slider="chatWidth"],
+body[data-active-slider="inputHeight"]            [data-scope="settings-view"] .st-control[data-slider="inputHeight"],
+body[data-active-slider="contentLineHeight"]      [data-scope="settings-view"] .st-control[data-slider="contentLineHeight"],
+body[data-active-slider="messageGap"]             [data-scope="settings-view"] .st-control[data-slider="messageGap"],
+body[data-active-slider="cardRadius"]             [data-scope="settings-view"] .st-control[data-slider="cardRadius"],
+body[data-active-slider="stripeWidth"]            [data-scope="settings-view"] .st-control[data-slider="stripeWidth"],
+body[data-active-slider="threadedBgOpacity"]      [data-scope="settings-view"] .st-control[data-slider="threadedBgOpacity"],
+body[data-active-slider="threadedBgBlur"]         [data-scope="settings-view"] .st-control[data-slider="threadedBgBlur"],
+body[data-active-slider="threadedMsgBgOpacity"]   [data-scope="settings-view"] .st-control[data-slider="threadedMsgBgOpacity"],
+body[data-active-slider="threadedListBgOpacity"]  [data-scope="settings-view"] .st-control[data-slider="threadedListBgOpacity"],
+body[data-active-slider="threadedInputBgOpacity"] [data-scope="settings-view"] .st-control[data-slider="threadedInputBgOpacity"],
+body[data-active-slider="threadedStageAspect"]    [data-scope="settings-view"] .st-control[data-slider="threadedStageAspect"],
+body[data-active-slider="threadedStageMaxWidthPct"] [data-scope="settings-view"] .st-control[data-slider="threadedStageMaxWidthPct"],
+body[data-active-slider="threadedStagePadding"]   [data-scope="settings-view"] .st-control[data-slider="threadedStagePadding"],
+body[data-active-slider="threadedStageRadius"]    [data-scope="settings-view"] .st-control[data-slider="threadedStageRadius"],
+body[data-active-slider="sandboxAspect"]          [data-scope="settings-view"] .st-control[data-slider="sandboxAspect"],
+body[data-active-slider="sandboxMaxWidth"]        [data-scope="settings-view"] .st-control[data-slider="sandboxMaxWidth"],
+body[data-active-slider="sandboxPadding"]         [data-scope="settings-view"] .st-control[data-slider="sandboxPadding"],
+body[data-active-slider="sandboxRadius"]          [data-scope="settings-view"] .st-control[data-slider="sandboxRadius"],
+body[data-active-slider="sandboxBgOpacity"]       [data-scope="settings-view"] .st-control[data-slider="sandboxBgOpacity"],
+body[data-active-slider="sandboxBgBlur"]          [data-scope="settings-view"] .st-control[data-slider="sandboxBgBlur"],
+body[data-active-slider="sandboxStageBgOpacity"]  [data-scope="settings-view"] .st-control[data-slider="sandboxStageBgOpacity"] {
+  display: grid !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+/* 高亮当前控件，便于辨识 */
+body.st-live-tuning [data-scope="settings-view"] .st-control[data-slider] {
+  background: rgba(var(--st-surface), 0.85) !important;
+  border-color: rgba(var(--st-primary), 0.45) !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12), 0 0 0 4px rgba(var(--st-primary), 0.06);
+}
+
+/* 隐藏外观面板右侧自定义滚动条（轨道与滑块），避免干扰预览 */
+body.st-live-tuning [data-scope="settings-view"] .custom-scrollbar-wrapper .scroll-track {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 </style>
 
 <style scoped>
