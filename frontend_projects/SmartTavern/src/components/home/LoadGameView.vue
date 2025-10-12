@@ -3,6 +3,9 @@ import { ref, onMounted, nextTick } from 'vue'
 import DataCatalog from '@/services/dataCatalog.js'
 import ChatBranches from '@/services/chatBranches.js'
 
+// 通知上层所选文件（由 App 处理 API 调用与页面切换）
+const emit = defineEmits(['confirm'])
+
 /**
  * LoadGameView
  * 需求：
@@ -144,7 +147,7 @@ onMounted(() => {
             <div v-else class="lgv-latest muted">无最新消息</div>
           </div>
           <div class="lgv-card-actions">
-            <button class="btn primary" :disabled="!!it.error" title="确认">
+            <button class="btn primary" :disabled="!!it.error" title="确认" @click="emit('confirm', it.file)">
               确认
             </button>
             <button class="btn danger" title="删除">

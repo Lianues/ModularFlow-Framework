@@ -33,8 +33,8 @@ import { useViewModal } from '@/composables/useViewModal'
 import StartView from '@/views/StartView.vue'
 import ThreadedView from '@/views/ThreadedView.vue'
 import SandboxView from '@/views/SandboxView.vue'
-import { useDemoMessages } from '@/composables/useDemoMessages'
 import { useNewGame } from '@/composables/useNewGame'
+import ChatBranches from '@/services/chatBranches.js'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -126,8 +126,8 @@ watch(view, (v) => {
 
 
 
- // 楼层对话演示消息（占位）— 抽离为组合式
- const { messages } = useDemoMessages()
+ // 楼层对话消息（仅用于 Threaded 页面），确认存档后由后端数据填充
+ const currentThreadMessages = ref([])
 
 
 onMounted(() => {
@@ -163,6 +163,35 @@ function onSidebarViewUpdate(v) {
   }
   // 视图切换后刷新图标/交互组件
   refreshIcons()
+}
+
+/**
+ * 处理 LoadGame 的确认：
+ * - 调用后端 openai_messages，传入文件路径
+ * - 将返回的 {role, content} 映射为楼层对话的消息结构
+ * - 关闭模态并切换到 threaded 视图
+ */
+async function onLoadGameConfirm(file) {
+  try {
+    // 拉取 OAI 消息
+    const result = await ChatBranches.openaiMessagesByFile(file)
+    const arr = Array.isArray(result?.messages) ? result.messages : []
+    // 映射为 ThreadedChatPreview 所需的消息结构（带 id）
+    const mapped = arr.map((m, idx) => ({
+      id: Date.now() + idx,
+      role: (m.role === 'user' || m.role === 'assistant' || m.role === 'system') ? m.role : 'system',
+      content: String(m.content ?? '')
+    }))
+    // 更新并切换视图
+    currentThreadMessages.value = mapped.length ? mapped : [{ id: Date.now(), role: 'system', content: '（空对话）' }]
+    closeHomeModal()
+    view.value = 'threaded'
+    nextTick(() => refreshIcons())
+  } catch (e) {
+    // 失败时保底：保持原消息并提示
+    console.error('openai_messages 调用失败:', e)
+    closeHomeModal()
+  }
 }
 
 </script>
@@ -276,7 +305,7 @@ function onSidebarViewUpdate(v) {
     />
 
     
-    <ThreadedView v-else-if="view === 'threaded'" :messages="messages" />
+    <ThreadedView v-else-if="view === 'threaded'" :messages="currentThreadMessages" />
 
     
     <SandboxView v-else />
@@ -335,6 +364,7 @@ function onSidebarViewUpdate(v) {
       :show="homeModalOpen && homeModalType === 'load'"
       :title="homeModalTitle || '读取存档'"
       icon="history"
+      @confirm="onLoadGameConfirm"
       @update:show="(v) => { if (!v) closeHomeModal() }"
       @close="closeHomeModal"
     />

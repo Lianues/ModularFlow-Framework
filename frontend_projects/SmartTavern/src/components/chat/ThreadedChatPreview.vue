@@ -15,11 +15,7 @@ import MessageItem from '@/components/chat/MessageItem.vue'
 const props = defineProps({
   messages: {
     type: Array,
-    default: () => ([
-      { id: 1, role: 'system', content: '欢迎来到 SmartTavern。' },
-      { id: 2, role: 'user', content: '你好，介绍一下你自己？' },
-      { id: 3, role: 'assistant', content: '我是一个对话助手，帮助你完成任务。' },
-    ])
+    default: () => []
   }
 })
 

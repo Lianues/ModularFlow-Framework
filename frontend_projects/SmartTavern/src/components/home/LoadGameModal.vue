@@ -8,7 +8,7 @@ const props = defineProps({
   icon: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update:show', 'close'])
+const emit = defineEmits(['update:show', 'close', 'confirm'])
 
 function onClose() {
   emit('close')
@@ -24,7 +24,7 @@ function onClose() {
     @update:show="(v) => emit('update:show', v)"
     @close="onClose"
   >
-    <LoadGameView />
+    <LoadGameView @confirm="(file) => emit('confirm', file)" />
   </ContentViewModal>
 </template>
 
