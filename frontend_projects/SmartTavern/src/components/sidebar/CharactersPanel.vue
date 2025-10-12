@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import DataCatalog from '@/services/dataCatalog'
+import ChatBranches from '@/services/chatBranches'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 },
@@ -9,6 +10,7 @@ const props = defineProps({
   top: { type: Number, default: 64 },
   bottom: { type: Number, default: 12 },
   title: { type: String, default: '角色卡 Characters' },
+  conversationFile: { type: String, default: null },
 })
 
 const emit = defineEmits(['close','use','view','delete'])
@@ -22,35 +24,85 @@ const panelStyle = computed(() => ({
   zIndex: String(props.zIndex),
 }))
 
-/** 远程数据 */
-const loading = ref(true)
+const loading = ref(false)
 const error = ref(null)
 const usingKey = ref(null)
 const characters = ref([])
+const settingsLoaded = ref(false)
 
-async function fetchCharacters() {
+async function loadData() {
+  if (settingsLoaded.value) return
+  
+  loading.value = true
+  error.value = null
+  
   try {
-    const res = await DataCatalog.listCharacters()
-    characters.value = DataCatalog.mapToCards(res.items, 'characters')
-    if (!usingKey.value && characters.value.length) usingKey.value = characters.value[0].key
+    const promises = [DataCatalog.listCharacters()]
+    
+    if (props.conversationFile) {
+      promises.push(
+        ChatBranches.settings({
+          action: 'get',
+          file: props.conversationFile
+        })
+      )
+    }
+    
+    const results = await Promise.all(promises)
+    const listRes = results[0]
+    const settingsRes = results[1]
+    
+    characters.value = DataCatalog.mapToCards(listRes?.items || [], 'characters')
+    
+    // character是单值字段
+    if (settingsRes?.settings?.character) {
+      usingKey.value = settingsRes.settings.character
+    } else if (!usingKey.value && characters.value.length) {
+      usingKey.value = characters.value[0].key
+    }
+    
+    settingsLoaded.value = true
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
     loading.value = false
+    setTimeout(() => {
+      try { window?.lucide?.createIcons?.() } catch (_) {}
+    }, 50)
   }
 }
 
+watch(() => props.conversationFile, (v) => {
+  if (v && !settingsLoaded.value) {
+    loadData()
+  }
+}, { immediate: true })
+
 function close(){ emit('close') }
-function onUse(k){ usingKey.value = k; emit('use', k) }
+
+async function onUse(k) {
+  if (!props.conversationFile) {
+    usingKey.value = k
+    emit('use', k)
+    return
+  }
+  
+  try {
+    await ChatBranches.settings({
+      action: 'update',
+      file: props.conversationFile,
+      patch: { character: k }
+    })
+    usingKey.value = k
+    emit('use', k)
+  } catch (e) {
+    error.value = e?.message || '更新失败'
+  }
+}
+
 function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
-/** 图标渲染：lucide 名称优先，否则回退 emoji */
 const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
-
-onMounted(() => {
-  window.lucide?.createIcons?.()
-  fetchCharacters()
-})
 </script>
 
 <template>

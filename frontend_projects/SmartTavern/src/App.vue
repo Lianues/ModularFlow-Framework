@@ -128,6 +128,9 @@ watch(view, (v) => {
 
  // 楼层对话消息（仅用于 Threaded 页面），确认存档后由后端数据填充
  const currentThreadMessages = ref([])
+ 
+ // 当前打开的对话文件路径（用于侧边栏settings联动）
+ const currentConversationFile = ref(null)
 
 
 onMounted(() => {
@@ -184,6 +187,7 @@ async function onLoadGameConfirm(file) {
     }))
     // 更新并切换视图
     currentThreadMessages.value = mapped.length ? mapped : [{ id: Date.now(), role: 'system', content: '（空对话）' }]
+    currentConversationFile.value = file // 记录当前对话文件路径
     closeHomeModal()
     view.value = 'threaded'
     nextTick(() => refreshIcons())
@@ -262,6 +266,7 @@ async function onNewChatConfirm(payload) {
       <transition name="st-subpage">
         <PresetsPanel
           v-if="showSidebar && presetsOpen"
+          :conversationFile="currentConversationFile"
           @close="presetsOpen = false"
           @view="(key) => openViewModal('preset', '预设详情 - ' + key, key)"
         />
@@ -271,6 +276,7 @@ async function onNewChatConfirm(payload) {
       <transition name="st-subpage">
         <WorldbookPanel
           v-if="showSidebar && worldbookOpen"
+          :conversationFile="currentConversationFile"
           @close="worldbookOpen = false"
           @view="(key) => openViewModal('worldbook', '世界书详情 - ' + key, key)"
         />
@@ -280,6 +286,7 @@ async function onNewChatConfirm(payload) {
       <transition name="st-subpage">
         <CharactersPanel
           v-if="showSidebar && charactersOpen"
+          :conversationFile="currentConversationFile"
           @close="charactersOpen = false"
           @view="(key) => openViewModal('character', '角色卡详情 - ' + key, key)"
         />
@@ -289,6 +296,7 @@ async function onNewChatConfirm(payload) {
       <transition name="st-subpage">
         <PersonaPanel
           v-if="showSidebar && personaOpen"
+          :conversationFile="currentConversationFile"
           @close="personaOpen = false"
           @view="(key) => openViewModal('persona', '用户信息详情 - ' + key, key)"
         />
@@ -298,6 +306,7 @@ async function onNewChatConfirm(payload) {
       <transition name="st-subpage">
         <RegexPanel
           v-if="showSidebar && regexOpen"
+          :conversationFile="currentConversationFile"
           @close="regexOpen = false"
           @view="(key) => openViewModal('regex', '正则规则详情 - ' + key, key)"
         />

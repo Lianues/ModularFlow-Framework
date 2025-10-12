@@ -1,0 +1,9 @@
+{
+  "preset": "backend_projects/SmartTavern/data/presets/Default.json",
+  "world_books": [],
+  "characters": [
+    "backend_projects/SmartTavern/data/characters/心与露.json"
+  ],
+  "persona": "backend_projects/SmartTavern/data/persona/用户2.json",
+  "regex_rules": []
+}

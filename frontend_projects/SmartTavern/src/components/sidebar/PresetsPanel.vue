@@ -1,14 +1,16 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import DataCatalog from '@/services/dataCatalog'
+import ChatBranches from '@/services/chatBranches'
 
 const props = defineProps({
-  anchorLeft: { type: Number, default: 308 }, // 左侧锚定像素（与外观面板一致：12+280+16）
-  width: { type: Number, default: 560 },      // 面板宽度
-  zIndex: { type: Number, default: 59 },      // 层级（与 Sidebar 同层）
-  top: { type: Number, default: 64 },         // 顶部偏移（避开顶部栏）
-  bottom: { type: Number, default: 12 },      // 底部偏移
+  anchorLeft: { type: Number, default: 308 },
+  width: { type: Number, default: 560 },
+  zIndex: { type: Number, default: 59 },
+  top: { type: Number, default: 64 },
+  bottom: { type: Number, default: 12 },
   title: { type: String, default: '预设 Presets' },
+  conversationFile: { type: String, default: null }, // 当前对话文件路径
 })
 
 const emit = defineEmits(['close','use','view','delete'])
@@ -23,34 +25,96 @@ const panelStyle = computed(() => ({
 }))
 
 /** 远程数据 */
-const loading = ref(true)
+const loading = ref(false)
 const error = ref(null)
 const usingKey = ref(null)
 const presets = ref([])
+const settingsLoaded = ref(false)
 
-async function fetchPresets() {
+/**
+ * 懒加载：面板打开时并行请求list与settings
+ */
+async function loadData() {
+  if (settingsLoaded.value) return // 避免重复加载
+  
+  loading.value = true
+  error.value = null
+  
   try {
-    const res = await DataCatalog.listPresets()
-    presets.value = DataCatalog.mapToCards(res.items, 'presets')
-    if (!usingKey.value && presets.value.length) usingKey.value = presets.value[0].key
+    const promises = [DataCatalog.listPresets()]
+    
+    // 若有对话文件，并行获取settings
+    if (props.conversationFile) {
+      promises.push(
+        ChatBranches.settings({
+          action: 'get',
+          file: props.conversationFile
+        })
+      )
+    }
+    
+    const results = await Promise.all(promises)
+    const listRes = results[0]
+    const settingsRes = results[1]
+    
+    // 处理列表
+    presets.value = DataCatalog.mapToCards(listRes?.items || [], 'presets')
+    
+    // 处理settings：标记使用中
+    if (settingsRes?.settings?.preset) {
+      usingKey.value = settingsRes.settings.preset
+    } else if (!usingKey.value && presets.value.length) {
+      usingKey.value = presets.value[0].key
+    }
+    
+    settingsLoaded.value = true
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
     loading.value = false
+    // 刷新图标
+    setTimeout(() => {
+      try { window?.lucide?.createIcons?.() } catch (_) {}
+    }, 50)
   }
 }
 
+// 监听面板打开，触发懒加载
+watch(() => props.conversationFile, (v) => {
+  if (v && !settingsLoaded.value) {
+    loadData()
+  }
+}, { immediate: true })
+
 function close(){ emit('close') }
-function onUse(k){ usingKey.value = k; emit('use', k) }
+
+/**
+ * 使用：调用settings API更新preset字段
+ */
+async function onUse(k) {
+  if (!props.conversationFile) {
+    usingKey.value = k
+    emit('use', k)
+    return
+  }
+  
+  try {
+    await ChatBranches.settings({
+      action: 'update',
+      file: props.conversationFile,
+      patch: { preset: k }
+    })
+    usingKey.value = k
+    emit('use', k)
+  } catch (e) {
+    error.value = e?.message || '更新失败'
+  }
+}
+
 function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
-/** 图标渲染：lucide 名称优先，否则回退 emoji */
-const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
 
-onMounted(() => {
-  window.lucide?.createIcons?.()
-  fetchPresets()
-})
+const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
 </script>
 
 <template>

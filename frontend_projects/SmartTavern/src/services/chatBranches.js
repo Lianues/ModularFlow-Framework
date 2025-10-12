@@ -111,17 +111,22 @@ const ChatBranches = {
     });
   },
 
-  // 更新对话 settings：仅允许 type / preset_file / character_file / persona_file / regex_file / worldbook_file
+  // 综合设置管理：读取(action=get)或更新(action=update)对话 settings
   // 使用 file 或 slug 二选一定位
-  // 后端实现见：[python.function(update_conversation_settings)](api/modules/SmartTavern/chat_branches/chat_branches.py:215)
-  async updateConversationSettings({ patch, file, slug }) {
-    if (!patch || typeof patch !== 'object') {
-      throw new Error('[ChatBranches] updateConversationSettings: patch must be object');
+  // 字段：preset(string)、character(string)、persona(string)、regex_rules(array)、world_books(array)
+  // 后端实现见：[python.function(settings)](api/modules/SmartTavern/chat_branches/chat_branches.py:282)
+  async settings({ action, patch, file, slug }) {
+    if (!action || !['get', 'update'].includes(action)) {
+      throw new Error('[ChatBranches] settings: action must be "get" or "update"');
     }
-    const body = { patch };
+    if (action === 'update' && (!patch || typeof patch !== 'object')) {
+      throw new Error('[ChatBranches] settings: patch required for action=update');
+    }
+    const body = { action };
+    if (patch) body.patch = patch;
     if (file) body.file = file;
     if (slug) body.slug = slug;
-    return postJSON('smarttavern/chat_branches/update_conversation_settings', body);
+    return postJSON('smarttavern/chat_branches/settings', body);
   },
 
   // 管理 variables：action=get|set|merge|reset；set/merge 需提供 data 对象

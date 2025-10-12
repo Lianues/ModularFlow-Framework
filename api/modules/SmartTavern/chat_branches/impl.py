@@ -560,14 +560,19 @@ def create_conversation_impl(
     # 写入主文件
     _safe_write_json(main_path, doc)
 
-    # 写入 settings（记录选择项）
+    # 写入 settings（对齐 branch_demo.settings.json 字段规范）
+    # 字段说明：
+    # - preset: string (单值)
+    # - character: string (单值，角色卡)
+    # - persona: string (单值)
+    # - regex_rules: string[] (多选)
+    # - world_books: string[] (多选)
     settings: Dict[str, Any] = {
-        "type": chat_type or "threaded",
-        "preset_file": preset_file,
-        "character_file": character_file,
-        "persona_file": persona_file,
-        "regex_file": regex_file,
-        "worldbook_file": worldbook_file
+        "preset": preset_file,
+        "character": character_file,
+        "persona": persona_file,
+        "regex_rules": [regex_file] if regex_file else [],
+        "world_books": [worldbook_file] if worldbook_file else []
     }
     _safe_write_json(settings_path, settings)
 
@@ -647,56 +652,83 @@ def _validate_allowlisted_path_opt(val: Optional[str], field_name: str) -> Optio
     return val
 
 
-def update_conversation_settings_impl(
-    patch: Dict[str, Any],
+def settings_impl(
+    action: str,
     file: Optional[str] = None,
     slug: Optional[str] = None,
+    patch: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    更新 {base}.settings.json 指定键值。仅允许以下字段：
-      - type
-      - preset_file, character_file, persona_file, regex_file, worldbook_file
-    不维护时间戳（按约定，settings/variables 不记录时间）。
+    综合设置管理：读取与更新 {base}.settings.json。
+    
+    参数：
+      - action: 'get' 或 'update'
+      - file/slug: 二选一定位对话
+      - patch: action=update 时必需，仅允许以下字段：
+        - preset: string (单值)
+        - character: string (单值，角色卡)
+        - persona: string (单值)
+        - regex_rules: string[] (多选)
+        - world_books: string[] (多选)
+    
+    返回：{ settings_file, settings, slug }
     """
-    if not isinstance(patch, dict):
-        raise ValueError("patch must be an object")
-
     main_path, settings_path, variables_path, base_name = _resolve_conversation_files(file=file, slug=slug)
-
-    # 读取/初始化 settings
+    rel_settings = str(settings_path.relative_to(_repo_root()).as_posix())
+    
+    action = (action or "").strip().lower()
+    if action not in {"get", "update"}:
+        raise ValueError(f"Unsupported action: {action} (must be 'get' or 'update')")
+    
+    # GET: 读取并返回
+    if action == "get":
+        settings = _safe_read_json_default(settings_path, default={})
+        return {
+            "settings_file": rel_settings,
+            "settings": settings,
+            "slug": base_name,
+        }
+    
+    # UPDATE: 校验 patch 并更新
+    if not isinstance(patch, dict):
+        raise ValueError("patch must be an object for action=update")
+    
     settings = _safe_read_json_default(settings_path, default={})
-
-    allowed_keys = {"type", "preset_file", "character_file", "persona_file", "regex_file", "worldbook_file"}
+    
+    allowed_keys = {"preset", "character", "persona", "regex_rules", "world_books"}
     for k in patch.keys():
         if k not in allowed_keys:
             raise ValueError(f"Unsupported settings field: {k}")
-
-    # 校验路径型字段
-    preset_file = _validate_allowlisted_path_opt(patch.get("preset_file"), "preset_file") if "preset_file" in patch else settings.get("preset_file")
-    character_file = _validate_allowlisted_path_opt(patch.get("character_file"), "character_file") if "character_file" in patch else settings.get("character_file")
-    persona_file = _validate_allowlisted_path_opt(patch.get("persona_file"), "persona_file") if "persona_file" in patch else settings.get("persona_file")
-    regex_file = _validate_allowlisted_path_opt(patch.get("regex_file"), "regex_file") if "regex_file" in patch else settings.get("regex_file")
-    worldbook_file = _validate_allowlisted_path_opt(patch.get("worldbook_file"), "worldbook_file") if "worldbook_file" in patch else settings.get("worldbook_file")
-
-    # 合并（只覆盖传入键）
-    for k in allowed_keys:
-        if k in patch:
-            if k == "preset_file":
-                settings[k] = preset_file
-            elif k == "character_file":
-                settings[k] = character_file
-            elif k == "persona_file":
-                settings[k] = persona_file
-            elif k == "regex_file":
-                settings[k] = regex_file
-            elif k == "worldbook_file":
-                settings[k] = worldbook_file
-            else:
-                settings[k] = patch[k]
-
+    
+    # 校验函数：数组字段
+    def _ensure_list_str(val, field):
+        if val is None:
+            return []
+        if not isinstance(val, list):
+            raise ValueError(f"{field} must be an array of strings")
+        out = []
+        for i, p in enumerate(val):
+            if p is None or p == "":
+                continue
+            ps = _validate_allowlisted_path_opt(p, f"{field}[{i}]")
+            if ps:
+                out.append(ps)
+        return out
+    
+    # 逐项校验与赋值（仅覆盖传入键）
+    if "preset" in patch:
+        settings["preset"] = _validate_allowlisted_path_opt(patch.get("preset"), "preset")
+    if "character" in patch:
+        settings["character"] = _validate_allowlisted_path_opt(patch.get("character"), "character")
+    if "persona" in patch:
+        settings["persona"] = _validate_allowlisted_path_opt(patch.get("persona"), "persona")
+    if "regex_rules" in patch:
+        settings["regex_rules"] = _ensure_list_str(patch.get("regex_rules"), "regex_rules")
+    if "world_books" in patch:
+        settings["world_books"] = _ensure_list_str(patch.get("world_books"), "world_books")
+    
     _safe_write_json(settings_path, settings)
-
-    rel_settings = str(settings_path.relative_to(_repo_root()).as_posix())
+    
     return {
         "settings_file": rel_settings,
         "settings": settings,

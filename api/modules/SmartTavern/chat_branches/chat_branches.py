@@ -30,7 +30,7 @@ from .impl import (
     truncate_after_node as _truncate_after_node,
     append_new_message as _append_new_message,
     create_conversation_impl as _create_conversation_impl,
-    update_conversation_settings_impl as _update_conversation_settings_impl,
+    settings_impl as _settings_impl,
     variables_impl as _variables_impl,
 )
 
@@ -280,21 +280,37 @@ def create_conversation(
 
 
 @core.register_api(
-    path="smarttavern/chat_branches/update_conversation_settings",
-    name="更新对话设置（settings.json）",
-    description="更新 conversations/{name}.settings.json 指定字段。仅允许：type、preset_file、character_file、persona_file、regex_file、worldbook_file。使用 file 或 slug 二选一定位。",
+    path="smarttavern/chat_branches/settings",
+    name="对话设置综合管理（settings.json）",
+    description=(
+        "读取或更新 conversations/{name}.settings.json。"
+        "action=get: 读取当前设置；action=update: 更新指定字段。"
+        "允许字段：preset(string)、character(string)、persona(string)、regex_rules(array)、world_books(array)。"
+        "使用 file 或 slug 二选一定位。"
+    ),
     input_schema={
         "type": "object",
         "properties": {
-            "patch": {"type": "object", "additionalProperties": True},
+            "action": {"type": "string", "enum": ["get", "update"]},
+            "patch": {
+                "type": "object",
+                "properties": {
+                    "preset": {"type": "string"},
+                    "character": {"type": "string"},
+                    "persona": {"type": "string"},
+                    "regex_rules": {"type": "array", "items": {"type": "string"}},
+                    "world_books": {"type": "array", "items": {"type": "string"}}
+                },
+                "additionalProperties": False
+            },
             "file": {"type": "string"},
             "slug": {"type": "string"}
         },
-        "required": ["patch"],
+        "required": ["action"],
         "additionalProperties": False,
         "oneOf": [
-            {"required": ["patch", "file"]},
-            {"required": ["patch", "slug"]}
+            {"required": ["action", "file"]},
+            {"required": ["action", "slug"]}
         ]
     },
     output_schema={
@@ -308,8 +324,8 @@ def create_conversation(
         "additionalProperties": False,
     },
 )
-def update_conversation_settings(patch: Dict[str, Any], file: str = None, slug: str = None) -> Dict[str, Any]:
-    return _update_conversation_settings_impl(patch=patch, file=file, slug=slug)
+def settings(action: str, file: str = None, slug: str = None, patch: Dict[str, Any] = None) -> Dict[str, Any]:
+    return _settings_impl(action=action, file=file, slug=slug, patch=patch)
 
 
 @core.register_api(

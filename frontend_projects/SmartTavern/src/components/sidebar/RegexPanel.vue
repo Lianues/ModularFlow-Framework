@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import DataCatalog from '@/services/dataCatalog'
+import ChatBranches from '@/services/chatBranches'
 
 const props = defineProps({
   anchorLeft: { type: Number, default: 308 },
@@ -9,6 +10,7 @@ const props = defineProps({
   top: { type: Number, default: 64 },
   bottom: { type: Number, default: 12 },
   title: { type: String, default: '正则 Regex Rules' },
+  conversationFile: { type: String, default: null },
 })
 
 const emit = defineEmits(['close','use','view','delete'])
@@ -22,35 +24,100 @@ const panelStyle = computed(() => ({
   zIndex: String(props.zIndex),
 }))
 
-/** 远程数据 */
-const loading = ref(true)
+const loading = ref(false)
 const error = ref(null)
-const usingKey = ref(null)
+const usingKeys = ref([]) // 多选：使用数组
 const regexRules = ref([])
+const settingsLoaded = ref(false)
 
-async function fetchRegexRules() {
+async function loadData() {
+  if (settingsLoaded.value) return
+  
+  loading.value = true
+  error.value = null
+  
   try {
-    const res = await DataCatalog.listRegexRules()
-    regexRules.value = DataCatalog.mapToCards(res.items, 'regex_rules')
-    if (!usingKey.value && regexRules.value.length) usingKey.value = regexRules.value[0].key
+    const promises = [DataCatalog.listRegexRules()]
+    
+    if (props.conversationFile) {
+      promises.push(
+        ChatBranches.settings({
+          action: 'get',
+          file: props.conversationFile
+        })
+      )
+    }
+    
+    const results = await Promise.all(promises)
+    const listRes = results[0]
+    const settingsRes = results[1]
+    
+    regexRules.value = DataCatalog.mapToCards(listRes?.items || [], 'regex_rules')
+    
+    // regex_rules是数组字段（多选）
+    if (Array.isArray(settingsRes?.settings?.regex_rules)) {
+      usingKeys.value = settingsRes.settings.regex_rules
+    }
+    
+    settingsLoaded.value = true
   } catch (e) {
     error.value = e?.message || String(e)
   } finally {
     loading.value = false
+    setTimeout(() => {
+      try { window?.lucide?.createIcons?.() } catch (_) {}
+    }, 50)
   }
 }
 
+watch(() => props.conversationFile, (v) => {
+  if (v && !settingsLoaded.value) {
+    loadData()
+  }
+}, { immediate: true })
+
 function close(){ emit('close') }
-function onUse(k){ usingKey.value = k; emit('use', k) }
+
+// 多选逻辑：切换选中状态
+async function onUse(k) {
+  if (!props.conversationFile) {
+    const idx = usingKeys.value.indexOf(k)
+    if (idx >= 0) {
+      usingKeys.value.splice(idx, 1)
+    } else {
+      usingKeys.value.push(k)
+    }
+    emit('use', k)
+    return
+  }
+  
+  try {
+    const newKeys = [...usingKeys.value]
+    const idx = newKeys.indexOf(k)
+    if (idx >= 0) {
+      newKeys.splice(idx, 1)
+    } else {
+      newKeys.push(k)
+    }
+    
+    await ChatBranches.settings({
+      action: 'update',
+      file: props.conversationFile,
+      patch: { regex_rules: newKeys }
+    })
+    usingKeys.value = newKeys
+    emit('use', k)
+  } catch (e) {
+    error.value = e?.message || '更新失败'
+  }
+}
+
 function onView(k){ emit('view', k) }
 function onDelete(k){ emit('delete', k) }
-/** 图标渲染：lucide 名称优先，否则回退 emoji */
 const isLucide = (v) => typeof v === 'string' && /^[a-z\-]+$/.test(v)
 
-onMounted(() => {
-  window.lucide?.createIcons?.()
-  fetchRegexRules()
-})
+// 辅助：检查是否选中
+const isUsing = (k) => usingKeys.value.includes(k)
 </script>
 
 <template>
@@ -89,11 +156,11 @@ onMounted(() => {
             <div class="rg-actions">
               <button
                 class="rg-btn"
-                :class="{ active: usingKey === it.key }"
+                :class="{ active: isUsing(it.key) }"
                 type="button"
                 @click="onUse(it.key)"
-                :aria-pressed="usingKey === it.key"
-              >{{ usingKey === it.key ? '使用中' : '使用' }}</button>
+                :aria-pressed="isUsing(it.key)"
+              >{{ isUsing(it.key) ? '使用中' : '使用' }}</button>
 
               <button class="rg-btn" type="button" @click="onView(it.key)">查看</button>
 
