@@ -21,6 +21,7 @@ from .impl import (
     list_characters_impl,
     list_personas_impl,
     list_regex_rules_impl,
+    list_conversations_impl,
 )
 
 
@@ -276,6 +277,56 @@ def list_personas(base_dir: Optional[str] = None,
 def list_regex_rules(base_dir: Optional[str] = None,
                      fields: Optional[List[str]] = None) -> Dict[str, Any]:
     return list_regex_rules_impl()
+
+# ---------- 对话配置（conversations） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/list_conversations",
+    name="列出对话配置清单（名称与描述）",
+    description="扫描 backend_projects/SmartTavern/data/conversations 下的 JSON 文件，返回文件相对路径与其 name/description 字段（若存在）。",
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "folder": {"type": "string"},
+            "total": {"type": "integer"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string"},
+                        "name": {"type": ["string", "null"]},
+                        "description": {"type": ["string", "null"]}
+                    },
+                    "required": ["file"],
+                    "additionalProperties": True
+                }
+            },
+            "errors": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": ["string", "null"]},
+                        "error": {"type": "string"}
+                    },
+                    "required": ["error"]
+                }
+            }
+        },
+        "required": ["folder", "total", "items"],
+        "additionalProperties": False
+    },
+)
+def list_conversations(base_dir: Optional[str] = None,
+                       fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    # 忽略入参，统一返回内置目录与全部字段
+    return list_conversations_impl()
 
 
 # ---------- 获取预设详情（读取单个文件） ----------

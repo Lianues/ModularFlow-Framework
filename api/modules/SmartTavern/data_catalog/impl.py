@@ -374,6 +374,64 @@ def list_regex_rules_impl(base_dir: Optional[str] = None,
         out["errors"] = errors
     return out
 
+# ---------- 实现：列出 conversations ----------
+def list_conversations_impl(base_dir: Optional[str] = None,
+                            fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 conversations 目录，返回文件相对路径与所需字段（name/description）
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out
+
 
 # ---------- 实现：读取单个 preset 详情 ----------
 

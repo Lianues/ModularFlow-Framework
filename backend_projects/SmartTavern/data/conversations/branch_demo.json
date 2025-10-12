@@ -1,6 +1,6 @@
 {
-  "schema": { "name": "chat-branches", "version": 2 },
-  "meta": { "id": "c_demo_branch", "title": "示例：分支重试对话（V2）" },
+  "name": "分支演示对话",
+  "description": "示例：分支重试对话（演示数据）",
   "root": "n_root",
   "nodes": {
     "n_root":   { "pid": null,       "role": "system",    "content": "对话上下文：这是一个分支重试示例。" },
@@ -16,5 +16,6 @@
     "n_ass1":  ["n_user2"],
     "n_user2": ["n_ass3"]
   },
-  "active_path": ["n_root", "n_user1", "n_ass1", "n_user2", "n_ass3"]
+  "active_path": ["n_root", "n_user1", "n_ass1", "n_user2", "n_ass3"],
+  "updated_at": "2025-10-12T14:59:55+08:00"
 }

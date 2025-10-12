@@ -1,0 +1,13 @@
+{
+  "preset": "backend_projects/SmartTavern/data/presets/Default.json",
+  "world_books": [
+    "backend_projects/SmartTavern/data/world_books/参考用main_world.json"
+  ],
+  "characters": [
+    "backend_projects/SmartTavern/data/characters/心与露.json"
+  ],
+  "persona": "backend_projects/SmartTavern/data/persona/用户2.json",
+  "regex_rules": [
+    "backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json"
+  ]
+}

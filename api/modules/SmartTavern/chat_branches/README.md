@@ -22,7 +22,7 @@
   - 切换分支并新会话：[python.function(switch_branch_and_start_new_session)](api/modules/SmartTavern/chat_branches/impl.py:187)
   - 分支 j/n 指示：[python.function(branch_indicator)](api/modules/SmartTavern/chat_branches/impl.py:241)
   - 列出对话/会话：[python.function(list_conversations)](api/modules/SmartTavern/chat_branches/impl.py:255), [python.function(list_sessions)](api/modules/SmartTavern/chat_branches/impl.py:277)
-  - 导出/导入（v2）：[python.function(export_v2)](api/modules/SmartTavern/chat_branches/impl.py:297), [python.function(import_v2)](api/modules/SmartTavern/chat_branches/impl.py:337)；稳定别名：[python.function(export)](api/modules/SmartTavern/chat_branches/impl.py:455), [python.function(import_chat)](api/modules/SmartTavern/chat_branches/impl.py:459)
+  - 导出/导入（最小文件）：导出仅包含 root/nodes/children/active_path → [python.function(export_v2)](api/modules/SmartTavern/chat_branches/impl.py:297)，导入支持最小文件且 schema/meta 可省略 → [python.function(import_v2)](api/modules/SmartTavern/chat_branches/impl.py:337)；稳定别名：[python.function(export)](api/modules/SmartTavern/chat_branches/impl.py:455), [python.function(import_chat)](api/modules/SmartTavern/chat_branches/impl.py:459)
   - 派生视图：OpenAI 消息：[python.function(openai_messages)](api/modules/SmartTavern/chat_branches/impl.py:463)，分支情况表：[python.function(branch_table)](api/modules/SmartTavern/chat_branches/impl.py:478)
 - 测试脚本：[filename](api/modules/SmartTavern/chat_branches/test_chat_branches.py:1)
 - 示例数据（chat-branches 文件）：[filename](backend_projects/SmartTavern/data/conversations/branch_demo.json:1)
@@ -67,9 +67,9 @@ API 列表（modules 命名空间）
   - 输出：{ session_id, latest: { depth, j, n, node_id }, levels: [{ depth, node_id, j, n }, ...] }
 - smarttavern/chat_branches/export（稳定别名）
   - 输入：{ conversation_id: string }
-  - 输出：chat-branches v2 标准文件对象：{ schema:{name:"chat-branches",version:2}, meta:{id,title}, root, nodes:{id:{pid,role,content}}, children:{pid:[cid...]}, active_path:[...] }
+  - 输出：最小分支树文件对象：{ root, nodes:{id:{pid,role,content}}, children:{pid:[cid...]}, active_path:[...] }
 - smarttavern/chat_branches/import（稳定别名）
-  - 输入：{ doc: chat-branches v2 标准文件 }
+  - 输入：{ doc: 最小分支树文件（可省略 schema/meta） }
   - 输出：{ conversation_id: string, active_session_id: string }
 
 使用示例（Python SDK）

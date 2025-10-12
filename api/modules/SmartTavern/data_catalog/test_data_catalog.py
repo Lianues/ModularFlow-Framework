@@ -165,6 +165,26 @@ def test_list_regex_rules_contains_sample():
     print("✓ list_regex_rules 包含 remove_xml_tags.json 且字段正确")
 
 
+def test_list_conversations_contains_demo():
+    res = core.call_api(
+        "smarttavern/data_catalog/list_conversations",
+        {},
+        method="POST",
+        namespace="modules",
+    )
+    _assert_basic_structure(res)
+    print(f"✓ list_conversations 基本结构 OK (total={res['total']})")
+    _print_section("list_conversations response", res)
+
+    want_path = "backend_projects/SmartTavern/data/conversations/branch_demo.json"
+    items = res.get("items", [])
+    item = next((x for x in items if str(x.get("file")) == want_path), None)
+    assert item is not None, f"未找到 {want_path} 条目"
+    assert item.get("name") == "分支演示对话", "conversations name 字段不匹配"
+    assert isinstance(item.get("description"), str) and item.get("description").startswith("示例"), "conversations description 字段不匹配或为空"
+    print("✓ list_conversations 包含 branch_demo.json 且字段正确")
+
+
 # ---------- 读取单个预设详情 ----------
 
 def test_get_preset_detail_default():
@@ -363,6 +383,7 @@ def main():
     test_list_characters_contains_sample()
     test_list_personas_contains_sample()
     test_list_regex_rules_contains_sample()
+    test_list_conversations_contains_demo()
     test_get_preset_detail_default()
     test_get_world_book_detail_sample()
     test_get_character_detail_sample()
