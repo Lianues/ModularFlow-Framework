@@ -42,6 +42,15 @@ def main():
         {"role": "assistant", "content": "undef: {{getvar:y}}"},
         {"role": "user", "content": "Nested A {{setvar:a:<<python:1+1>>}} B {{getvar:a}}"},
         {"role": "assistant", "content": "Sum <<python:3+4>>"},
+        # 嵌套变量路径：字典与列表
+        {"role": "user", "content": "{{setvar:profile.name::Alice}}{{setvar:scores[1]::5}}{{setvar:scores[3]::9}}"},
+        {"role": "assistant", "content": "P={{getvar:profile.name}} S1={{getvar:scores[1]}} S3={{getvar:scores[3]}}"},
+        # 传统宏（incvar/addvar/setglobalvar）对嵌套路径的支持（经转译到 Python 沙盒）
+        {"role": "user", "content": "{{setglobalvar:stats.hp::10}}{{incvar:stats.hp}}{{addvar:stats.hp::5}}"},
+        {"role": "assistant", "content": "HP={{getvar:stats.hp}}"},
+        # 传统宏 + 列表索引路径
+        {"role": "user", "content": "{{setvar:counters[0]::1}}{{decvar:counters[0]}}"},
+        {"role": "assistant", "content": "C0={{getvar:counters[0]}}"},
     ]
 
     res = call_process(messages, variables={"pre": "v"})
@@ -61,13 +70,27 @@ def main():
     assert out_msgs[3]["content"] == "undef: [UndefinedVar:y]", "未定义变量应输出占位词"
     assert out_msgs[4]["content"] == "Nested A  B 2", "嵌套 python + setvar + getvar 顺序应正确"
     assert out_msgs[5]["content"] == "Sum 7", "<< >> 定界符应正常求值"
+    assert out_msgs[7]["content"] == "P=Alice S1=5 S3=9", "嵌套路径 get/setvar 失败"
+    assert out_msgs[9]["content"] == "HP=16.0", "嵌套路径 inc/add/setglobalvar 失败"
+    assert out_msgs[11]["content"] == "C0=0.0", "嵌套路径 decvar + 索引失败"
 
     # 断言变量表
     assert vars_obj["initial"].get("pre") == "v"
     assert vars_obj["final"].get("x") == "1"
     assert vars_obj["final"].get("a") == "2"
+    # 验证最终变量嵌套结构
+    assert isinstance(vars_obj["final"].get("profile"), dict)
+    assert vars_obj["final"]["profile"].get("name") == "Alice"
+    assert isinstance(vars_obj["final"].get("scores"), list)
+    assert vars_obj["final"]["scores"][1] == "5"
+    assert vars_obj["final"]["scores"][3] == "9"
+    # 验证传统宏对嵌套路径的最终变量效果
+    assert isinstance(vars_obj["final"].get("stats"), dict)
+    assert vars_obj["final"]["stats"].get("hp") == "16.0"
+    assert isinstance(vars_obj["final"].get("counters"), list)
+    assert vars_obj["final"]["counters"][0] == "0.0"
 
-    print("✓ macro 顺序宏处理测试通过")
+    print("[OK] macro 顺序宏处理测试通过")
 
     # 新增：测试纯文本宏处理 API（默认严格模式，无 policy 输入）
     text = "a={{setvar:x:1}} b={{getvar:x}} c={{getvar:y}} d=<<python:3+4>>"
@@ -79,7 +102,7 @@ def main():
     assert res_text["variables"]["initial"].get("pre") == "v", "初始变量未正确回显"
     assert res_text["variables"]["final"].get("x") == "1", "setvar 应写入变量表"
 
-    print("✓ macro 纯文本宏处理测试通过")
+    print("[OK] macro 纯文本宏处理测试通过")
 
 
 if __name__ == "__main__":

@@ -55,6 +55,14 @@ def main():
     res5 = call_eval("setvar('y', 7)")
     results["setvar_mutation"] = res5
 
+    # 6) 嵌套路径 set/get（dict + list）
+    res6 = call_eval("setvar('a.b[1].c', 42)\nresult=str(getvar('a.b[1].c'))")
+    results["nested_set_get"] = res6
+
+    # 7) 嵌套路径 get 未定义（应返回占位或空）
+    res7 = call_eval("getvar('no.such.path')")
+    results["nested_undefined"] = res7
+
     print(json.dumps(results, ensure_ascii=False, indent=2, sort_keys=False))
 
     # 断言
@@ -75,7 +83,13 @@ def main():
     vf = ((res5.get("variables") or {}).get("final") or {})
     assert vf.get("y") == 7
 
-    print("✓ python_sandbox 表达式沙盒测试通过")
+    assert isinstance(res6, dict) and res6.get("success") is True
+    assert res6.get("result") == "42"
+    vf6 = ((res6.get("variables") or {}).get("final") or {})
+    assert isinstance(vf6.get("a"), dict) and isinstance(vf6["a"].get("b"), list)
+    assert isinstance(vf6["a"]["b"][1], dict) and vf6["a"]["b"][1].get("c") == 42
+
+    print("[OK] python_sandbox 表达式沙盒测试通过")
 
 
 if __name__ == "__main__":

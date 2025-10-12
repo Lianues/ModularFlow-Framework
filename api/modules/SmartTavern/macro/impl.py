@@ -26,6 +26,137 @@ DEFAULT_POLICY = {
     "error_token": "[UndefinedVar:{name}]",
 }
 
+# ---------- Nested variable path helpers ----------
+# 支持点号/方括号路径，如：
+#   - "a.b.c"
+#   - "a.b[2].c"
+#   - "a['复杂.key']" 或 "a[\"复杂.key\"]"
+#   - "a.b[0]['k']"
+from typing import Union
+
+_PathToken = Union[str, int]
+
+def _parse_path(path: str) -> List[_PathToken]:
+    s = str(path or "")
+    tokens: List[_PathToken] = []
+    i, n = 0, len(s)
+    buf: List[str] = []
+    def flush_buf():
+        nonlocal buf
+        if buf:
+            tokens.append("".join(buf))
+            buf = []
+    while i < n:
+        ch = s[i]
+        if ch == ".":
+            flush_buf()
+            i += 1
+            continue
+        if ch == "[":
+            flush_buf()
+            i += 1
+            if i < n and s[i] in ("'", '"'):
+                quote = s[i]; i += 1
+                qbuf: List[str] = []
+                while i < n and s[i] != quote:
+                    qbuf.append(s[i]); i += 1
+                # skip closing quote
+                if i < n and s[i] == quote: i += 1
+                # skip closing ]
+                while i < n and s[i] != "]": i += 1
+                if i < n and s[i] == "]": i += 1
+                tokens.append("".join(qbuf))
+            else:
+                # number or bare key until ]
+                nb: List[str] = []
+                while i < n and s[i] != "]":
+                    nb.append(s[i]); i += 1
+                if i < n and s[i] == "]": i += 1
+                raw = "".join(nb).strip()
+                if raw.isdigit() or (raw.startswith("-") and raw[1:].isdigit()):
+                    try:
+                        tokens.append(int(raw))
+                    except Exception:
+                        tokens.append(raw)
+                else:
+                    tokens.append(raw)
+            continue
+        else:
+            buf.append(ch)
+            i += 1
+    flush_buf()
+    # 清理空 token
+    return [t for t in tokens if t != "" and t is not None]
+
+def _get_by_path(store: Dict[str, Any], path: str, policy: Dict[str, Any]) -> Any:
+    toks = _parse_path(path)
+    cur: Any = store
+    try:
+        for t in toks:
+            if isinstance(t, int):
+                if not isinstance(cur, list) or t < 0 or t >= len(cur):
+                    raise KeyError("list index")
+                cur = cur[t]
+            else:
+                if not isinstance(cur, dict) or t not in cur:
+                    raise KeyError("dict key")
+                cur = cur[t]
+        return cur
+    except Exception:
+        ug = str(policy.get("undefined_get", "error")).lower()
+        return _error_token(path, policy) if ug == "error" else ""
+
+def _set_by_path(store: Dict[str, Any], path: str, value: Any) -> None:
+    toks = _parse_path(path)
+    if not toks:
+        return
+    cur: Any = store
+    for idx, t in enumerate(toks):
+        last = (idx == len(toks) - 1)
+        if last:
+            if isinstance(t, int):
+                if not isinstance(cur, list):
+                    # 尝试将空位替换为 list
+                    # 若 cur 不是 list，则无法索引数字，创建 list 并丢弃原值
+                    # 仅在不可用时覆盖（保守策略）
+                    # 这里不做类型严格校验，尽量容错
+                    new_list: List[Any] = []
+                    if isinstance(cur, dict):
+                        # 不能将 dict 直接替换，放弃嵌套到 list 的能力
+                        # 退化为在字典里用字符串索引
+                        cur[str(t)] = value
+                        return
+                    else:
+                        # 无法推进
+                        return
+                # 扩容
+                if t >= len(cur):
+                    cur.extend([None] * (t - len(cur) + 1))
+                cur[t] = value
+            else:
+                if isinstance(cur, dict):
+                    cur[t] = value
+                else:
+                    # 非字典，无法设置键，放弃
+                    return
+        else:
+            nxt = toks[idx + 1]
+            if isinstance(t, int):
+                # 需要 list 容器
+                if not isinstance(cur, list):
+                    # 无法从非 list 进入索引，尝试转换为 list（保守：忽略）
+                    return
+                if t >= len(cur):
+                    cur.extend([None] * (t - len(cur) + 1))
+                if cur[t] is None:
+                    # 根据下一跳类型推断容器
+                    cur[t] = [] if isinstance(nxt, int) else {}
+                cur = cur[t]
+            else:
+                if t not in cur or cur[t] is None or not isinstance(cur[t], (dict, list)):
+                    cur[t] = [] if isinstance(nxt, int) else {}
+                cur = cur[t]
+
 
 # 支持的传统宏名（小写）
 SUPPORTED_LEGACY_MACROS = {
@@ -170,31 +301,33 @@ def _execute_legacy_macro(name: str, params: str, state: Dict[str, Any], policy:
         parts = _split_params(params)
         var_name = parts[0] if parts else ""
         inc = parts[1] if len(parts) > 1 else "0"
-        cur = state.get(var_name, "0")
+        cur = _get_by_path(state, var_name, policy)
         a = _to_number(cur)
         b = _to_number(inc)
         # 若均为数字则相加，否则字符串拼接
-        if (str(cur).replace('.','',1).lstrip('-').isdigit() and str(inc).replace('.','',1).lstrip('-').isdigit()):
-            state[var_name] = str(a + b)
+        cur_s = "" if cur is None else str(cur)
+        if (str(cur_s).replace('.','',1).lstrip('-').isdigit() and str(inc).replace('.','',1).lstrip('-').isdigit()):
+            _set_by_path(state, var_name, str(a + b))
         else:
-            state[var_name] = str(cur) + str(inc)
+            _set_by_path(state, var_name, str(cur_s) + str(inc))
         return ""
 
     if n in ("incvar","incglobalvar"):
         var_name = (params or "").strip()
-        cur = _to_number(state.get(var_name, "0"))
-        state[var_name] = str(cur + 1)
+        cur = _to_number(_get_by_path(state, var_name, policy))
+        _set_by_path(state, var_name, str(cur + 1))
         return ""
 
     if n in ("decvar","decglobalvar"):
         var_name = (params or "").strip()
-        cur = _to_number(state.get(var_name, "0"))
-        state[var_name] = str(cur - 1)
+        cur = _to_number(_get_by_path(state, var_name, policy))
+        _set_by_path(state, var_name, str(cur - 1))
         return ""
 
     if n in ("getglobalvar",):
         var_name = (params or "").strip()
-        return str(state.get(var_name, "") if state.get(var_name, "") is not None else "")
+        val = _get_by_path(state, var_name, policy)
+        return "" if val is None else str(val)
 
     if n in ("setglobalvar",):
         # setglobalvar:name::value 或 name:value
@@ -205,7 +338,7 @@ def _execute_legacy_macro(name: str, params: str, state: Dict[str, Any], policy:
             var_name, value = body.split(":", 1)
         else:
             var_name, value = body, ""
-        state[var_name.strip()] = value
+        _set_by_path(state, var_name.strip(), value)
         return ""
 
     # 字符串
@@ -595,17 +728,12 @@ def _process_text(content: str, state: Dict[str, Any], policy: Dict[str, Any], a
             repl = _eval_python(str(payload), state, policy)
         elif kind == "setvar":
             name, value = payload
-            state[str(name)] = value
+            _set_by_path(state, str(name), value)
             repl = ""  # setvar 本身不产出文本
         elif kind == "getvar":
             name = str(payload)
-            if name in state:
-                repl = "" if state[name] is None else str(state[name])
-            else:
-                if str(policy.get("undefined_get", "error")).lower() == "error":
-                    repl = _error_token(name, policy)
-                else:
-                    repl = ""
+            val = _get_by_path(state, name, policy)
+            repl = "" if val is None else str(val)
         elif kind == "legacy":
             name, params = payload
             code = _legacy_to_python(name, params)

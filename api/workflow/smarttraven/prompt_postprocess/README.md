@@ -43,6 +43,7 @@ API 列表
   - rules: array | object（数组或 {rules:[...]} 容器；格式参考 [filename](backend_projects/SmartTavern/data/presets/Default.json) 的 regex_rules）
   - view: "user_view" | "assistant_view"
   - variables: object（可选；作为宏初始变量注入）
+    - 提示：variables 支持“点号 + 方括号”的嵌套路径访问与赋值（如 a.b[1].c、a['复杂.key']），宏与沙盒均已支持
 - 输出（JSON）
   - message: array（单视图处理后的消息数组，仅 content 可能被改变）
   - variables: {initial:object, final:object}

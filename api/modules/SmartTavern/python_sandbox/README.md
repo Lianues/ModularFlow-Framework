@@ -74,3 +74,12 @@ AST 安全规则
 参考
 - api/modules/SmartTavern/python_sandbox/python_sandbox.py
 - api/modules/SmartTavern/python_sandbox/impl.py
+
+嵌套变量路径支持
+- VarProxy 支持“以路径为键”的读写：vars['a.b[1].c']，可与 getvar('a.b[1].c')/setvar('a.b[1].c', v) 混用。
+- 路径语法：点号 + 方括号，支持引号键与数组索引（如 a['复杂.key']、a[2]）。
+- 自动容器推断：下一跳为整数索引 → 自动创建/扩容 list，否则创建 dict。
+- AST 调整：允许 Store 节点以支持安全的赋值语句；exec 路径返回值优先读取局部作用域 result。
+- 示例：
+  - setvar('a.b[1].c', 42); result = str(getvar('a.b[1].c'))  → "42"
+  - vars['profile.name'] = 'Alice'; result = vars['profile.name'] → "Alice"

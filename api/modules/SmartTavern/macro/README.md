@@ -88,3 +88,18 @@ API：纯文本处理（smarttavern/macro/process_text）
 - api/modules/SmartTavern/macro/impl.py
 - api/modules/SmartTavern/macro/SYSTEM_VARIABLES.md
 - api/modules/SmartTavern/macro/test_macro.py
+
+嵌套变量路径支持
+- 现已支持通过“点号 + 方括号”混合路径访问与赋值变量（适用于 setvar/getvar 与所有传统变量宏：getglobalvar/setglobalvar/addvar/incvar/decvar 等）。
+- 路径示例：
+  - a.b.c
+  - a.b[2].c
+  - a['复杂.key'] 或 a["复杂.key"]
+  - a.b[0]['k']
+- 自动容器推断：
+  - 下一跳为数字索引 → 自动创建/扩容 list
+  - 否则 → 自动创建 dict
+- 示例：
+  - {{setvar:profile.name::Alice}}{{getvar:profile.name}} → Alice
+  - {{setglobalvar:stats.hp::10}}{{incvar:stats.hp}}{{addvar:stats.hp::5}}{{getvar:stats.hp}} → 16.0
+- 实现位置：impl._parse_path/_get_by_path/_set_by_path；policy.undefined_get 行为保持一致（未定义读取返回占位符或空串）。

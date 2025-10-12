@@ -23,6 +23,106 @@ DEFAULT_POLICY = {
     "error_token": "[UndefinedVar:{name}]",
 }
 
+# ---------- Nested variable path helpers ----------
+from typing import List as _List, Union as _Union
+
+_PathToken = _Union[str, int]
+
+def _parse_path(path: str) -> _List[_PathToken]:
+    s = str(path or "")
+    tokens: _List[_PathToken] = []
+    i, n = 0, len(s)
+    buf: _List[str] = []
+    def flush_buf():
+        nonlocal buf
+        if buf:
+            tokens.append("".join(buf))
+            buf = []
+    while i < n:
+        ch = s[i]
+        if ch == ".":
+            flush_buf(); i += 1; continue
+        if ch == "[":
+            flush_buf(); i += 1
+            if i < n and s[i] in ("'", '"'):
+                q = s[i]; i += 1
+                qb: _List[str] = []
+                while i < n and s[i] != q:
+                    qb.append(s[i]); i += 1
+                if i < n and s[i] == q: i += 1
+                while i < n and s[i] != "]": i += 1
+                if i < n and s[i] == "]": i += 1
+                tokens.append("".join(qb))
+            else:
+                nb: _List[str] = []
+                while i < n and s[i] != "]":
+                    nb.append(s[i]); i += 1
+                if i < n and s[i] == "]": i += 1
+                raw = "".join(nb).strip()
+                if raw.isdigit() or (raw.startswith("-") and raw[1:].isdigit()):
+                    try:
+                        tokens.append(int(raw))
+                    except Exception:
+                        tokens.append(raw)
+                else:
+                    tokens.append(raw)
+            continue
+        buf.append(ch); i += 1
+    flush_buf()
+    return [t for t in tokens if t != "" and t is not None]
+
+def _get_by_path(store: Dict[str, Any], path: str, policy: Dict[str, Any]) -> Any:
+    toks = _parse_path(path)
+    cur: Any = store
+    try:
+        for t in toks:
+            if isinstance(t, int):
+                if not isinstance(cur, list) or t < 0 or t >= len(cur):
+                    raise KeyError("list index")
+                cur = cur[t]
+            else:
+                if not isinstance(cur, dict) or t not in cur:
+                    raise KeyError("dict key")
+                cur = cur[t]
+        return cur
+    except Exception:
+        ug = str(policy.get("undefined_get", "error")).lower()
+        return _make_error_token(path, policy) if ug == "error" else ""
+
+def _set_by_path(store: Dict[str, Any], path: str, value: Any) -> None:
+    toks = _parse_path(path)
+    if not toks:
+        return
+    cur: Any = store
+    for idx, t in enumerate(toks):
+        last = (idx == len(toks) - 1)
+        if last:
+            if isinstance(t, int):
+                if not isinstance(cur, list):
+                    return
+                if t >= len(cur):
+                    cur.extend([None] * (t - len(cur) + 1))
+                cur[t] = value
+            else:
+                if isinstance(cur, dict):
+                    cur[t] = value
+                else:
+                    return
+        else:
+            nxt = toks[idx + 1]
+            if isinstance(t, int):
+                if not isinstance(cur, list):
+                    return
+                if t >= len(cur):
+                    cur.extend([None] * (t - len(cur) + 1))
+                if cur[t] is None:
+                    cur[t] = [] if isinstance(nxt, int) else {}
+                cur = cur[t]
+            else:
+                if t not in cur or cur[t] is None or not isinstance(cur[t], (dict, list)):
+                    cur[t] = [] if isinstance(nxt, int) else {}
+                cur = cur[t]
+
 ALLOWED_FUNCS = {
     "len": len,
     "abs": abs,
@@ -62,7 +162,7 @@ ALLOWED_SECOND_ATTRS = {
 ALLOWED_NODES: Set[type] = {
     ast.Module, ast.Expr,
     ast.Expression, ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare, ast.IfExp, ast.If,
-    ast.Call, ast.Name, ast.Load, ast.Constant, ast.Subscript, ast.Slice, ast.Index,
+    ast.Call, ast.Name, ast.Load, ast.Store, ast.Constant, ast.Subscript, ast.Slice, ast.Index,
     ast.Dict, ast.List, ast.Tuple, ast.Attribute,
     ast.Assign, ast.AugAssign, ast.AnnAssign,
     # 操作符节点
@@ -86,19 +186,16 @@ def _make_error_token(name: str, policy: Dict[str, Any]) -> str:
 
 
 class VarProxy:
-    """变量代理，支持下标读写；未定义读取时按策略返回占位词或空串"""
+    """变量代理，支持路径读写（'a.b[1].c'）；未定义读取时按策略返回占位词或空串"""
     def __init__(self, store: Dict[str, Any], policy: Dict[str, Any]):
         self._store = store
         self._policy = policy
 
     def __getitem__(self, key: str) -> Any:
-        if key in self._store:
-            return self._store[key]
-        ug = str(self._policy.get("undefined_get", "error")).lower()
-        return _make_error_token(key, self._policy) if ug == "error" else ""
+        return _get_by_path(self._store, str(key), self._policy)
 
     def __setitem__(self, key: str, value: Any) -> None:
-        self._store[key] = value
+        _set_by_path(self._store, str(key), value)
 
     def __repr__(self) -> str:
         return f"VarProxy({self._store!r})"
@@ -178,13 +275,10 @@ def eval_expr(code: str, variables: Dict[str, Any] = None, policy: Dict[str, Any
         pol.update(policy)
 
     def getvar(name: str) -> Any:
-        if name in store:
-            return store[name]
-        ug = str(pol.get("undefined_get", "error")).lower()
-        return _make_error_token(name, pol) if ug == "error" else ""
+        return _get_by_path(store, str(name), pol)
 
     def setvar(name: str, value: Any) -> str:
-        store[name] = value
+        _set_by_path(store, str(name), value)
         return ""  # 作为表达式一部分时，不污染输出
 
     # 构造安全上下文
@@ -381,8 +475,10 @@ def eval_expr(code: str, variables: Dict[str, Any] = None, policy: Dict[str, Any
         tree = ast.parse(code, mode="exec")
         _SafeExprChecker().visit(tree)
         compiled = compile(tree, "<smarttavern_sandbox>", "exec")
-        exec(compiled, ctx_globals, {})
-        value = ctx_globals.get("result", "")
+        _locals: Dict[str, Any] = {}
+        exec(compiled, ctx_globals, _locals)
+        # 优先从局部作用域读取 result，其次从全局
+        value = _locals.get("result", ctx_globals.get("result", ""))
         out = "" if value is None else str(value)
         elapsed = time.time() - start_ts
         if elapsed > TIMEOUT_SEC:

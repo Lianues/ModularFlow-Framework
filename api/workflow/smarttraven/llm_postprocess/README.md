@@ -106,6 +106,7 @@ curl -X POST "http://localhost:8050/api/workflow/smarttavern/llm_postprocess/app
 使用说明与注意事项
 - 流式聚合策略：本工作流不在 token 级别做后处理；而是在 SSE 完整结束后一次性处理，保证宏与正则逻辑的确定性。
 - variables 注入：可在模板中使用 {{getvar:name}} 或 <<getvar:name>>，也可通过 setvar 修改变量；输出 variables.final 为宏执行后的最终表。
+- 嵌套路径：variables 支持“点号 + 方括号”的嵌套路径访问与赋值（如 a.b[1].c、a['复杂.key']），宏与沙盒均已支持
 - rules 可传空数组以绕过正则阶段，但本工作流仍会执行宏阶段。
 - messages/source：上游 messages（system/user/assistant）建议保留 source 信息，便于正则 targets 命中（如 history.user / preset.relative / world_book.in-chat 等）。
 - 视图固定为 user_view：若需对 assistant_view 执行后处理，建议直接调用 prompt_postprocess 接口并指定 view。

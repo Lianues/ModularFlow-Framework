@@ -89,6 +89,7 @@
 - 受限内置：len/abs/min/max/sum/str/int/float/bool/round/sorted 等
 - 受限模块：random/math/datetime/re（仅白名单属性链）
 - 注入变量接口：getvar(name)、setvar(name, value)、vars[...]（可读写）
+  - 嵌套路径：上述接口均支持“点号 + 方括号”的嵌套路径（如 a.b[1].c、a['复杂.key']）；自动容器推断：下一跳为整数索引 → list，否则 dict
 - 注入辅助函数：legacy_upper/legacy_lower/legacy_roll/legacy_time/legacy_time_utc/legacy_weekday_cn/legacy_timediff/legacy_num/legacy_addvar/legacy_inc/legacy_dec
 - 禁止：import、循环（for/while）、with/try、函数/类定义、推导式、异常抛出等
 详情见：
