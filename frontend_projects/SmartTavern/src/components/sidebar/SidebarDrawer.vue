@@ -282,11 +282,12 @@ const drawerStyle = computed(() => {
   overflow: hidden;
 }
 
-/* Backdrop 背板（点击关闭） */
+/* Backdrop 背板（点击关闭）
+   使用主题墨色变量：浅色=白半透明，深色=黑半透明 */
 .sd-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.18);
+  background: rgba(var(--st-overlay-ink), 0.18);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: 58; /* 低于抽屉(59)，高于内容 */

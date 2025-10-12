@@ -51,6 +51,20 @@ const showSidebar = computed(() => view.value !== 'start')
 const { drawerOpen } = useSidebar()
 const { appearanceOpen, appSettingsOpen, presetsOpen, worldbookOpen, charactersOpen, personaOpen, regexOpen, aiConfigOpen, togglePanel, closeAllPanels } = usePanels()
 
+// 右侧列表面板是否有任一打开（用于显示半透明遮罩：浅色=白、深色=黑）
+const anyPanelOpen = computed(() =>
+  showSidebar.value && (
+    appearanceOpen.value ||
+    appSettingsOpen.value ||
+    presetsOpen.value ||
+    worldbookOpen.value ||
+    charactersOpen.value ||
+    personaOpen.value ||
+    regexOpen.value ||
+    aiConfigOpen.value
+  )
+)
+
 const { updateHomeMenuInk } = useHomeMenuInk(() => view.value === 'start')
 const { playHomeBgFX, playThreadedBgFX, playSandboxBgFX } = useBackgroundFx()
 
@@ -175,6 +189,9 @@ function onSidebarViewUpdate(v) {
     </template>
 
     <template #overlays>
+      <transition name="st-panel-backdrop">
+        <div v-if="anyPanelOpen" class="st-panel-backdrop" @click="closeAllPanels()"></div>
+      </transition>
       
       <transition name="st-subpage">
         <AppearancePanel
@@ -475,6 +492,21 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
 .st-subpage-leave-to   { opacity: 0; transform: translateX(-12px) scale(0.98); filter: blur(4px); }
 .st-subpage-enter-active,
 .st-subpage-leave-active { transition: opacity .2s ease, transform .24s cubic-bezier(.22,.61,.36,1), filter .24s ease; }
+
+/* 右侧列表面板背板：浅色=白半透明，深色=黑半透明（由 --st-overlay-ink 控制） */
+.st-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(var(--st-overlay-ink), 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 58; /* 低于各面板(59)，高于内容 */
+}
+/* 背板淡入淡出动画 */
+.st-panel-backdrop-enter-from,
+.st-panel-backdrop-leave-to { opacity: 0; }
+.st-panel-backdrop-enter-active,
+.st-panel-backdrop-leave-active { transition: opacity .18s ease; }
 
 /* 模态框占位符样式 */
 .modal-placeholder {
