@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 const props = defineProps({
   show: { type: Boolean, default: false },
   title: { type: String, default: '详细内容' },
+  icon: { type: String, default: '' }, // lucide icon name
 })
 
 const emit = defineEmits(['close', 'update:show'])
@@ -39,7 +40,7 @@ watch(() => props.show, (v) => {
           <!-- 顶部栏 -->
           <header class="modal-header">
             <div class="modal-title">
-              <i class="modal-icon">📋</i>
+              <i v-if="icon" :data-lucide="icon" class="modal-icon icon-20" aria-hidden="true"></i>
               {{ title }}
             </div>
             <button class="modal-close" type="button" title="关闭 (ESC)" @click="close">✕</button>
@@ -108,8 +109,10 @@ watch(() => props.show, (v) => {
   color: rgb(var(--st-color-text));
 }
 
-.modal-icon {
-  font-size: 22px;
+.icon-20 {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
 }
 
 .modal-close {

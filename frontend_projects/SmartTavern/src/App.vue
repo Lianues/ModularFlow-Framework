@@ -325,6 +325,7 @@ function onSidebarViewUpdate(v) {
     <NewChatModal
       v-model:show="newGameOpen"
       title="新建对话"
+      icon="swords"
       @confirm="onNewChatConfirm"
       @close="cancelNewGame"
     />
@@ -333,18 +334,21 @@ function onSidebarViewUpdate(v) {
     <LoadGameModal
       :show="homeModalOpen && homeModalType === 'load'"
       :title="homeModalTitle || '读取存档'"
+      icon="history"
       @update:show="(v) => { if (!v) closeHomeModal() }"
       @close="closeHomeModal"
     />
     <GalleryModal
       :show="homeModalOpen && homeModalType === 'gallery'"
       :title="homeModalTitle || '画廊'"
+      icon="image"
       @update:show="(v) => { if (!v) closeHomeModal() }"
       @close="closeHomeModal"
     />
     <OptionsModal
       :show="homeModalOpen && homeModalType === 'options'"
       :title="homeModalTitle || '选项'"
+      icon="settings"
       :theme="theme"
       @update:theme="onThemeUpdate"
       @update:show="(v) => { if (!v) closeHomeModal() }"

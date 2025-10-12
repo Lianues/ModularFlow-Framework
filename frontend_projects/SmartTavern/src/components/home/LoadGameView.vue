@@ -87,18 +87,6 @@ onMounted(() => {
 
 <template>
   <section data-scope="load-game-view" class="lgv">
-    <header class="lgv-header">
-      <div class="lgv-title">
-        <i class="lgv-icon">💾</i>
-        对话存档
-      </div>
-      <div class="lgv-actions">
-        <button class="btn ghost" :disabled="loading" @click="loadData" title="刷新">
-          <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
-          刷新
-        </button>
-      </div>
-    </header>
 
     <!-- 高级骨架屏加载（微光动画），一行一个卡片 -->
     <div v-if="loading" class="lgv-list">
@@ -184,25 +172,7 @@ onMounted(() => {
   gap: 16px;
 }
 
-/* 头部 */
-.lgv-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0 4px;
-  border-bottom: 1px solid rgba(var(--st-border), 0.85);
-}
-.lgv-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 800;
-  font-size: 18px;
-  color: rgb(var(--st-color-text));
-}
-.lgv-icon { font-size: 22px; }
-.lgv-actions { display: inline-flex; gap: 8px; }
+/* 头部样式已移除（标题在 modal-title，避免重复） */
 
 /* 按钮 */
 .btn {
@@ -224,14 +194,14 @@ onMounted(() => {
 }
 .btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-sm); }
 .btn.primary {
-  /* Outline style per UI spec: no solid colored background */
+  /* 黑白极简风格（符合主题，无彩色） */
   background: transparent;
-  color: rgb(var(--st-primary));
-  border-color: rgba(var(--st-primary), 0.55);
+  color: rgb(var(--st-color-text));
+  border-color: rgba(var(--st-border), 0.9);
 }
 .btn.primary:hover {
-  background: rgba(var(--st-primary), 0.08);
-  border-color: rgba(var(--st-primary), 0.7);
+  background: rgba(var(--st-surface-2), 0.85);
+  border-color: rgba(var(--st-border), 1);
 }
 .btn.ghost { background: rgba(var(--st-surface-2), 0.6); }
 .btn.danger {

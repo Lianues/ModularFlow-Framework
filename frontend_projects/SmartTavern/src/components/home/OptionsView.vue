@@ -45,11 +45,7 @@ watch(() => props.theme, (v) => {
 
 <template>
   <section class="home-modal-section">
-    <div class="hm-title">
-      <i data-lucide="settings" class="icon-20" aria-hidden="true"></i>
-      <h2>选项</h2>
-    </div>
-    <p class="hm-desc">主页选项与侧边栏保持一致：主题切换为“系统/浅色/深色”。</p>
+    <p class="hm-desc">主页选项与侧边栏保持一致：主题切换为"系统/浅色/深色"。</p>
 
     <div class="opt-panel">
       <!-- 语言（占位，保留但不改动逻辑） -->
@@ -112,9 +108,6 @@ watch(() => props.theme, (v) => {
 
 <style scoped>
 .home-modal-section { display: grid; gap: 12px; }
-.hm-title { display: flex; align-items: center; gap: 10px; }
-.hm-title .icon-20 { width: 20px; height: 20px; stroke: currentColor; color: rgb(var(--st-color-text)); }
-.hm-title h2 { margin: 0; font-size: 18px; font-weight: 700; color: rgb(var(--st-color-text)); }
 .hm-desc { margin: 0 0 8px; font-size: 12px; color: rgba(var(--st-color-text), 0.7); }
 
 .opt-panel {

@@ -5,6 +5,7 @@ import GalleryView from '@/components/home/GalleryView.vue'
 const props = defineProps({
   show: { type: Boolean, default: false },
   title: { type: String, default: '画廊' },
+  icon: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:show', 'close'])
@@ -19,6 +20,7 @@ function onClose() {
   <ContentViewModal
     :show="props.show"
     :title="props.title"
+    :icon="props.icon"
     @update:show="(v) => emit('update:show', v)"
     @close="onClose"
   >

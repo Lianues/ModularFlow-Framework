@@ -5,6 +5,7 @@ import OptionsView from '@/components/home/OptionsView.vue'
 const props = defineProps({
   show: { type: Boolean, default: false },
   title: { type: String, default: '选项' },
+  icon: { type: String, default: '' },
   theme: { type: String, default: 'system' },
 })
 
@@ -24,6 +25,7 @@ function onThemeUpdate(t) {
   <ContentViewModal
     :show="props.show"
     :title="props.title"
+    :icon="props.icon"
     @update:show="(v) => emit('update:show', v)"
     @close="onClose"
   >
