@@ -90,7 +90,7 @@ const { playHomeBgFX, playThreadedBgFX, playSandboxBgFX } = useBackgroundFx()
  const { ensureUIAssets, refreshIcons } = useUiAssets()
 
  /* New Game 模态：新建对话（组合式 useNewGame 管理表单状态与行为） */
- const { newGameOpen, openNewGame, cancelNewGame, onNewChatConfirm } = useNewGame({
+ const { newGameOpen, openNewGame, cancelNewGame, onNewChatConfirm: onNewChatConfirmRaw } = useNewGame({
    setView: (v) => { if (v === 'threaded' || v === 'sandbox' || v === 'start') { view.value = v } },
    refreshIcons,
  })
@@ -191,6 +191,25 @@ async function onLoadGameConfirm(file) {
     // 失败时保底：保持原消息并提示
     console.error('openai_messages 调用失败:', e)
     closeHomeModal()
+  }
+}
+
+/**
+ * 处理 NewGame 的确认：
+ * - 若 type=threaded 且后端已返回 file，则直接加载该对话并切换到 threaded
+ * - 否则退回 useNewGame 的默认行为（只切视图）
+ */
+async function onNewChatConfirm(payload) {
+  try {
+    if (payload?.type === 'threaded' && payload?.file) {
+      await onLoadGameConfirm(payload.file)
+    } else {
+      onNewChatConfirmRaw(payload)
+    }
+  } catch (e) {
+    console.error('create_conversation 后处理失败:', e)
+    // 兜底：仍然按原逻辑切换视图
+    onNewChatConfirmRaw(payload)
   }
 }
 

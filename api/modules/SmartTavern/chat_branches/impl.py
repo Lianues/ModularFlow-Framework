@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 import json
+import re
 
 
 # ---------- 文件读取工具 ----------
@@ -417,3 +418,189 @@ def append_new_message(
     _update_timestamp(loaded_doc)
     
     return loaded_doc
+
+
+# ---------- 创建初始对话：从角色卡 messages[0] 生成根节点，并输出对话三件套 ----------
+
+def _conversations_dir() -> Path:
+    root = _repo_root()
+    conv = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+    conv.mkdir(parents=True, exist_ok=True)
+    return conv
+
+def _allowed_data_dirs() -> List[Path]:
+    root = _repo_root()
+    return [
+        root / "backend_projects" / "SmartTavern" / "data" / "characters",
+        root / "backend_projects" / "SmartTavern" / "data" / "presets",
+        root / "backend_projects" / "SmartTavern" / "data" / "persona",
+        root / "backend_projects" / "SmartTavern" / "data" / "regex_rules",
+        root / "backend_projects" / "SmartTavern" / "data" / "world_books",
+    ]
+
+def _is_under_any(target: Path, parents: List[Path]) -> bool:
+    for p in parents:
+        if _is_within(target, p):
+            return True
+    return False
+
+def _safe_write_json(p: Path, obj: Dict[str, Any]) -> None:
+    with p.open("w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+def _slugify_name(name: str) -> str:
+    # 保留以兼容旧逻辑；创建文件时将不再使用 slug，而是使用用户输入名称
+    s = str(name or "").strip()
+    s = re.sub(r"[^A-Za-z0-9\-\_ ]+", "-", s)
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"-{2,}", "-", s)
+    s = s.strip("-")
+    return s or "conversation"
+
+def _ensure_unique_slug(base_slug: str) -> str:
+    # 兼容旧逻辑；创建文件时改用 _ensure_unique_name
+    conv_dir = _conversations_dir()
+    slug = base_slug
+    idx = 2
+    while True:
+        main = conv_dir / f"{slug}.json"
+        settings = conv_dir / f"{slug}.settings.json"
+        variables = conv_dir / f"{slug}.variables.json"
+        if not (main.exists() or settings.exists() or variables.exists()):
+            return slug
+        slug = f"{base_slug}-{idx}"
+        idx += 1
+
+def _sanitize_filename(name: str) -> str:
+    """
+    最小化的文件名安全处理：
+    - 去掉首尾空白
+    - 替换 Windows/Unix 非法分隔符: / \ : * ? " < > | 为连字符
+    - 去掉结尾的点与空格
+    其余字符保留，以尽量“直接使用用户设置的名称”。
+    """
+    s = str(name or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r'[\\/:\*\?"<>|]', '-', s)
+    s = s.rstrip(' .')
+    return s
+
+def _ensure_unique_name(base_name: str) -> str:
+    """
+    在 conversations 目录下确保文件基名唯一，冲突时追加 -2, -3, ...
+    """
+    conv_dir = _conversations_dir()
+    name = base_name or "conversation"
+    idx = 2
+    while True:
+        main = conv_dir / f"{name}.json"
+        settings = conv_dir / f"{name}.settings.json"
+        variables = conv_dir / f"{name}.variables.json"
+        if not (main.exists() or settings.exists() or variables.exists()):
+            return name
+        name = f"{base_name}-{idx}"
+        idx += 1
+
+def _read_json_allowlisted(file: str) -> Dict[str, Any]:
+    root = _repo_root()
+    target = (root / Path(file)).resolve()
+    if not _is_under_any(target, _allowed_data_dirs()):
+        raise ValueError(f"Access denied for file outside allowed data dirs: {file}")
+    data, err = _safe_read_json(target)
+    if err:
+        raise ValueError(f"Failed to read json: {file}: {err}")
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid JSON object: {file}")
+    return data
+
+def create_conversation_impl(
+    name: str,
+    description: str,
+    character_file: str,
+    preset_file: str,
+    persona_file: str,
+    regex_file: Optional[str] = None,
+    worldbook_file: Optional[str] = None,
+    chat_type: str = "threaded",
+) -> Dict[str, Any]:
+    # 校验并读取角色卡，提取 messages[0]（兼容 message 与 messages）
+    char_doc = _read_json_allowlisted(character_file)
+
+    # 兼容两种字段：message（数组）/ messages（数组）
+    msgs = None
+    if isinstance(char_doc, dict):
+        if isinstance(char_doc.get("messages"), list):
+            msgs = char_doc["messages"]
+        elif isinstance(char_doc.get("message"), list):
+            msgs = char_doc["message"]
+
+    if not isinstance(msgs, list) or len(msgs) == 0:
+        # 允许角色卡无 message(s)，使用默认根消息
+        root_role, root_content = "assistant", "（空）"
+    else:
+        m0 = msgs[0]
+        if isinstance(m0, dict):
+            root_role = m0.get("role") or "assistant"
+            root_content = str(m0.get("content") or "").strip()
+        else:
+            # 若为纯文本，按 assistant 文本处理
+            root_role = "assistant"
+            root_content = str(m0 or "").strip()
+        if not root_content:
+            root_content = "（空）"
+        if root_role not in ("system", "user", "assistant"):
+            root_role = "assistant"
+
+    # 生成文件名（直接使用用户输入名称作为基名，做最小安全处理）
+    base_name = _sanitize_filename(name) or "conversation"
+    filename_base = _ensure_unique_name(base_name)
+    conv_dir = _conversations_dir()
+    main_path = conv_dir / f"{filename_base}.json"
+    settings_path = conv_dir / f"{filename_base}.settings.json"
+    variables_path = conv_dir / f"{filename_base}.variables.json"
+
+    # 构造主对话 doc
+    doc: Dict[str, Any] = {
+        "name": str(name or "").strip() or filename_base,
+        "description": str(description or "").strip(),
+        "root": "n_root1",
+        "nodes": {
+            "n_root1": {"pid": None, "role": root_role, "content": root_content}
+        },
+        "children": {},
+        "active_path": ["n_root1"],
+    }
+    updated_at = _update_timestamp(doc)  # 设置 updated_at（+08:00）
+
+    # 写入主文件
+    _safe_write_json(main_path, doc)
+
+    # 写入 settings（记录选择项）
+    settings: Dict[str, Any] = {
+        "type": chat_type or "threaded",
+        "preset_file": preset_file,
+        "character_file": character_file,
+        "persona_file": persona_file,
+        "regex_file": regex_file,
+        "worldbook_file": worldbook_file
+    }
+    _safe_write_json(settings_path, settings)
+
+    # 写入 variables（空对象）
+    _safe_write_json(variables_path, {})
+
+    # 返回结果
+    rel_main = str(main_path.relative_to(_repo_root()).as_posix())
+    rel_settings = str(settings_path.relative_to(_repo_root()).as_posix())
+    rel_variables = str(variables_path.relative_to(_repo_root()).as_posix())
+    return {
+        "file": rel_main,
+        "settings_file": rel_settings,
+        "variables_file": rel_variables,
+        "name": doc["name"],
+        "root_node_id": "n_root1",
+        "nodes_count": 1,
+        "updated_at": updated_at,
+        "slug": filename_base,
+    }

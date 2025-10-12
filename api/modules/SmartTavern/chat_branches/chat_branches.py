@@ -29,6 +29,7 @@ from .impl import (
     update_message_content as _update_message_content,
     truncate_after_node as _truncate_after_node,
     append_new_message as _append_new_message,
+    create_conversation_impl as _create_conversation_impl,
 )
 
 
@@ -214,3 +215,63 @@ def truncate_after(node_id: str, doc: Dict[str, Any] = None, file: str = None) -
 )
 def append_message(node_id: str, pid: str, role: str, content: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
     return _append_new_message(node_id=node_id, pid=pid, role=role, content=content, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/create_conversation",
+    name="创建初始对话文件（从角色卡 messages[0] 派生）",
+    description=(
+        "根据 NewGame 选择项创建一套对话三件套：{slug}.json / {slug}.settings.json / {slug}.variables.json。"
+        "从角色卡文件读取 messages[0] 作为根消息（暂不启用多分支）。"
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "type": {"type": "string", "enum": ["threaded"]},
+            "character_file": {"type": "string"},
+            "preset_file": {"type": "string"},
+            "persona_file": {"type": "string"},
+            "regex_file": {"type": ["string", "null"]},
+            "worldbook_file": {"type": ["string", "null"]},
+        },
+        "required": ["name", "description", "character_file", "preset_file", "persona_file"],
+        "additionalProperties": False,
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "settings_file": {"type": "string"},
+            "variables_file": {"type": "string"},
+            "name": {"type": "string"},
+            "root_node_id": {"type": "string"},
+            "nodes_count": {"type": "integer"},
+            "updated_at": {"type": "string"},
+            "slug": {"type": "string"},
+        },
+        "required": ["file", "settings_file", "variables_file", "name", "root_node_id", "nodes_count", "updated_at", "slug"],
+        "additionalProperties": True,
+    },
+)
+def create_conversation(
+    name: str,
+    description: str,
+    character_file: str,
+    preset_file: str,
+    persona_file: str,
+    regex_file: str = None,
+    worldbook_file: str = None,
+    type: str = "threaded",
+) -> Dict[str, Any]:
+    return _create_conversation_impl(
+        name=name,
+        description=description,
+        character_file=character_file,
+        preset_file=preset_file,
+        persona_file=persona_file,
+        regex_file=regex_file,
+        worldbook_file=worldbook_file,
+        chat_type=type or "threaded",
+    )

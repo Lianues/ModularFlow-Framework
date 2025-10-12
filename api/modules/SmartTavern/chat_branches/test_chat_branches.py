@@ -165,7 +165,40 @@ def main():
     assert "updated_at" in appended_doc
     print(f"[OK] append_message OK, new_node in path={appended_doc['active_path'][-1]}")
 
-    print("\n[done] 无状态 chat_branches 接口验证通过（doc + file + get_latest + update/truncate/append）。")
+    # 测试10：创建初始对话（从角色卡 messages[0] 生成根节点）
+    payload = {
+      "name": f"UT-创建对话-{int(time.time())}",
+      "description": "单元测试自动创建的对话",
+      "type": "threaded",
+      "character_file": "backend_projects/SmartTavern/data/characters/心与露.json",
+      "preset_file": "backend_projects/SmartTavern/data/presets/Default.json",
+      "persona_file": "backend_projects/SmartTavern/data/persona/用户2.json",
+      "regex_file": "backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json",
+      "worldbook_file": "backend_projects/SmartTavern/data/world_books/参考用main_world.json",
+    }
+    res = core.call_api(
+      "smarttavern/chat_branches/create_conversation",
+      payload,
+      method="POST",
+      namespace="modules",
+    )
+    assert isinstance(res, dict) and "file" in res and "settings_file" in res and "variables_file" in res
+    main_path = ROOT / res["file"]
+    settings_path = ROOT / res["settings_file"]
+    variables_path = ROOT / res["variables_file"]
+    assert main_path.exists(), f"main file not exists: {main_path}"
+    assert settings_path.exists(), f"settings file not exists: {settings_path}"
+    assert variables_path.exists(), f"variables file not exists: {variables_path}"
+
+    with main_path.open("r", encoding="utf-8") as f:
+        created_doc = json.load(f)
+    assert created_doc.get("root") == "n_root1"
+    assert "nodes" in created_doc and "n_root1" in created_doc["nodes"]
+    assert isinstance(created_doc.get("active_path"), list) and created_doc["active_path"][-1] == "n_root1"
+    print(f"[OK] create_conversation OK, file={res['file']}")
+
+    print("\n[done] 无状态 chat_branches 接口验证通过（doc + file + get_latest + update/truncate/append + create_conversation）。")
+
 
 
 if __name__ == "__main__":

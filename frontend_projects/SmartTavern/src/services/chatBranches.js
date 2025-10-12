@@ -86,6 +86,30 @@ const ChatBranches = {
   async branchTableByFile(file) {
     return postJSON('smarttavern/chat_branches/branch_table', { file });
   },
+
+  // 创建初始对话（从角色卡 messages[0] 作为根消息），返回三件套路径
+  // 后端实现见：[python.function(create_conversation)](api/modules/SmartTavern/chat_branches/chat_branches.py:215)
+  async createConversation({
+    name,
+    description = '',
+    type = 'threaded',
+    character,
+    preset,
+    persona,
+    regex = null,
+    worldbook = null,
+  }) {
+    return postJSON('smarttavern/chat_branches/create_conversation', {
+      name,
+      description,
+      type,
+      character_file: character,
+      preset_file: preset,
+      persona_file: persona,
+      regex_file: regex ?? null,
+      worldbook_file: worldbook ?? null,
+    });
+  },
 };
 
 export default ChatBranches;
