@@ -1,7 +1,6 @@
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import SidebarNav from '@/components/sidebar/SidebarNav.vue'
-import ThreadedChatPreview from '@/components/chat/ThreadedChatPreview.vue'
 import { watch } from 'vue'
 import SidebarDrawer from '@/components/sidebar/SidebarDrawer.vue'
 import AppearancePanel from '@/components/sidebar/AppearancePanel.vue'
@@ -18,9 +17,7 @@ import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
 import CharacterDetailView from '@/components/content/CharacterDetailView.vue'
 import PersonaDetailView from '@/components/content/PersonaDetailView.vue'
 import RegexDetailView from '@/components/content/RegexDetailView.vue'
-import SandboxStage from '@/components/sandbox/SandboxStage.vue'
 import NewChatModal from '@/components/home/NewChatModal.vue'
-import HomeMenu from '@/components/home/HomeMenu.vue'
 import LoadGameModal from '@/components/home/LoadGameModal.vue'
 import GalleryModal from '@/components/home/GalleryModal.vue'
 import OptionsModal from '@/components/home/OptionsModal.vue'
@@ -28,8 +25,16 @@ import AppShell from '@/layouts/AppShell.vue'
 import { useHomeMenuInk } from '@/composables/useHomeMenuInk'
 import { useBackgroundFx } from '@/composables/useBackgroundFx'
 import { useSidebar } from '@/composables/useSidebar.js'
-import ThemeManager from '@/features/themes/manager'
-import DataCatalog from '@/services/dataCatalog'
+import { usePanels } from '@/composables/usePanels'
+import { useHomeModal } from '@/composables/useHomeModal'
+import { useThemeMode } from '@/composables/useThemeMode'
+import { useUiAssets } from '@/composables/useUiAssets'
+import { useViewModal } from '@/composables/useViewModal'
+import StartView from '@/views/StartView.vue'
+import ThreadedView from '@/views/ThreadedView.vue'
+import SandboxView from '@/views/SandboxView.vue'
+import { useDemoMessages } from '@/composables/useDemoMessages'
+import { useNewGame } from '@/composables/useNewGame'
 
 /**
  * 单一路径（/）下的多视图切换
@@ -44,152 +49,42 @@ import DataCatalog from '@/services/dataCatalog'
 const view = ref('start')
 const showSidebar = computed(() => view.value !== 'start')
 const { drawerOpen } = useSidebar()
-const appearanceOpen = ref(false)
-const appSettingsOpen = ref(false)
-const presetsOpen = ref(false)
-const worldbookOpen = ref(false)
-const charactersOpen = ref(false)
-const personaOpen = ref(false)
-const regexOpen = ref(false)
-const aiConfigOpen = ref(false)
+const { appearanceOpen, appSettingsOpen, presetsOpen, worldbookOpen, charactersOpen, personaOpen, regexOpen, aiConfigOpen, togglePanel, closeAllPanels } = usePanels()
 
 const { updateHomeMenuInk } = useHomeMenuInk(() => view.value === 'start')
 const { playHomeBgFX, playThreadedBgFX, playSandboxBgFX } = useBackgroundFx()
 
- // 内容查看模态框
-const viewModalOpen = ref(false)
-const viewModalTitle = ref('')
-const viewModalType = ref('') // 'preset', 'regex', 'worldbook', etc.
-const viewModalData = ref(null)
-const viewModalLoading = ref(false)
-const viewModalError = ref('')
-const viewModalFile = ref('') // 详情对应的文件相对路径
+ const {
+   viewModalOpen,
+   viewModalTitle,
+   viewModalType,
+   viewModalData,
+   viewModalLoading,
+   viewModalError,
+   viewModalFile,
+   currentPresetData,
+   openViewModal,
+   closeViewModal,
+ } = useViewModal()
 
-// 当前使用的预设数据（用于AI配置面板的覆盖提示）
-const currentPresetData = ref(null)
+ // 主页功能模态（Load / Gallery / Options）
+ const { homeModalOpen, homeModalTitle, homeModalType, openHomeModal, closeHomeModal } = useHomeModal()
 
-async function openViewModal(type, title, fileOrData) {
-  viewModalType.value = type
-  viewModalTitle.value = title
-  viewModalError.value = ''
-  viewModalLoading.value = true
-  viewModalData.value = null
-  // 先记录 file（如果传入的是字符串）
-  viewModalFile.value = typeof fileOrData === 'string' ? fileOrData : ''
-  viewModalOpen.value = true
+ // 主题模式：system/dark/light（跟随系统 + 持久化 + 同步 ThemeManager）
+ const { theme, initTheme, onThemeUpdate: __onThemeUpdateMode, applyTheme } = useThemeMode()
+ // UI 资产（图标/Flowbite）加载与刷新
+ const { ensureUIAssets, refreshIcons } = useUiAssets()
 
-  try {
-    if (fileOrData && typeof fileOrData === 'object') {
-      // 直接使用传入的数据（可能没有 file）
-      viewModalData.value = fileOrData
-    } else if (typeof fileOrData === 'string') {
-      // 按类型调用后端详情接口，并写入缓存（由服务内部处理）
-      const fetchers = {
-        preset:    (f) => DataCatalog.getPresetDetail(f, { useCache: false, persist: false }),
-        worldbook: (f) => DataCatalog.getWorldBookDetail(f, { useCache: false, persist: false }),
-        character: (f) => DataCatalog.getCharacterDetail(f, { useCache: false, persist: false }),
-        persona:   (f) => DataCatalog.getPersonaDetail(f, { useCache: false, persist: false }),
-        regex:     (f) => DataCatalog.getRegexRuleDetail(f, { useCache: false, persist: false }),
-      }
-      const fn = fetchers[type]
-      if (!fn) throw new Error(`未知类型: ${type}`)
-      const res = await fn(fileOrData)
-      // 后端结构为 { file, name, description, content }
-      viewModalData.value = res && (res.content ?? res)
-      if (res && typeof res.file === 'string') {
-        viewModalFile.value = res.file
-      }
-      // 如果是预设类型，保存为当前预设数据（用于AI配置覆盖检测）
-      if (type === 'preset' && res) {
-        currentPresetData.value = res.content ?? res
-      }
-    } else {
-      // 无文件参数时保持空（例如纯占位模式）
-    }
-  } catch (e) {
-    viewModalError.value = e?.message || String(e)
-  } finally {
-    viewModalLoading.value = false
-    nextTick(() => { window?.lucide?.createIcons?.() })
-  }
-}
-
-function closeViewModal() {
-  viewModalOpen.value = false
-  viewModalType.value = ''
-  viewModalTitle.value = ''
-  viewModalData.value = null
-  viewModalLoading.value = false
-  viewModalError.value = ''
-  viewModalFile.value = ''
-}
-
-// 主页功能模态（Load / Gallery / Options）
-const homeModalOpen = ref(false)
-const homeModalTitle = ref('')
-const homeModalType = ref('') // 'load' | 'gallery' | 'options'
-
-function openHomeModal(type) {
-  homeModalType.value = type
-  homeModalTitle.value =
-    type === 'load' ? '读取存档'
-    : type === 'gallery' ? '画廊'
-    : type === 'options' ? '选项'
-    : ' '
-  homeModalOpen.value = true
-  nextTick(() => {
-    window?.lucide?.createIcons?.()
-    if (typeof window.initFlowbite === 'function') {
-      try { window.initFlowbite() } catch (_) {}
-    }
-  })
-}
-
-function closeHomeModal() {
-  homeModalOpen.value = false
-  homeModalType.value = ''
-  homeModalTitle.value = ''
-}
-
-/* New Game 模态：新建对话（独立组件 NewChatModal 管理表单状态） */
-const newGameOpen = ref(false)
-
-function openNewGame() {
-  newGameOpen.value = true
-  nextTick(() => {
-    window?.lucide?.createIcons?.()
-    if (typeof window.initFlowbite === 'function') {
-      try { window.initFlowbite() } catch (_) {}
-    }
-  })
-}
-
-function onNewChatConfirm(payload) {
-  // TODO: 占位符 —— 后续在此与后端通信创建会话（携带所选项）
-  // payload: { name, type, preset, character, persona, regex?, worldbook? }
-  if (payload?.type === 'threaded' || payload?.type === 'sandbox') {
-    view.value = payload.type
-  }
-  newGameOpen.value = false
-  nextTick(() => { window?.lucide?.createIcons?.() })
-}
-
-function cancelNewGame() {
-  newGameOpen.value = false
-  nextTick(() => { window?.lucide?.createIcons?.() })
-}
+ /* New Game 模态：新建对话（组合式 useNewGame 管理表单状态与行为） */
+ const { newGameOpen, openNewGame, cancelNewGame, onNewChatConfirm } = useNewGame({
+   setView: (v) => { if (v === 'threaded' || v === 'sandbox' || v === 'start') { view.value = v } },
+   refreshIcons,
+ })
 
 // 当侧边栏抽屉关闭时，同步关闭右侧“应用设置”面板，保持同层同生命周期
 watch(drawerOpen, (v) => {
   if (!v) {
-    appearanceOpen.value = false
-    appSettingsOpen.value = false
-    presetsOpen.value = false
-    worldbookOpen.value = false
-    charactersOpen.value = false
-    personaOpen.value = false
-    regexOpen.value = false
-    aiConfigOpen.value = false
+    closeAllPanels()
   }
 })
 
@@ -217,109 +112,12 @@ watch(view, (v) => {
 
 
 
-// 楼层对话演示消息（占位）
-const messages = reactive([
-  { id: 1, role: 'system', content: '欢迎来到 SmartTavern。' },
-  { id: 2, role: 'user', content: '你好，介绍一下你自己？' },
-  { id: 3, role: 'assistant', content: '我是一个对话助手，帮助你完成任务。' },
-  { id: 4, role: 'user', content: '你能做什么？' },
-  { id: 5, role: 'assistant', content: '我可以回答问题、提供建议、帮助你完成各种任务。无论是写作、编程还是日常对话，我都能提供帮助。' },
-  { id: 6, role: 'user', content: '那很好！' },
-  { id: 7, role: 'assistant', content: '谢谢！有什么我可以帮助你的吗？' },
-  { id: 8, role: 'user', content: '我想了解一下这个应用的特点。' },
-  { id: 9, role: 'assistant', content: '这个应用具有以下特点：\n\n1. 解耦架构设计\n2. 可自定义主题\n3. 支持多种显示模式\n4. 响应式设计\n5. 美观的UI界面' },
-  { id: 10, role: 'user', content: '听起来不错！' },
-  { id: 11, role: 'assistant', content: '下面是一个内嵌演示网页，前后还有普通正文，便于比对。\n\n正文段落 A。\n\n```html\n<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>内嵌演示</title></head><body><h1 style="font-family:system-ui;margin:16px;">楼层内 Iframe 演示</h1><p style="margin:16px;">这是一段通过 iframe 渲染的 HTML。</p></body></html>\n```\n\n正文段落 B。' },
-])
+ // 楼层对话演示消息（占位）— 抽离为组合式
+ const { messages } = useDemoMessages()
 
-/**
- * ThemeSwitch：UI 表层的明/暗主题切换（后续可挂接到 settings store）
- * - 通过 data-theme 属性切换 CSS Variables
- */
-const theme = ref('system')
-
-// 初始化主题优先从 documentElement 或本地存储读取，避免深色主题白屏闪烁
-try {
-  const attrTheme = document?.documentElement?.getAttribute?.('data-theme')
-  const savedTheme = localStorage.getItem('st.theme')
-  const init = (attrTheme === 'dark' || attrTheme === 'light') ? attrTheme
-             : (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'system') ? savedTheme
-             : 'system'
-  if (init !== 'system') {
-    theme.value = init
-  }
-} catch (_) {}
-
-let __themeMql = null
-let __onSchemeChange = null
-function applyTheme(t) {
-  const root = document.documentElement
-  // detach previous system watcher if any
-  if (__themeMql && t !== 'system' && __onSchemeChange) {
-    try { __themeMql.removeEventListener('change', __onSchemeChange) } catch (_) {}
-    __themeMql = null
-  }
-  if (t === 'dark' || t === 'light') {
-    root.setAttribute('data-theme', t)
-    return
-  }
-  // system: follow OS prefers-color-scheme (and react to changes)
-  const mql = window.matchMedia?.('(prefers-color-scheme: dark)')
-  const setByMql = (mq) => {
-    try {
-      root.setAttribute('data-theme', mq?.matches ? 'dark' : 'light')
-    } catch (_) {}
-  }
-  setByMql(mql)
-  if (mql) {
-    __onSchemeChange = (e) => setByMql(e)
-    try { mql.addEventListener('change', __onSchemeChange) } catch (_) {}
-    __themeMql = mql
-  }
-}
-
-// 动态注入 UI 库（Lucide 图标、Flowbite JS），并初始化图标
-async function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve()
-    const s = document.createElement('script')
-    s.src = src
-    s.async = true
-    s.onload = () => resolve()
-    s.onerror = (e) => reject(e)
-    document.head.appendChild(s)
-  })
-}
-async function ensureUIAssets() {
-  try {
-    await loadScript('https://unpkg.com/lucide@latest/dist/umd/lucide.min.js')
-  } catch (_) {}
-  try {
-    await loadScript('https://cdn.jsdelivr.net/npm/flowbite@2.0.0/dist/flowbite.min.js')
-  } catch (_) {}
-  if (window.lucide && typeof window.lucide.createIcons === 'function') {
-    window.lucide.createIcons()
-  }
-  // 初始化 Flowbite（如 Tooltip 等组件）
-  if (typeof window.initFlowbite === 'function') {
-    try { window.initFlowbite() } catch (_) {}
-  }
-}
-function refreshIcons() {
-  nextTick(() => {
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons()
-    }
-    // 重新扫描并初始化 Flowbite 组件（确保动态节点生效）
-    if (typeof window.initFlowbite === 'function') {
-      try { window.initFlowbite() } catch (_) {}
-    }
-  })
-}
 
 onMounted(() => {
-  applyTheme(theme.value)
-  try { ThemeManager.setColorMode?.(theme.value) } catch (_) {}
+  initTheme()
 
   ensureUIAssets().finally(() => {
     try {
@@ -338,10 +136,7 @@ onMounted(() => {
 })
 
 function onThemeUpdate(t) {
-  theme.value = t
-  applyTheme(t)
-  try { ThemeManager.setColorMode?.(t) } catch (_) {}
-  try { localStorage.setItem('st.theme', t) } catch (_) {}
+  __onThemeUpdateMode(t)
   refreshIcons()
 }
 
@@ -367,14 +162,14 @@ function onSidebarViewUpdate(v) {
           :theme="theme"
           @update:view="onSidebarViewUpdate"
           @update:theme="onThemeUpdate"
-          @openAppearance="(appearanceOpen = !appearanceOpen, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
-          @openAppSettings="(appSettingsOpen = !appSettingsOpen, appearanceOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
-          @openPresets="(presetsOpen = !presetsOpen, appearanceOpen = false, appSettingsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
-          @openWorldbook="(worldbookOpen = !worldbookOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
-          @openCharacters="(charactersOpen = !charactersOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, personaOpen = false, regexOpen = false, aiConfigOpen = false)"
-          @openPersona="(personaOpen = !personaOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, regexOpen = false, aiConfigOpen = false)"
-          @openRegex="(regexOpen = !regexOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, aiConfigOpen = false)"
-          @openAIConfig="(aiConfigOpen = !aiConfigOpen, appearanceOpen = false, appSettingsOpen = false, presetsOpen = false, worldbookOpen = false, charactersOpen = false, personaOpen = false, regexOpen = false)"
+          @openAppearance="togglePanel('appearance')"
+          @openAppSettings="togglePanel('appSettings')"
+          @openPresets="togglePanel('presets')"
+          @openWorldbook="togglePanel('worldbook')"
+          @openCharacters="togglePanel('characters')"
+          @openPersona="togglePanel('persona')"
+          @openRegex="togglePanel('regex')"
+          @openAIConfig="togglePanel('aiConfig')"
         />
       </SidebarDrawer>
     </template>
@@ -455,25 +250,19 @@ function onSidebarViewUpdate(v) {
 
     
     
-    <section v-if="view === 'start'" data-scope="start-view" class="st-start">
-      
-      <HomeMenu
-        @new-game="openNewGame"
-        @open-load="openHomeModal('load')"
-        @open-gallery="openHomeModal('gallery')"
-        @open-options="openHomeModal('options')"
-      />
-    </section>
+    <StartView
+      v-if="view === 'start'"
+      @new-game="openNewGame"
+      @open-load="openHomeModal('load')"
+      @open-gallery="openHomeModal('gallery')"
+      @open-options="openHomeModal('options')"
+    />
 
     
-    <section v-else-if="view === 'threaded'" data-scope="chat-threaded" class="st-threaded">
-      <ThreadedChatPreview :messages="messages" />
-    </section>
+    <ThreadedView v-else-if="view === 'threaded'" :messages="messages" />
 
     
-    <section v-else data-scope="chat-sandbox" class="st-sandbox">
-      <SandboxStage />
-    </section>
+    <SandboxView v-else />
 
     
     <ContentViewModal
@@ -678,116 +467,6 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
 
 <style scoped>
 
-/* 开始视图（Hero） */
-.st-start {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  padding: 16px;
-  position: relative;
-}
-.st-start::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: var(--st-bg-start);
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  opacity: 1;
-  z-index: 0; /* 确保背景图位于内容层后面但不被 body 白底影响 */
-  pointer-events: none;
-}
-@media (max-width: 980px) { .st-start { grid-template-columns: 1fr; } }
-
-
-/* Threaded chat container */
-.st-threaded {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: var(--st-chat-width, 860px);
-  margin: 0 auto;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-}
-.st-threaded::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: var(--st-bg-threaded);
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  opacity: 1; /* 背景图始终全可见，遮罩由 ::after 控制 */
-  /* 直接对背景图片层应用模糊，避免 backdrop-filter 在某些栈顺序下不生效 */
-  filter: blur(var(--st-threaded-bg-blur, 0px));
-  will-change: filter;
-  z-index: -1;
-  pointer-events: none;
-}
-.st-threaded::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  /* 遮罩色固定为纯墨色/纯白色，由不透明度变量控制强度 */
-  background: rgb(var(--st-overlay-ink) / 1);
-  /* 终点与用户配置一致，动画也会过渡到该变量值，避免闪烁 */
-  opacity: var(--st-threaded-bg-opacity, 0.12);
-  z-index: -1;
-  pointer-events: none;
-  /* 为 overlay 动画提供目标变量（线程页）：始终与不透明度变量一致 */
-  --st-target-bg-opacity: var(--st-threaded-bg-opacity, 0.12);
-}
-
-/* Sandbox container */
-.st-sandbox {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 0 auto;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-}
-.st-sandbox::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: var(--st-bg-sandbox);
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  opacity: 1; /* 背景图始终全可见，遮罩由 ::after 控制 */
-  /* 直接对背景图片层应用模糊（更稳定的实现） */
-  filter: blur(var(--st-sandbox-bg-blur, 0px));
-  will-change: filter;
-  z-index: -1;
-  pointer-events: none;
-}
-.st-sandbox::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  /* 主题自适应遮罩（不透明度独立为元素 opacity，避免动画终值跳跃） */
-  background: rgb(var(--st-overlay-ink) / 1);
-  opacity: var(--st-sandbox-bg-opacity, 0.12);
-  /* 新增：对背景图片应用可调模糊（通过遮罩层的 backdrop-filter 实现） */
-  backdrop-filter: blur(var(--st-sandbox-bg-blur, 0px));
-  -webkit-backdrop-filter: blur(var(--st-sandbox-bg-blur, 0px));
-  z-index: -1;
-  pointer-events: none;
-  /* 为 overlay 动画提供目标变量（沙盒页） */
-  --st-target-bg-opacity: var(--st-sandbox-bg-opacity, 0.12);
-}
 
 
 
@@ -821,7 +500,7 @@ body.st-bg-anim-sandbox [data-scope="chat-sandbox"]::after {
 
 .placeholder-desc {
   font-size: 14px;
-  color: rgb(var(--st-color-text) /0.65);
+  color: rgba(var(--st-color-text), 0.65);
 }
 
 </style>
