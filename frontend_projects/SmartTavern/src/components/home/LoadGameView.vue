@@ -1,222 +1,528 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from "vue"
-onMounted(() => window.lucide?.createIcons?.())
+import { ref, onMounted, nextTick } from 'vue'
+import DataCatalog from '@/services/dataCatalog.js'
+import ChatBranches from '@/services/chatBranches.js'
 
-const search = ref("")
+/**
+ * LoadGameView
+ * 需求：
+ *  1) 通过 data_catalog 列出对话文件（conversations）
+ *  2) 并发调用 chat_branches/get_latest_message 获取每个文件的最后一条消息
+ *  3) 汇总后一次性更新面板显示
+ */
 
-const saves = ref([
-  { id: "slot-1", name: "沙盒调试会话", desc: "用于测试楼层渲染与分支", character: "许莲笙", latest: "好的，我来尝试说明一下……", updatedAt: "2025-01-01 12:00", cover: null },
-  { id: "slot-2", name: "分支对话演示", desc: "演示多分支与回退", character: "心与露", latest: "我们刚刚说到，旅程的开端在清晨。", updatedAt: "2025-02-10 09:26", cover: null },
-  { id: "slot-3", name: "世界书检验", desc: "校验关键词触发", character: "系统助手", latest: "触发关键字：神经接口。", updatedAt: "2025-03-08 19:40", cover: null },
-])
+const loading = ref(false)
+const error = ref('')
+const items = ref([]) // [{ file, name, description, latest: {node_id, role, content, depth} | null, error?: string }]
 
-const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return saves.value
-  return saves.value.filter(s =>
-    [s.name, s.character, s.latest].some(x => String(x || "").toLowerCase().includes(q))
-  )
+function baseName(file) {
+  const s = String(file || '')
+  const i = s.lastIndexOf('/')
+  return i >= 0 ? s.slice(i + 1) : s
+}
+
+function roleLabel(role) {
+  if (role === 'user') return '用户'
+  if (role === 'assistant') return '助手'
+  if (role === 'system') return '系统'
+  return '未知'
+}
+
+function truncate(text, max = 160) {
+  const t = String(text || '')
+  if (t.length <= max) return t
+  return t.slice(0, max - 1) + '…'
+}
+
+async function loadData() {
+  loading.value = true
+  error.value = ''
+  items.value = []
+  try {
+    const list = await DataCatalog.listConversations() // 后端定义见：[python.function(list_conversations)](api/modules/SmartTavern/data_catalog/data_catalog.py:326)
+    const rawItems = Array.isArray(list?.items) ? list.items : []
+    // 预构造展示数据
+    const combined = rawItems.map(it => ({
+      file: it.file,
+      name: it.name || baseName(it.file),
+      description: it.description || '',
+      latest: null,
+      error: ''
+    }))
+
+    // 一次性获取每个文件的最新消息（并发）
+    // 若单个失败，不影响整体
+    const promises = combined.map(async (row, idx) => {
+      try {
+        const latest = await ChatBranches.getLatestMessageByFile(row.file) // 后端定义见：[python.function(get_latest_message)](api/modules/SmartTavern/chat_branches/chat_branches.py:130)
+        combined[idx].latest = latest
+      } catch (e) {
+        combined[idx].error = e?.message || '获取最新消息失败'
+      }
+    })
+    await Promise.allSettled(promises)
+
+    // 一次性更新面板
+    items.value = combined
+
+    // 刷新外部图标组件
+    nextTick(() => {
+      try { window?.lucide?.createIcons?.() } catch (_) {}
+      if (typeof window.initFlowbite === 'function') {
+        try { window.initFlowbite() } catch (_) {}
+      }
+    })
+  } catch (e) {
+    error.value = e?.message || '加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadData()
 })
-
-function loadSave(id) {
-  console.log("load save:", id)
-}
-
-function deleteSave(id) {
-  if (!confirm("确认删除该存档？此操作不可撤销。")) return
-  const i = saves.value.findIndex(s => s.id === id)
-  if (i >= 0) saves.value.splice(i, 1)
-  nextTick(() => window.lucide?.createIcons?.())
-}
 </script>
 
 <template>
-  <section class="saves-section">
-    <div class="hm-title">
-      <i data-lucide="history" class="icon-20" aria-hidden="true"></i>
-      <h2>读取存档</h2>
-    </div>
-    <p class="hm-desc">支持通过关键字筛选，单击加载进入会话；可删除无用存档。</p>
-
-    <div class="toolbar">
-      <div class="searchbox">
-        <i data-lucide="search" class="icon-16 search-icon" aria-hidden="true"></i>
-        <input
-          v-model="search"
-          type="text"
-          class="search-input"
-          placeholder="搜索名称 / 角色卡 / 最新消息"
-        />
+  <section data-scope="load-game-view" class="lgv">
+    <header class="lgv-header">
+      <div class="lgv-title">
+        <i class="lgv-icon">💾</i>
+        对话存档
       </div>
-      <div class="result-chip">
-        结果：{{ filtered.length }} 个
+      <div class="lgv-actions">
+        <button class="btn ghost" :disabled="loading" @click="loadData" title="刷新">
+          <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
+          刷新
+        </button>
+      </div>
+    </header>
+
+    <!-- 高级骨架屏加载（微光动画），一行一个卡片 -->
+    <div v-if="loading" class="lgv-list">
+      <div v-for="n in 2" :key="'sk'+n" class="lgv-card lgv-item lgv-skel">
+        <div class="lgv-row">
+          <div class="lgv-media">
+            <div class="sk-media" aria-hidden="true"></div>
+          </div>
+          <div class="lgv-main">
+            <div class="sk-row w-44"></div>
+            <div class="sk-row w-72"></div>
+            <div class="sk-row w-56"></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="saves-list">
+    <div v-else-if="error" class="lgv-error">
+      <div class="err-icon">⚠️</div>
+      <div class="err-text">{{ error }}</div>
+    </div>
+
+    <transition-group v-else name="lgv" tag="div" class="lgv-list">
       <div
-        v-for="s in filtered"
-        :key="s.id"
-        class="save-item"
+        v-for="it in items"
+        :key="it.file"
+        class="lgv-card lgv-item"
       >
-        <div class="save-cover" :title="s.name">
-          <div class="cover-box">
-            <div class="cover-fallback">🖼️</div>
+        <div class="lgv-row">
+          <div class="lgv-media">
+            <div class="media-ph" aria-label="封面占位"></div>
           </div>
-        </div>
+          <div class="lgv-main">
+            <div class="lgv-card-head">
+              <div class="lgv-card-title">
+                <span class="lgv-file">{{ it.name }}</span>
+                <small class="lgv-file-path">{{ it.file }}</small>
+                <div class="lgv-desc" v-if="it.description">
+                  {{ it.description }}
+                </div>
+              </div>
+              <div class="lgv-card-actions">
+                <button class="btn primary" :disabled="!!it.error" title="确认">
+                  <i data-lucide="check" class="icon-16" aria-hidden="true"></i>
+                  确认
+                </button>
+                <button class="btn danger" title="删除">
+                  <i data-lucide="trash-2" class="icon-16" aria-hidden="true"></i>
+                  删除
+                </button>
+              </div>
+            </div>
 
-        <div class="save-main">
-          <div class="save-title">
-            <span class="save-name">{{ s.name }}</span>
-            <span class="save-time">{{ s.updatedAt }}</span>
+            <div v-if="it.error" class="lgv-latest error">
+              <div class="err-badge">获取最新消息失败</div>
+              <div class="err-detail">{{ it.error }}</div>
+            </div>
+            <div v-else-if="it.latest" class="lgv-latest">
+              <div class="latest-meta">
+                <span class="dim">楼层 #{{ it.latest.depth }}</span>
+                <span class="badge">{{ roleLabel(it.latest.role) }}</span>
+              </div>
+              <div class="latest-content">
+                {{ truncate(it.latest.content, 220) }}
+              </div>
+            </div>
+            <div v-else class="lgv-latest muted">无最新消息</div>
           </div>
-          <div class="save-meta">
-            <span class="chip">角色卡：{{ s.character }}</span>
-          </div>
-          <div class="save-latest" :title="s.latest">
-            <span class="latest-label">最新消息：</span>
-            <span class="latest-text">{{ s.latest }}</span>
-          </div>
-        </div>
-
-        <div class="save-actions">
-          <button class="btn btn-danger" type="button" @click="deleteSave(s.id)">
-            <i data-lucide="trash-2" class="icon-16" aria-hidden="true"></i>
-            <span>删除</span>
-          </button>
-          <button class="btn btn-primary" type="button" @click="loadSave(s.id)">
-            <i data-lucide="play" class="icon-16" aria-hidden="true"></i>
-            <span>加载</span>
-          </button>
         </div>
       </div>
 
-      <div v-if="filtered.length === 0" class="saves-empty">
-        未找到匹配的存档
+      <div v-if="items.length === 0" key="empty" class="lgv-empty">
+        <div class="empty-icon">📂</div>
+        <div class="empty-text">未找到对话存档</div>
       </div>
-    </div>
+    </transition-group>
   </section>
 </template>
 
 <style scoped>
-.hm-title { display: flex; align-items: center; gap: 10px; }
-.hm-title .icon-20 { width: 20px; height: 20px; stroke: currentColor; color: rgb(var(--st-color-text)); }
-.hm-title h2 { margin: 0; font-size: 18px; font-weight: 700; color: rgb(var(--st-color-text)); }
-.hm-desc { margin: 0 0 8px; font-size: 12px; color: rgba(var(--st-color-text), 0.7); }
+.icon-16 { width: 16px; height: 16px; stroke: currentColor; }
 
-.toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin: 8px 0 12px;
-}
-.searchbox {
-  position: relative; flex: 1;
-}
-.search-icon {
-  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-  color: rgba(var(--st-color-text), .6);
-}
-.search-input {
-  width: 100%;
-  padding: 10px 12px 10px 34px;
-  border-radius: 10px;
-  border: 1px solid rgb(var(--st-border));
-  background: rgb(var(--st-surface-2));
-  color: rgb(var(--st-color-text));
-  outline: none;
-}
-.search-input:focus {
-  border-color: rgba(var(--st-primary), .55);
-  box-shadow: 0 0 0 3px rgba(var(--st-primary), .12);
-}
-.result-chip {
-  white-space: nowrap;
-  font-size: 12px;
-  color: rgba(var(--st-color-text), .7);
-  border: 1px solid rgb(var(--st-border));
-  background: rgb(var(--st-surface));
-  border-radius: 999px;
-  padding: 6px 10px;
-}
-
-.saves-list { display: grid; gap: 12px; }
-
-/* 单行卡片布局 */
-.save-item {
-  display: grid;
-  grid-template-columns: var(--cover-w, 280px) 1fr auto;
-  align-items: center;
+/* 容器 */
+.lgv {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  padding: 14px;
-  border-radius: var(--st-radius-lg);
-  border: 1px solid rgb(var(--st-border));
-  background: rgb(var(--st-surface));
-  transition: transform .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s, border-color .18s;
 }
-.save-item:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-sm); border-color: rgba(var(--st-primary), .45); }
 
-/* 左侧 16:9 头像/封面区域 */
-.save-cover { line-height: 0; font-size: 0; }
-.cover-box {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 10px;
-  border: 1px solid rgba(var(--st-border), .9);
-  background:
-    linear-gradient(135deg, rgba(var(--st-primary), .12), rgba(var(--st-accent), .12)),
-    repeating-conic-gradient(from 45deg, rgba(0,0,0,.05) 0 10deg, transparent 10deg 20deg);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
-  overflow: hidden;
+/* 头部 */
+.lgv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 4px;
+  border-bottom: 1px solid rgba(var(--st-border), 0.85);
 }
-.cover-fallback { font-size: 28px; opacity: .7; }
-
-/* 中部信息区 */
-.save-main { min-width: 0; display: grid; gap: 6px; }
-.save-title { display: flex; align-items: baseline; gap: 10px; }
-.save-name { font-weight: 800; color: rgb(var(--st-color-text)); font-size: 18px; }
-.save-time { font-size: 12px; color: rgba(var(--st-color-text), .55); }
-
-/* 角色卡：完全左对齐、无边框/背景、加粗文本 */
-.save-meta { display: block; margin: 0; padding: 0; }
-.chip {
-  display: inline;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-weight: 700;
-  font-size: 13px;
+.lgv-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
   color: rgb(var(--st-color-text));
 }
+.lgv-icon { font-size: 22px; }
+.lgv-actions { display: inline-flex; gap: 8px; }
 
-/* 最新消息：与左侧紧贴、基线对齐、单行省略号、斜体 */
-.save-latest { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0; padding: 0; }
-.latest-label { font-size: 12px; color: rgba(var(--st-color-text), .6); border: 0; background: transparent; padding: 0; margin: 0; }
-.latest-text { font-size: 12px; color: rgba(var(--st-color-text), .85); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* 右侧行为区 */
-.save-actions { display: grid; gap: 8px; }
+/* 按钮 */
 .btn {
   appearance: none;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer;
-  border: 1px solid rgb(var(--st-border)); background: rgb(var(--st-surface)); color: rgb(var(--st-color-text));
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
-  min-width: 86px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  background: rgb(var(--st-surface));
+  color: rgb(var(--st-color-text));
+  border-radius: var(--st-radius-md);
+  padding: 8px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
 }
-.btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-sm); border-color: rgba(var(--st-primary), .45); }
-.btn-primary { border-color: rgba(var(--st-primary), .55); background: rgba(var(--st-primary), .08); }
-.btn-primary:hover { background: rgba(var(--st-primary), .12); }
-.btn-danger { border-color: rgba(220, 38, 38, .55); background: rgba(220, 38, 38, .06); }
-.btn-danger:hover { background: rgba(220, 38, 38, .1); }
-
-.saves-empty {
-  text-align: center; padding: 24px 8px;
-  font-size: 12px; color: rgba(var(--st-color-text), .6);
-  border: 1px dashed rgba(var(--st-border), .9);
-  border-radius: 10px; background: rgba(var(--st-surface), .6);
+.btn:hover { transform: translateY(-1px); box-shadow: var(--st-shadow-sm); }
+.btn.primary {
+  background: linear-gradient(135deg, rgb(var(--st-primary) / 1), rgb(var(--st-accent) / 1));
+  color: var(--st-primary-contrast);
+  border-color: transparent;
+}
+.btn.ghost { background: rgba(var(--st-surface-2), 0.6); }
+.btn.danger {
+  background: linear-gradient(135deg, rgba(220,38,38,0.95), rgba(239,68,68,0.95));
+  color: white;
+  border-color: transparent;
+}
+.btn.danger:hover {
+  background: linear-gradient(135deg, rgba(220,38,38,1), rgba(239,68,68,1));
 }
 
-/* 深色主题细化 */
-[data-theme="dark"] .search-input { background: rgb(var(--st-surface)); }
+/* 加载与错误 */
+.lgv-loading, .lgv-error {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  padding: 40px 20px;
+}
+.spinner {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid currentColor; border-top-color: transparent;
+  animation: st-spin 0.9s linear infinite;
+  opacity: 0.9;
+}
+.lgv-loading .text { color: rgba(var(--st-color-text), 0.85); }
+.lgv-error .err-icon { font-size: 22px; }
+.lgv-error .err-text { color: rgb(220, 38, 38); font-weight: 600; }
+
+/* 列表与卡片 */
+.lgv-list {
+  display: grid;
+  grid-template-columns: 1fr; /* 一行一个卡片 */
+  gap: 16px;
+  max-width: none; /* 占满页面宽度 */
+  width: 100%;
+  margin: 0;
+  padding: 16px 24px; /* 页面左右内边距 */
+  box-sizing: border-box;
+}
+
+/* 高级卡片（玻璃+渐变描边+微光） */
+.lgv-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid rgba(var(--st-border), 0.75);
+  border-radius: var(--st-radius-lg);
+  background: rgb(var(--st-surface) / 0.78) !important;
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  padding: 16px;
+  transition:
+    transform .22s cubic-bezier(.22,.61,.36,1),
+    box-shadow .22s cubic-bezier(.22,.61,.36,1),
+    border-color .22s cubic-bezier(.22,.61,.36,1),
+    background .22s cubic-bezier(.22,.61,.36,1);
+  will-change: transform, box-shadow, background, border-color;
+}
+
+/* 渐变描边（伪元素） */
+.lgv-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1px; /* 伪边框宽度 */
+  background: linear-gradient(135deg, rgba(var(--st-primary), .34), rgba(var(--st-accent), .34)) border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+
+/* 关闭光泽扫过动画（按需求移除 ::after 效果） */
+
+.lgv-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 44px rgba(0,0,0,0.14);
+  border-color: rgba(var(--st-primary), 0.45);
+}
+
+/* 卡片内部两列布局：左 media 右内容，右侧内容高度与图片一致 */
+.lgv-row {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 16px;
+  align-items: stretch; /* 确保两列等高 */
+}
+.lgv-media { width: 100%; }
+.media-ph {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--st-radius-md);
+  background:
+    linear-gradient(135deg, rgba(var(--st-primary), 0.16), rgba(var(--st-accent), 0.16)),
+    repeating-linear-gradient(45deg, rgba(var(--st-color-text),0.06) 0, rgba(var(--st-color-text),0.06) 8px, transparent 8px, transparent 16px);
+  border: 1px solid rgba(var(--st-border), 0.7);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.lgv-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: space-between; /* 顶部内容+底部最新消息，撑满高度 */
+}
+@media (max-width: 980px) {
+  .lgv-row { grid-template-columns: 1fr; }
+}
+
+/* sheen 效果已移除 */
+
+/* 进场/离场与重排（与 <transition-group name="lgv"> 对应） */
+.lgv-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  filter: blur(10px) saturate(0.94);
+}
+.lgv-enter-to {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+.lgv-enter-active {
+  transition:
+    opacity .34s cubic-bezier(.22,.61,.36,1),
+    transform .42s cubic-bezier(.22,.61,.36,1),
+    filter .42s ease;
+  will-change: opacity, transform, filter;
+}
+.lgv-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.985);
+  filter: blur(6px);
+}
+.lgv-leave-active {
+  transition:
+    opacity .22s ease,
+    transform .26s ease,
+    filter .26s ease;
+}
+.lgv-move {
+  transition: transform .32s cubic-bezier(.22,.61,.36,1);
+  will-change: transform;
+}
+
+/* 轻微阶梯延时：末尾靠后的卡片稍晚出现，营造自然瀑布感 */
+.lgv-item.lgv-enter-active:nth-last-child(1) { transition-delay: 24ms; }
+.lgv-item.lgv-enter-active:nth-last-child(2) { transition-delay: 48ms; }
+.lgv-item.lgv-enter-active:nth-last-child(3) { transition-delay: 72ms; }
+
+/* sheen 动画已移除 */
+/* 骨架屏（高端微光） */
+.lgv-skel .sk-media {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--st-radius-md);
+  border: 1px solid rgba(var(--st-border), 0.7);
+  background:
+    linear-gradient(90deg,
+      rgba(var(--st-surface-2), 0.6) 0%,
+      rgba(var(--st-surface-2), 0.85) 20%,
+      rgba(var(--st-surface-2), 0.6) 40%);
+  background-size: 200% 100%;
+  animation: lgv-shimmer 1.4s ease-in-out infinite;
+  margin-bottom: 12px;
+}
+.lgv-skel .sk-row {
+  height: 16px;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg,
+      rgba(var(--st-surface-2), 0.6) 0%,
+      rgba(var(--st-surface-2), 0.85) 20%,
+      rgba(var(--st-surface-2), 0.6) 40%);
+  background-size: 200% 100%;
+  animation: lgv-shimmer 1.4s ease-in-out infinite;
+  margin: 8px 0;
+}
+.lgv-skel .sk-row.w-44 { width: 176px; }
+.lgv-skel .sk-row.w-56 { width: 224px; }
+.lgv-skel .sk-row.w-72 { width: 288px; }
+@media (max-width: 480px) {
+  .lgv-skel .sk-row.w-44 { width: 52vw; }
+  .lgv-skel .sk-row.w-56 { width: 62vw; }
+  .lgv-skel .sk-row.w-72 { width: 78vw; }
+}
+@keyframes lgv-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 可访问性焦点与按压反馈 */
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--st-primary), 0.18);
+  border-color: rgba(var(--st-primary), 0.6);
+}
+.btn:active {
+  transform: translateY(0);
+}
+
+.lgv-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.lgv-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.lgv-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.lgv-file {
+  font-weight: 700;
+  font-size: 18px; /* 增大标题字体 */
+  color: rgb(var(--st-color-text));
+}
+.lgv-file-path {
+  color: rgba(var(--st-color-text), 0.6);
+  font-family: var(--st-font-mono);
+  font-size: 13px; /* 略微增大路径字体 */
+}
+
+/* 描述 */
+.lgv-desc {
+  color: rgba(var(--st-color-text), 0.9);
+  font-size: 15px; /* 增大描述字体 */
+  line-height: 1.6;
+}
+
+/* 最新消息 */
+.lgv-latest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(var(--st-border), 0.35);
+  padding-top: 8px;
+}
+.lgv-latest .latest-meta {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  color: rgb(var(--st-color-text));
+  background: rgba(var(--st-primary), 0.12);
+  border: 1px solid rgba(var(--st-primary), 0.32);
+}
+.dim { color: rgba(var(--st-color-text), 0.85); font-size: 12px; font-weight: 600; }
+.muted { color: rgba(var(--st-color-text), 0.65); font-size: 13px; }
+.lgv-latest .latest-content {
+  color: rgba(var(--st-color-text), 0.95);
+  font-size: 15px; /* 增大最新消息字体 */
+  line-height: 1.7;
+  font-style: italic;
+}
+.lgv-latest.error {
+  border-color: rgba(220, 38, 38, 0.45);
+}
+.err-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 22px; padding: 0 8px; border-radius: 9999px;
+  font-size: 12px; color: rgb(220,38,38);
+  background: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.45);
+}
+.err-detail { color: rgb(220,38,38); font-size: 12px; }
+
+/* 空状态 */
+.lgv-empty {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 60px 20px;
+}
+.empty-icon { font-size: 48px; opacity: 0.6; }
+.empty-text { font-weight: 700; color: rgba(var(--st-color-text), 0.9); }
+
+@keyframes st-spin { to { transform: rotate(360deg); } }
 </style>

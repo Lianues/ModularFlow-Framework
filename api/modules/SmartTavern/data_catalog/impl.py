@@ -408,6 +408,11 @@ def list_conversations_impl(base_dir: Optional[str] = None,
         }
 
     for p in sorted(folder.glob("*.json")):
+        filename = p.name.lower()
+        # 过滤 SmartTavern 对话目录中的派生文件（不应出现在清单中）
+        # 例如：*.variables.json、*.settings.json
+        if filename.endswith(".variables.json") or filename.endswith(".settings.json"):
+            continue
         doc, err = _safe_read_json(p)
         if err:
             errors.append({"file": _path_rel_to_root(p, root), "error": err})

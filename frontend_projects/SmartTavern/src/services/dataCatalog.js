@@ -78,6 +78,9 @@ const DataCatalog = {
   listRegexRules() {
     return postJSON('smarttavern/data_catalog/list_regex_rules', {});
   },
+  listConversations() {
+    return postJSON('smarttavern/data_catalog/list_conversations', {});
+  },
 
   // Lightweight cache (in-memory + localStorage)
   _lsKey: 'st.datacache.v1',
