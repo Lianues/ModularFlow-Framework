@@ -108,8 +108,14 @@ onMounted(() => {
   const wheelHandler = (e) => {
     const container = messageListRef.value?.$el?.querySelector('.scroll-container')
     if (!container) return
+    
     // 如果事件来源本就在列表容器内，让原生滚动处理
     if (container.contains(e.target)) return
+    
+    // 如果事件来源在输入框容器内（包括 textarea 和自定义滚动条），让原生滚动处理
+    const inputContainer = document.querySelector('.input-container')
+    if (inputContainer && inputContainer.contains(e.target)) return
+    
     // 位于聊天统一区域或主区域空白时，拦截并转发滚动到消息容器
     const inChatUnified = chatUnified && chatUnified.contains(e.target)
     const inMainArea = mainArea && mainArea.contains(e.target)
@@ -132,6 +138,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   removeWheel?.()
   if (sendErrorTimer) { clearTimeout(sendErrorTimer); sendErrorTimer = null }
+  if (sendSuccessTimer) { clearTimeout(sendSuccessTimer); sendSuccessTimer = null }
 })
 
 watch(() => props.messages.length, () => {
@@ -219,7 +226,9 @@ function regenerateMessage(msg) {
 /* 发送状态管理 */
 const isSending = ref(false)
 const sendErrorMsg = ref('')
+const lastSentMessageId = ref(null)
 let sendErrorTimer = null
+let sendSuccessTimer = null
 
 /**
  * 提交输入（来自 InputRow），创建用户消息并保存到后端
@@ -286,6 +295,14 @@ async function onSubmit(text) {
     // 清空输入框
     inputRowRef.value?.clearText?.()
     isSending.value = false
+    
+    // 显示发送成功状态（1.5秒后自动清除）
+    lastSentMessageId.value = newNodeId
+    if (sendSuccessTimer) clearTimeout(sendSuccessTimer)
+    sendSuccessTimer = setTimeout(() => {
+      lastSentMessageId.value = null
+      refreshIcons()
+    }, 1500)
 
     // 滚动到底部
     nextTick(() => {
@@ -361,8 +378,8 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :split-after="splitDoc(m).after"
               :pending-active="false"
               :pending-seconds="0"
-              :send-status="null"
-              :send-message="''"
+              :send-status="m.id === lastSentMessageId ? 'success' : null"
+              :send-message="m.id === lastSentMessageId ? '发送成功' : ''"
               :conversation-file="props.conversationFile"
               @delete="deleteMessage"
               @regenerate="regenerateMessage"
@@ -1146,6 +1163,8 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
+  height: auto;
 }
 
 /* 发送错误提示（绝对定位在输入框上方） */

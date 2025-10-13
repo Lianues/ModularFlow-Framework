@@ -11,14 +11,16 @@
       </div>
     </div>
 
-    <textarea
-      ref="inputRef"
-      v-model="text"
-      class="tch-input"
-      :placeholder="placeholder"
-      :disabled="sending"
-      @keydown="onKeydown"
-    ></textarea>
+    <CustomScrollbar class="tch-input-wrapper" :width="6">
+      <textarea
+        ref="inputRef"
+        v-model="text"
+        class="tch-input"
+        :placeholder="placeholder"
+        :disabled="sending"
+        @keydown="onKeydown"
+      ></textarea>
+    </CustomScrollbar>
 
     <div class="tch-tools-right">
       <button
@@ -42,6 +44,7 @@
 
 <script setup>
 import { ref, computed, nextTick } from 'vue'
+import CustomScrollbar from '@/components/common/CustomScrollbar.vue'
 
 const props = defineProps({
   pendingActive: { type: Boolean, default: false },
@@ -101,18 +104,18 @@ defineExpose({ setText, clearText })
 .tch-input-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid rgba(var(--st-border), 0.9);
   border-radius: var(--st-radius-lg);
   background: rgb(var(--st-surface) / var(--st-threaded-input-bg-opacity, 0.80)) !important;
-  /* 根据不透明度动态衰减玻璃效果，0 时完全无模糊/饱和 */
   backdrop-filter: blur(calc(var(--st-threaded-input-bg-opacity, 0.80) * 18px)) saturate(calc(1 + var(--st-threaded-input-bg-opacity, 0.80) * 0.6));
   -webkit-backdrop-filter: blur(calc(var(--st-threaded-input-bg-opacity, 0.80) * 18px)) saturate(calc(1 + var(--st-threaded-input-bg-opacity, 0.80) * 0.6));
   box-shadow: var(--st-shadow-sm);
   flex-shrink: 0;
-  min-height: clamp(calc(var(--st-content-font-size) * 2.8 + 28px), var(--st-input-height, 100px), 100vh);
+  height: 100%;
+  min-height: 100px;
   transition: box-shadow .2s cubic-bezier(.22,.61,.36,1), border-color .2s cubic-bezier(.22,.61,.36,1), background .2s cubic-bezier(.22,.61,.36,1), transform .2s cubic-bezier(.22,.61,.36,1);
 }
 .tch-input-row:focus-within {
@@ -162,11 +165,18 @@ defineExpose({ setText, clearText })
   height: 36px;
 }
 
+/* 输入框包装器 */
+.tch-input-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 /* 多行输入区域 */
 .tch-input {
   width: 100%;
-  min-height: calc(var(--st-content-font-size) * 2.2 + 12px);
-  padding: 10px 2px;
+  min-height: 100%;
+  padding: 10px 8px;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -176,7 +186,6 @@ defineExpose({ setText, clearText })
   font-size: var(--st-content-font-size);
   line-height: 1.6;
   resize: none;
-  overflow-y: auto;
   box-sizing: border-box;
 }
 .tch-input::placeholder {
