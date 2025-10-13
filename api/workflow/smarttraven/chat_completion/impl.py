@@ -96,22 +96,42 @@ def chat_completion_non_streaming(
         # 步骤2：读取LLM配置
         llm_config = _safe_read_json(llm_config_file)
         
-        # 步骤3：调用LLM API
+        # 步骤3：调用LLM API（只使用配置文件的值，不提供默认值）
+        llm_params = {
+            "provider": llm_config.get("provider"),
+            "api_key": llm_config.get("api_key"),
+            "base_url": llm_config.get("base_url"),
+            "messages": messages,
+            "stream": False,  # 非流式
+        }
+        
+        # 只添加配置文件中存在的参数
+        if "model" in llm_config and llm_config["model"]:
+            llm_params["model"] = llm_config["model"]
+        if "max_tokens" in llm_config and llm_config["max_tokens"] is not None:
+            llm_params["max_tokens"] = llm_config["max_tokens"]
+        if "temperature" in llm_config and llm_config["temperature"] is not None:
+            llm_params["temperature"] = llm_config["temperature"]
+        if "top_p" in llm_config and llm_config["top_p"] is not None:
+            llm_params["top_p"] = llm_config["top_p"]
+        if "presence_penalty" in llm_config and llm_config["presence_penalty"] is not None:
+            llm_params["presence_penalty"] = llm_config["presence_penalty"]
+        if "frequency_penalty" in llm_config and llm_config["frequency_penalty"] is not None:
+            llm_params["frequency_penalty"] = llm_config["frequency_penalty"]
+        if "timeout" in llm_config and llm_config["timeout"] is not None:
+            llm_params["timeout"] = llm_config["timeout"]
+        if "connect_timeout" in llm_config and llm_config["connect_timeout"] is not None:
+            llm_params["connect_timeout"] = llm_config["connect_timeout"]
+        if "enable_logging" in llm_config:
+            llm_params["enable_logging"] = llm_config["enable_logging"]
+        if "custom_params" in llm_config and llm_config["custom_params"]:
+            llm_params["custom_params"] = llm_config["custom_params"]
+        if "safety_settings" in llm_config and llm_config["safety_settings"]:
+            llm_params["safety_settings"] = llm_config["safety_settings"]
+        
         llm_response = core.call_api(
             "llm_api/chat",
-            {
-                "provider": llm_config.get("provider", "openai"),
-                "api_key": llm_config.get("api_key", ""),
-                "base_url": llm_config.get("base_url", ""),
-                "messages": messages,
-                "stream": False,  # 非流式
-                "model": llm_config.get("model"),
-                "max_tokens": llm_config.get("max_tokens", 2048),
-                "temperature": llm_config.get("temperature", 0.7),
-                "top_p": llm_config.get("top_p"),
-                "presence_penalty": llm_config.get("presence_penalty"),
-                "frequency_penalty": llm_config.get("frequency_penalty"),
-            },
+            llm_params,
             method="POST",
             namespace="modules"
         )
@@ -234,23 +254,42 @@ def chat_completion_streaming(
         # 步骤2：读取LLM配置
         llm_config = _safe_read_json(llm_config_file)
         
-        # 步骤3：调用LLM API（流式）
-        # 注意：llm_api/chat 在 stream=true 时返回 StreamingResponse (SSE)
-        # 这里我们需要直接调用实现层的 stream_chat_chunks
+        # 步骤3：调用LLM API（流式，只使用配置文件的值）
         from api.modules.llm_api.impl import stream_chat_chunks
         
-        chunk_iter = stream_chat_chunks(
-            provider=llm_config.get("provider", "openai"),
-            api_key=llm_config.get("api_key", ""),
-            base_url=llm_config.get("base_url", ""),
-            messages=messages,
-            model=llm_config.get("model"),
-            max_tokens=llm_config.get("max_tokens", 2048),
-            temperature=llm_config.get("temperature", 0.7),
-            top_p=llm_config.get("top_p"),
-            presence_penalty=llm_config.get("presence_penalty"),
-            frequency_penalty=llm_config.get("frequency_penalty"),
-        )
+        # 构建参数（只使用配置文件中存在的值）
+        stream_params = {
+            "provider": llm_config.get("provider"),
+            "api_key": llm_config.get("api_key"),
+            "base_url": llm_config.get("base_url"),
+            "messages": messages,
+        }
+        
+        # 只添加配置文件中存在的参数
+        if "model" in llm_config and llm_config["model"]:
+            stream_params["model"] = llm_config["model"]
+        if "max_tokens" in llm_config and llm_config["max_tokens"] is not None:
+            stream_params["max_tokens"] = llm_config["max_tokens"]
+        if "temperature" in llm_config and llm_config["temperature"] is not None:
+            stream_params["temperature"] = llm_config["temperature"]
+        if "top_p" in llm_config and llm_config["top_p"] is not None:
+            stream_params["top_p"] = llm_config["top_p"]
+        if "presence_penalty" in llm_config and llm_config["presence_penalty"] is not None:
+            stream_params["presence_penalty"] = llm_config["presence_penalty"]
+        if "frequency_penalty" in llm_config and llm_config["frequency_penalty"] is not None:
+            stream_params["frequency_penalty"] = llm_config["frequency_penalty"]
+        if "timeout" in llm_config and llm_config["timeout"] is not None:
+            stream_params["timeout"] = llm_config["timeout"]
+        if "connect_timeout" in llm_config and llm_config["connect_timeout"] is not None:
+            stream_params["connect_timeout"] = llm_config["connect_timeout"]
+        if "enable_logging" in llm_config:
+            stream_params["enable_logging"] = llm_config["enable_logging"]
+        if "custom_params" in llm_config and llm_config["custom_params"]:
+            stream_params["custom_params"] = llm_config["custom_params"]
+        if "safety_settings" in llm_config and llm_config["safety_settings"]:
+            stream_params["safety_settings"] = llm_config["safety_settings"]
+        
+        chunk_iter = stream_chat_chunks(**stream_params)
         
         # 收集完整响应用于保存
         full_content = ""

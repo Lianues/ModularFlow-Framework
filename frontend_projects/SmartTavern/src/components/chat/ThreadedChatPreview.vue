@@ -458,11 +458,21 @@ async function callAI() {
     id: `temp_${Date.now()}`,
     role: 'assistant',
     content: '',
-    error: null
+    error: null,
+    waitingAI: true,
+    waitingSeconds: 0
   })
   
   const aiPlaceholder = props.messages[aiPlaceholderIndex]
   ensurePaletteFor(aiPlaceholder)
+
+  // 等待计时器
+  let waitingTimer = null
+  let waitingStartTime = Date.now()
+  waitingTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - waitingStartTime) / 1000)
+    props.messages[aiPlaceholderIndex].waitingSeconds = elapsed
+  }, 1000)
 
   // 打字机缓冲区
   let typewriterBuffer = ''
@@ -475,6 +485,15 @@ async function callAI() {
       llmConfigFile: llmConfigFile,
       callbacks: {
         onChunk: async (content) => {
+          // 第一个 chunk 到达，停止等待动画
+          if (props.messages[aiPlaceholderIndex].waitingAI) {
+            props.messages[aiPlaceholderIndex].waitingAI = false
+            if (waitingTimer) {
+              clearInterval(waitingTimer)
+              waitingTimer = null
+            }
+          }
+          
           // 如果已经收到错误，忽略后续内容
           if (hasReceivedError) return
           
@@ -497,8 +516,23 @@ async function callAI() {
                 container.scrollTop = container.scrollHeight
               }
               
-              // 打字速度（毫秒）
-              await new Promise(r => setTimeout(r, 30))
+              // 智能打字速度：根据缓冲区大小动态调整
+              // 缓冲区越大，速度越快，避免延迟累积
+              const bufferLen = typewriterBuffer.length
+              let speed
+              if (bufferLen < 10) {
+                speed = 30  // 慢速，打字机效果明显
+              } else if (bufferLen < 50) {
+                speed = 15  // 中速
+              } else if (bufferLen < 100) {
+                speed = 8   // 快速
+              } else if (bufferLen < 200) {
+                speed = 4   // 很快
+              } else {
+                speed = 1   // 极快，几乎立即显示
+              }
+              
+              await new Promise(r => setTimeout(r, speed))
             }
             
             isTyping = false
@@ -521,11 +555,19 @@ async function callAI() {
         onError: (message) => {
           console.error('AI调用失败:', message)
           hasReceivedError = true
+          
+          // 停止等待计时器
+          if (waitingTimer) {
+            clearInterval(waitingTimer)
+            waitingTimer = null
+          }
+          
           // 停止打字机效果
           typewriterBuffer = ''
           isTyping = false
           
-          // 直接修改数组元素以触发响应式更新
+          // 标记错误并停止等待动画
+          props.messages[aiPlaceholderIndex].waitingAI = false
           props.messages[aiPlaceholderIndex].error = message || 'AI调用失败'
           
           // 强制刷新视图
@@ -535,9 +577,20 @@ async function callAI() {
         },
         
         onEnd: async () => {
+          // 停止等待计时器
+          if (waitingTimer) {
+            clearInterval(waitingTimer)
+            waitingTimer = null
+          }
+          
           // 等待打字机效果完成
           while (isTyping || typewriterBuffer.length > 0) {
             await new Promise(r => setTimeout(r, 50))
+          }
+          
+          // 停止等待动画
+          if (props.messages[aiPlaceholderIndex]) {
+            props.messages[aiPlaceholderIndex].waitingAI = false
           }
           
           console.log('AI流式调用完成')
@@ -555,6 +608,13 @@ async function callAI() {
     })
   } catch (error) {
     console.error('AI调用异常:', error)
+    
+    // 停止等待计时器
+    if (waitingTimer) {
+      clearInterval(waitingTimer)
+      waitingTimer = null
+    }
+    
     // 移除占位消息
     if (props.messages[aiPlaceholderIndex]) {
       props.messages.splice(aiPlaceholderIndex, 1)
@@ -585,6 +645,8 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :split-after="splitDoc(m).after"
               :pending-active="false"
               :pending-seconds="0"
+              :waiting-a-i="m.waitingAI || false"
+              :waiting-seconds="m.waitingSeconds || 0"
               :send-status="m.id === lastSentMessageId ? 'success' : null"
               :send-message="m.id === lastSentMessageId ? '发送成功' : ''"
               :conversation-file="props.conversationFile"

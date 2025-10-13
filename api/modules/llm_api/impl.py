@@ -123,11 +123,11 @@ class LLMAPIManager:
 
     def _build_request_payload(self, messages: List[Dict[str, str]],
                              model: str,
-                             max_tokens: int = 2048,
-                             temperature: float = 0.7,
+                             max_tokens: int = None,
+                             temperature: float = None,
                              stream: bool = False,
                              **kwargs) -> Dict[str, Any]:
-        """构建API请求体"""
+        """构建API请求体（不使用默认参数，完全依赖配置文件）"""
 
         if self.config.provider == 'gemini':
             return self._build_gemini_payload(messages, model, max_tokens, temperature, stream, **kwargs)
@@ -138,13 +138,20 @@ class LLMAPIManager:
         payload = {
             "messages": messages,
             "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": kwargs.get("top_p", 1.0),
             "stream": stream,
-            "presence_penalty": kwargs.get("presence_penalty", 0.0),
-            "frequency_penalty": kwargs.get("frequency_penalty", 0.0)
         }
+        
+        # 只添加非 None 的参数
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if "top_p" in kwargs and kwargs["top_p"] is not None:
+            payload["top_p"] = kwargs["top_p"]
+        if "presence_penalty" in kwargs and kwargs["presence_penalty"] is not None:
+            payload["presence_penalty"] = kwargs["presence_penalty"]
+        if "frequency_penalty" in kwargs and kwargs["frequency_penalty"] is not None:
+            payload["frequency_penalty"] = kwargs["frequency_penalty"]
 
         # 合并自定义字段（如果有的话）
         custom_params = kwargs.get("custom_params", {})
@@ -161,11 +168,11 @@ class LLMAPIManager:
 
     def _build_gemini_payload(self, messages: List[Dict[str, str]],
                             model: str,
-                            max_tokens: int = 2048,
-                            temperature: float = 0.7,
+                            max_tokens: int = None,
+                            temperature: float = None,
                             stream: bool = False,
                             **kwargs) -> Dict[str, Any]:
-        """构建Gemini特定的请求体"""
+        """构建Gemini特定的请求体（不使用默认参数）"""
         # 分离系统消息和对话消息
         system_instruction = None
         conversation_messages = []
@@ -204,12 +211,14 @@ class LLMAPIManager:
                 "parts": [{"text": system_instruction}]
             }
 
-        # 添加生成配置 - 直接放在顶层
-        generation_config = {
-            "temperature": temperature,
-            "topP": kwargs.get("top_p", 1.0),
-            "maxOutputTokens": max_tokens
-        }
+        # 添加生成配置 - 直接放在顶层（只添加非 None 的参数）
+        generation_config = {}
+        if temperature is not None:
+            generation_config["temperature"] = temperature
+        if "top_p" in kwargs and kwargs["top_p"] is not None:
+            generation_config["topP"] = kwargs["top_p"]
+        if max_tokens is not None:
+            generation_config["maxOutputTokens"] = max_tokens
 
         # 添加thinking配置（如果支持的话）
         if kwargs.get("disable_thinking", False):
@@ -239,11 +248,11 @@ class LLMAPIManager:
 
     def _build_anthropic_payload(self, messages: List[Dict[str, str]],
                                model: str,
-                               max_tokens: int = 2048,
-                               temperature: float = 0.7,
+                               max_tokens: int = None,
+                               temperature: float = None,
                                stream: bool = False,
                                **kwargs) -> Dict[str, Any]:
-        """构建Anthropic特定的请求体"""
+        """构建Anthropic特定的请求体（不使用默认参数）"""
         # 分离系统消息和对话消息
         system_messages = []
         conversation_messages = []
@@ -254,22 +263,26 @@ class LLMAPIManager:
             else:
                 conversation_messages.append(msg)
 
-        # 构建Anthropic请求体
+        # 构建Anthropic请求体（只添加非 None 的参数）
         payload = {
             "model": model,
-            "max_tokens": max_tokens,
             "messages": conversation_messages,
             "stream": stream
         }
+        
+        # 只添加非 None 的参数
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
 
         # 添加系统消息（如果有）
         if system_messages:
             payload["system"] = "\n\n".join(system_messages)
 
         # 添加其他参数
-        payload["temperature"] = temperature
+        if temperature is not None:
+            payload["temperature"] = temperature
 
-        if "top_p" in kwargs:
+        if "top_p" in kwargs and kwargs["top_p"] is not None:
             payload["top_p"] = kwargs["top_p"]
 
         # Anthropic特有的参数
@@ -334,8 +347,8 @@ class LLMAPIManager:
 
     def call_api(self, messages: List[Dict[str, str]],
                  model: str = None,
-                 max_tokens: int = 2048,
-                 temperature: float = 0.7,
+                 max_tokens: int = None,
+                 temperature: float = None,
                  stream: bool = False,
                  **kwargs) -> Union[APIResponse, Iterator[StreamChunk]]:
         """同步调用API"""
@@ -1074,8 +1087,8 @@ def call_chat_non_streaming(
     base_url: str,
     messages: List[Dict[str, str]],
     model: Optional[str] = None,
-    max_tokens: int = 2048,
-    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
     top_p: Optional[float] = None,
     presence_penalty: Optional[float] = None,
     frequency_penalty: Optional[float] = None,
@@ -1088,7 +1101,7 @@ def call_chat_non_streaming(
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """
-    非流式调用：返回一次性 JSON
+    非流式调用：返回一次性 JSON（不使用默认参数）
     """
     msgs = _normalize_messages(messages)
     mgr = create_manager(
@@ -1148,8 +1161,8 @@ def stream_chat_chunks(
     base_url: str,
     messages: List[Dict[str, str]],
     model: Optional[str] = None,
-    max_tokens: int = 2048,
-    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None,
     top_p: Optional[float] = None,
     presence_penalty: Optional[float] = None,
     frequency_penalty: Optional[float] = None,
@@ -1162,7 +1175,7 @@ def stream_chat_chunks(
     **kwargs: Any,
 ) -> Iterator[StreamChunk]:
     """
-    流式调用：返回迭代器（由注册层封装为 SSE）
+    流式调用：返回迭代器（不使用默认参数）
     """
     msgs = _normalize_messages(messages)
     mgr = create_manager(

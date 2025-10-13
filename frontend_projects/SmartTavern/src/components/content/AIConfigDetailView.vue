@@ -14,7 +14,7 @@ const initialLLMConfigData = {
   provider: 'openai',
   base_url: 'https://api.openai.com/v1',
   api_key: '',
-  model_id: 'gpt-4o-mini',
+  model: 'gpt-4o-mini',
   max_tokens: 2048,
   temperature: 0.7,
   top_p: 1.0,
@@ -54,7 +54,7 @@ function normalizeLLMConfigData(src) {
     provider: src.provider || 'openai',
     base_url: src.base_url || 'https://api.openai.com/v1',
     api_key: src.api_key || '',
-    model_id: src.model_id || src.model || '',
+    model: src.model || src.model_id || '',
     max_tokens: src.max_tokens ?? 2048,
     temperature: src.temperature ?? 0.7,
     top_p: src.top_p ?? 1.0,
@@ -187,7 +187,7 @@ const modelListPlaceholder = ref([
 ])
 
 function selectModel(modelId) {
-  currentData.value.model_id = modelId
+  currentData.value.model = modelId
   showModelDropdown.value = false
 }
 
@@ -235,7 +235,7 @@ async function save() {
     provider: currentData.value.provider,
     base_url: currentData.value.base_url,
     api_key: currentData.value.api_key,
-    model_id: currentData.value.model_id,
+    model: currentData.value.model,
     max_tokens: currentData.value.max_tokens,
     temperature: currentData.value.temperature,
     top_p: currentData.value.top_p,
@@ -348,10 +348,10 @@ async function save() {
           <input v-model="currentData.api_key" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800" placeholder="sk-..." />
         </div>
         <div>
-          <label class="block text-sm font-medium text-black mb-2">模型ID</label>
+          <label class="block text-sm font-medium text-black mb-2">模型(model)</label>
           <div class="relative flex gap-2">
             <input
-              v-model="currentData.model_id"
+              v-model="currentData.model"
               class="flex-1 px-3 py-2 border border-gray-300 rounded-4 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
               placeholder="如 gpt-4o-mini"
             />

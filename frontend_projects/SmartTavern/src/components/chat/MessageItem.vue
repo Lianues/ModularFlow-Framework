@@ -101,8 +101,14 @@
 
         <!-- 正常模式：显示消息内容 -->
         <section v-else data-part="content" class="floor-content">
+          <!-- 等待AI响应动画 -->
+          <div v-if="waitingAI" class="waiting-box">
+            <div class="waiting-spinner" aria-hidden="true"></div>
+            <span class="waiting-text">等待AI响应（{{ waitingSeconds }}s）</span>
+          </div>
+          
           <!-- 错误框（如果消息有错误）-->
-          <div v-if="msg.error" class="error-box">
+          <div v-else-if="msg.error" class="error-box">
             <div class="error-header">
               <i data-lucide="alert-circle" class="icon-16" aria-hidden="true"></i>
               <span class="error-title">AI调用失败</span>
@@ -235,6 +241,9 @@ const props = defineProps({
   // 等待态
   pendingActive: { type: Boolean, default: false },
   pendingSeconds: { type: Number, default: 0 },
+  // AI等待状态
+  waitingAI: { type: Boolean, default: false },
+  waitingSeconds: { type: Number, default: 0 },
   // 发送状态（从父组件传入）
   sendStatus: { type: String, default: null },
   sendMessage: { type: String, default: '' },
@@ -662,6 +671,44 @@ async function saveEdit() {
   padding: 0 4px; border-radius: var(--st-radius-sm);
 }
 [data-theme="dark"] .floor-content code { background: rgba(var(--st-color-text), 0.14); }
+
+/* 等待AI响应动画 */
+.waiting-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid rgba(var(--st-primary), 0.3);
+  border-radius: var(--st-radius-md);
+  background: rgba(var(--st-primary), 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.waiting-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(var(--st-primary), 0.2);
+  border-top-color: rgb(var(--st-primary));
+  animation: waiting-spin 0.8s linear infinite;
+}
+
+.waiting-text {
+  color: rgb(var(--st-primary));
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+@keyframes waiting-spin {
+  to { transform: rotate(360deg); }
+}
+
+[data-theme="dark"] .waiting-box {
+  border-color: rgba(var(--st-primary), 0.4);
+  background: rgba(var(--st-primary), 0.08);
+}
 
 /* 错误框样式 */
 .error-box {
