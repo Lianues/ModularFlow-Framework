@@ -205,24 +205,6 @@ const ChatBranches = {
       target_j
     });
   },
-
-  // 重试分支：创建与指定节点同级的新分支
-  // 后端实现见：[python.function(retry_branch)](api/modules/SmartTavern/chat_branches/chat_branches.py:223)
-  async retryBranch({ file, old_node_id, new_node_id, role, content }) {
-    if (!file) {
-      throw new Error('[ChatBranches] retryBranch: file is required');
-    }
-    if (!old_node_id || !new_node_id || !role || content === undefined) {
-      throw new Error('[ChatBranches] retryBranch: old_node_id, new_node_id, role, content are required');
-    }
-    return postJSON('smarttavern/chat_branches/retry_branch', {
-      file,
-      old_node_id,
-      new_node_id,
-      role,
-      content
-    });
-  },
 };
 
 export default ChatBranches;

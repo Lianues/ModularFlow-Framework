@@ -248,64 +248,8 @@ function onKeydown(e) {
 function startEdit(msg) {
   inputRowRef.value?.setText?.(msg.content)
 }
-
-async function regenerateMessage(msg) {
+function regenerateMessage(msg) {
   console.log('请求重新生成：', msg.id)
-  
-  // 只有 assistant 消息支持重试
-  if (msg.role !== 'assistant') {
-    console.warn('只有 assistant 消息支持重试')
-    return
-  }
-  
-  // 检查是否是最后一条消息
-  const isLastMsg = props.messages[props.messages.length - 1]?.id === msg.id
-  
-  if (!isLastMsg) {
-    console.warn('只有最后一条消息支持重试')
-    return
-  }
-  
-  if (!props.conversationFile) {
-    console.error('无对话文件，无法重试')
-    return
-  }
-  
-  try {
-    // 生成新节点ID
-    const newNodeId = `n_retry${Date.now()}`
-    
-    const ChatBranches = (await import('@/services/chatBranches.js')).default
-    
-    // 调用 retry_branch API：创建新分支节点
-    const retryDoc = await ChatBranches.retryBranch({
-      file: props.conversationFile,
-      old_node_id: msg.id,
-      new_node_id: newNodeId,
-      role: 'assistant',
-      content: ''  // 空内容，等待 AI 填充
-    })
-    
-    console.log('重试分支创建成功，新节点:', newNodeId)
-    
-    // 更新消息ID为新节点ID
-    msg.id = newNodeId
-    msg.content = ''
-    msg.error = null
-    
-    // 更新本地文档
-    if (retryDoc && props.conversationDoc) {
-      Object.assign(props.conversationDoc, retryDoc)
-    }
-    
-    // 重新加载分支信息
-    await loadBranchInfo()
-    
-    // 调用 AI 生成新响应（重试模式）
-    await callAI(true)
-  } catch (error) {
-    console.error('重试分支失败:', error)
-  }
 }
 
 /* 发送状态管理 */
@@ -496,9 +440,8 @@ function typewriterEffect(targetObj, text, speed = 30) {
 
 /**
  * 调用AI生成响应（流式，带打字机效果）
- * @param {boolean} isRetry - 是否是重试（替换最后一条 assistant 消息）
  */
-async function callAI(isRetry = false) {
+async function callAI() {
   if (!props.conversationFile) {
     console.warn('无对话文件，跳过AI调用')
     return
@@ -507,38 +450,21 @@ async function callAI(isRetry = false) {
   // LLM配置文件（占位，后续可从设置中读取）
   const llmConfigFile = 'backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json'
 
-  let aiPlaceholderIndex
+  // 创建AI占位消息索引
+  const aiPlaceholderIndex = props.messages.length
   
-  if (isRetry) {
-    // 重试模式：使用最后一条消息（应该已经通过 retry_branch 创建）
-    aiPlaceholderIndex = props.messages.length - 1
-    const lastMsg = props.messages[aiPlaceholderIndex]
-    if (!lastMsg || lastMsg.role !== 'assistant') {
-      console.error('重试失败：最后一条消息不是 assistant')
-      return
-    }
-    // 重置消息状态
-    lastMsg.content = ''
-    lastMsg.error = null
-    lastMsg.waitingAI = true
-    lastMsg.waitingSeconds = 0
-  } else {
-    // 正常模式：创建新的 AI 占位消息
-    aiPlaceholderIndex = props.messages.length
-    props.messages.push({
-      id: `temp_${Date.now()}`,
-      role: 'assistant',
-      content: '',
-      error: null,
-      waitingAI: true,
-      waitingSeconds: 0
-    })
-  }
+  // 创建AI占位消息
+  props.messages.push({
+    id: `temp_${Date.now()}`,
+    role: 'assistant',
+    content: '',
+    error: null,
+    waitingAI: true,
+    waitingSeconds: 0
+  })
   
   const aiPlaceholder = props.messages[aiPlaceholderIndex]
-  if (!isRetry) {
-    ensurePaletteFor(aiPlaceholder)
-  }
+  ensurePaletteFor(aiPlaceholder)
 
   // 等待计时器
   let waitingTimer = null
@@ -696,6 +622,20 @@ async function callAI(isRetry = false) {
   }
 }
 
+/**
+ * 判断是否是该角色的最后一条消息
+ */
+function isLastOfRole(msg, idx) {
+  const role = msg.role
+  // 从当前消息之后查找，如果没有相同角色的消息，则当前是最后一条
+  for (let i = idx + 1; i < props.messages.length; i++) {
+    if (props.messages[i].role === role) {
+      return false
+    }
+  }
+  return true
+}
+
 function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 </script>
 
@@ -714,6 +654,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :msg="m"
               :idx="idx"
               :is-last="idx === props.messages.length - 1"
+              :is-last-of-role="isLastOfRole(m, idx)"
               :split-before="splitDoc(m).before"
               :split-html="splitDoc(m).html"
               :split-after="splitDoc(m).after"
