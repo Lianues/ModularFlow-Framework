@@ -173,6 +173,21 @@ const ChatBranches = {
       content
     });
   },
+
+  // 修剪消息树：删除指定节点及其所有子孙
+  // 后端实现见：[python.function(truncate_after)](api/modules/SmartTavern/chat_branches/chat_branches.py:165)
+  async truncateAfter({ file, node_id }) {
+    if (!file) {
+      throw new Error('[ChatBranches] truncateAfter: file is required');
+    }
+    if (!node_id) {
+      throw new Error('[ChatBranches] truncateAfter: node_id is required');
+    }
+    return postJSON('smarttavern/chat_branches/truncate_after', {
+      file,
+      node_id
+    });
+  },
 };
 
 export default ChatBranches;

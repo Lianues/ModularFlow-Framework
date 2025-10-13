@@ -308,19 +308,19 @@ def truncate_after_node(
     file: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    修剪：保留指定节点及之前，删除其所有子树。
+    修剪：删除指定节点及其所有子孙。
     
     参数：
-    - node_id: 保留到此节点（不包括其子节点）
+    - node_id: 要删除的节点（包括其本身及所有子孙）
     - doc/file: 二选一输入
     
     返回：
-      更新后的完整 doc（nodes 删除子树，children 清理，active_path 截断，updated_at 更新）
+      更新后的完整 doc（nodes 删除节点及子树，children 清理，active_path 截断到父节点，updated_at 更新）
     
     说明：
-    - 级联删除：递归删除 node_id 的所有子孙节点
-    - active_path 截断：若 node_id 在 active_path 中，截断到该节点；否则不变
-    - children 清理：移除 node_id 的 children 条目
+    - 级联删除：删除 node_id 本身及其所有子孙节点
+    - active_path 截断：若 node_id 在 active_path 中，截断到其父节点；否则不变
+    - children 清理：从父节点的 children 中移除 node_id，并清理所有被删节点的 children 条目
     """
     loaded_doc = _load_doc_from_file_or_obj(doc, file)
     nodes = loaded_doc.get("nodes") or {}
@@ -330,8 +330,11 @@ def truncate_after_node(
     if node_id not in nodes:
         raise ValueError(f"Node not found: {node_id}")
     
-    # 递归收集所有子孙节点（使用栈避免深度递归）
-    to_delete = set()
+    # 获取父节点ID（用于后续 active_path 截断和 children 清理）
+    parent_id = nodes[node_id].get("pid")
+    
+    # 递归收集所有要删除的节点：node_id 本身 + 所有子孙
+    to_delete = set([node_id])  # 包含节点本身
     stack = list(children_map.get(node_id, []))
     
     while stack:
@@ -344,31 +347,50 @@ def truncate_after_node(
             if child not in to_delete:
                 stack.append(child)
     
-    # 删除节点
+    # 删除所有收集到的节点
     for nid in to_delete:
         nodes.pop(nid, None)
     
-    # 清理 children_map：删除被删节点的条目 + 清理引用
+    # 清理 children_map：删除被删节点的条目
     for nid in to_delete:
         children_map.pop(nid, None)
     
+    # 从其他节点的 children 中移除被删节点的引用
     for pid in list(children_map.keys()):
         children_map[pid] = [cid for cid in children_map[pid] if cid not in to_delete]
         if not children_map[pid]:
             children_map.pop(pid, None)
     
-    # 清理 node_id 的 children
-    children_map.pop(node_id, None)
-    
-    # 截断 active_path
-    if node_id in active_path:
-        idx = active_path.index(node_id)
-        active_path = active_path[:idx + 1]
+    # 清理 active_path：移除所有被删除的节点（包括 node_id 及其所有子孙）
+    # 由于 active_path 是一条路径，如果父节点被删除，其子孙必然也在后面
+    # 所以只需找到第一个被删除节点的位置并截断即可
+    if active_path:
+        # 找到第一个被删除节点在 active_path 中的位置
+        first_deleted_idx = None
+        for i, nid in enumerate(active_path):
+            if nid in to_delete:
+                first_deleted_idx = i
+                break
+        
+        # 截断到第一个被删除节点之前
+        if first_deleted_idx is not None:
+            active_path = active_path[:first_deleted_idx]
     
     loaded_doc["nodes"] = nodes
     loaded_doc["children"] = children_map
     loaded_doc["active_path"] = active_path
     _update_timestamp(loaded_doc)
+    
+    # 如果传入了 file 参数，保存更新后的文档到文件
+    if file is not None and isinstance(file, str) and file.strip():
+        root = _repo_root()
+        conversations_dir = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+        target = (root / Path(file)).resolve()
+        
+        if not _is_within(target, conversations_dir):
+            raise ValueError(f"File must be within conversations directory: {file}")
+        
+        _safe_write_json(target, loaded_doc)
     
     return loaded_doc
 

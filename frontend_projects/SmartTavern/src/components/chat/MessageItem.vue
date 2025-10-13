@@ -34,6 +34,13 @@
               <i v-else-if="sendStatus === 'error'" data-lucide="x" class="icon-14" aria-hidden="true"></i>
               <span class="chip-text">{{ sendMessage }}</span>
             </div>
+            <!-- 删除状态指示（优先级第二） -->
+            <div v-else-if="deleteStatus" class="status-chip" :class="`status-${deleteStatus}`" aria-live="polite">
+              <i v-if="deleteStatus === 'deleting'" data-lucide="loader-circle" class="icon-14 chip-spinner-icon" aria-hidden="true"></i>
+              <i v-else-if="deleteStatus === 'success'" data-lucide="check" class="icon-14" aria-hidden="true"></i>
+              <i v-else-if="deleteStatus === 'error'" data-lucide="x" class="icon-14" aria-hidden="true"></i>
+              <span class="chip-text">{{ deleteMessage }}</span>
+            </div>
             <!-- 保存状态指示 -->
             <div v-else-if="saveStatus" class="status-chip" :class="`status-${saveStatus}`" aria-live="polite">
               <i v-if="saveStatus === 'saving'" data-lucide="loader-circle" class="icon-14 chip-spinner-icon" aria-hidden="true"></i>
@@ -198,6 +205,8 @@ const isEditing = ref(false)
 const editingContent = ref('')
 const saveStatus = ref(null) // null | 'saving' | 'success' | 'error'
 const saveMessage = ref('')
+const deleteStatus = ref(null) // null | 'deleting' | 'success' | 'error'
+const deleteMessage = ref('')
 
 function refreshIcons() {
   nextTick(() => {
@@ -245,9 +254,70 @@ function copyMessage() {
   menuOpen.value = false
 }
 
-function emitDelete() {
-  emit('delete', props.msg.id)
+async function emitDelete() {
+  console.log('[MessageItem] emitDelete 被调用, msg.id:', props.msg.id)
+  console.log('[MessageItem] conversationFile:', props.conversationFile)
+  
+  if (deleteStatus.value === 'deleting') {
+    console.log('[MessageItem] 正在删除中，忽略')
+    return
+  }
+  
   menuOpen.value = false
+  
+  if (!props.conversationFile) {
+    console.error('[MessageItem] 无法删除：缺少 conversationFile')
+    deleteStatus.value = 'error'
+    deleteMessage.value = '缺少对话文件'
+    setTimeout(() => {
+      deleteStatus.value = null
+      deleteMessage.value = ''
+    }, 2000)
+    return
+  }
+  
+  try {
+    deleteStatus.value = 'deleting'
+    deleteMessage.value = '删除中...'
+    refreshIcons()
+    
+    console.log('[MessageItem] 开始调用后端 truncateAfter API')
+    const ChatBranches = (await import('@/services/chatBranches.js')).default
+    
+    // 调用后端修剪接口，删除此节点及其所有子孙
+    console.log('[MessageItem] 调用参数:', { file: props.conversationFile, node_id: props.msg.id })
+    await ChatBranches.truncateAfter({
+      file: props.conversationFile,
+      node_id: props.msg.id
+    })
+    
+    console.log('[MessageItem] 后端API调用成功')
+    
+    // 后端成功后，触发前端删除事件
+    deleteStatus.value = 'success'
+    deleteMessage.value = '删除成功'
+    refreshIcons()
+    
+    // 短暂显示成功状态后触发删除
+    setTimeout(() => {
+      console.log('[MessageItem] 触发 delete 事件')
+      emit('delete', props.msg.id)
+      deleteStatus.value = null
+      deleteMessage.value = ''
+    }, 500)
+    
+    console.log('[MessageItem] 消息删除成功:', props.msg.id)
+  } catch (error) {
+    console.error('删除失败:', error)
+    deleteStatus.value = 'error'
+    deleteMessage.value = '删除失败'
+    
+    setTimeout(() => {
+      deleteStatus.value = null
+      deleteMessage.value = ''
+      refreshIcons()
+    }, 2500)
+  }
 }
 function emitRegenerate() { emit('regenerate', props.msg) }
 function emitEdit() {
@@ -632,7 +702,8 @@ async function saveEdit() {
   color: rgba(var(--st-color-text), 0.9); box-shadow: var(--st-shadow-sm); margin-right: 8px;
   transition: all .2s ease;
 }
-.status-chip.status-saving {
+.status-chip.status-saving,
+.status-chip.status-deleting {
   border-color: rgba(var(--st-primary), 0.4);
   background: rgba(var(--st-primary), 0.08);
   color: rgb(var(--st-primary));

@@ -165,7 +165,7 @@ def update_message(node_id: str, content: str, doc: Dict[str, Any] = None, file:
 @core.register_api(
     path="smarttavern/chat_branches/truncate_after",
     name="修剪消息树",
-    description="保留到指定节点，删除其所有子孙；更新 nodes/children/active_path/updated_at",
+    description="删除指定节点及其所有子孙；更新 nodes/children/active_path（截断到父节点）/updated_at",
     input_schema={
         "type": "object",
         "properties": {

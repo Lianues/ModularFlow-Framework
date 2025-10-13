@@ -130,7 +130,7 @@ def main():
     assert "updated_at" in updated_doc
     print(f"[OK] update_message OK, updated_at={updated_doc.get('updated_at')}")
 
-    # 测试8：修剪消息树（删除 n_user2 及其子孙）
+    # 测试8：修剪消息树（删除 n_ass1 及其所有子孙）
     truncated_doc = core.call_api(
         "smarttavern/chat_branches/truncate_after",
         {"doc": doc, "node_id": "n_ass1"},
@@ -138,19 +138,21 @@ def main():
         namespace="modules",
     )
     assert isinstance(truncated_doc, dict)
-    assert "n_user2" not in truncated_doc["nodes"]  # n_user2 应被删除
-    assert "n_ass3" not in truncated_doc["nodes"]   # n_ass3 应被删除
-    assert "n_ass1" in truncated_doc["nodes"]       # n_ass1 应保留
-    assert truncated_doc["active_path"][-1] == "n_ass1"  # active_path 应截断到 n_ass1
+    assert "n_ass1" not in truncated_doc["nodes"]   # n_ass1 应被删除（节点本身）
+    assert "n_user2" not in truncated_doc["nodes"]  # n_user2 应被删除（子节点）
+    assert "n_ass3" not in truncated_doc["nodes"]   # n_ass3 应被删除（孙节点）
+    assert "n_user1" in truncated_doc["nodes"]      # n_user1 应保留（父节点）
+    assert truncated_doc["active_path"][-1] == "n_user1"  # active_path 应截断到父节点 n_user1
     print(f"[OK] truncate_after OK, active_path={truncated_doc['active_path']}")
 
-    # 测试9：追加新消息
+    # 测试9：追加新消息（追加到 active_path 最后节点）
+    last_node = doc["active_path"][-1]
     appended_doc = core.call_api(
         "smarttavern/chat_branches/append_message",
         {
             "doc": doc,
             "node_id": "n_new_user",
-            "pid": "n_ass3",
+            "pid": last_node,  # 追加到 active_path 最后节点
             "role": "user",
             "content": "这是新追加的用户消息"
         },
@@ -160,10 +162,30 @@ def main():
     assert isinstance(appended_doc, dict)
     assert "n_new_user" in appended_doc["nodes"]
     assert appended_doc["nodes"]["n_new_user"]["content"] == "这是新追加的用户消息"
-    assert "n_new_user" in appended_doc["children"]["n_ass3"]
+    assert "n_new_user" in appended_doc["children"][last_node]
     assert appended_doc["active_path"][-1] == "n_new_user"  # 新消息应追加到 active_path
     assert "updated_at" in appended_doc
     print(f"[OK] append_message OK, new_node in path={appended_doc['active_path'][-1]}")
+    
+    # 测试9b：在截断后的文档上追加新消息（追加到 n_user1）
+    appended_doc2 = core.call_api(
+        "smarttavern/chat_branches/append_message",
+        {
+            "doc": truncated_doc,  # 使用截断后的 doc
+            "node_id": "n_new_user2",
+            "pid": "n_user1",  # 父节点是 n_user1（截断后的最后节点）
+            "role": "user",
+            "content": "截断后的新消息"
+        },
+        method="POST",
+        namespace="modules",
+    )
+    assert isinstance(appended_doc2, dict)
+    assert "n_new_user2" in appended_doc2["nodes"]
+    assert appended_doc2["nodes"]["n_new_user2"]["content"] == "截断后的新消息"
+    assert "n_new_user2" in appended_doc2["children"]["n_user1"]
+    assert appended_doc2["active_path"][-1] == "n_new_user2"  # 新消息应追加到 active_path
+    print(f"[OK] append_message on truncated doc OK, new_node in path={appended_doc2['active_path'][-1]}")
 
     # 测试10：创建初始对话（从角色卡 messages[0] 生成根节点）
     payload = {
