@@ -156,15 +156,15 @@
 
           <!-- 正常模式：显示操作按钮 -->
           <div v-else class="floor-actions">
-            <!-- 错误消息只显示重试按钮 -->
-            <template v-if="msg.error">
+            <!-- 错误的 assistant 消息只显示重试按钮 -->
+            <template v-if="msg.error && msg.role === 'assistant'">
               <button class="act-btn" @click="emitRegenerate" title="重试" aria-label="重试">
                 <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
               </button>
             </template>
             
-            <!-- 正常消息显示完整按钮 -->
-            <template v-else>
+            <!-- assistant 消息显示完整按钮（包括重试） -->
+            <template v-else-if="msg.role === 'assistant'">
               <transition name="copy-tip">
                 <div v-if="copied" class="copy-tip">已复制</div>
               </transition>
@@ -180,6 +180,26 @@
               </button>
               <button class="act-btn" @click="emitRegenerate" title="重试" aria-label="重试">
                 <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
+              </button>
+              <button class="act-btn" @click="emitEdit" title="编辑" aria-label="编辑">
+                <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>
+              </button>
+            </template>
+            
+            <!-- user/system 消息只显示复制和编辑按钮 -->
+            <template v-else>
+              <transition name="copy-tip">
+                <div v-if="copied" class="copy-tip">已复制</div>
+              </transition>
+
+              <button
+                class="act-btn"
+                :class="{ success: copied }"
+                @click="copyMessage"
+                :title="copied ? '已复制' : '复制'"
+                :aria-label="copied ? '已复制' : '复制'"
+              >
+                <i :data-lucide="copied ? 'check' : 'copy'" class="icon-16" aria-hidden="true"></i>
               </button>
               <button class="act-btn" @click="emitEdit" title="编辑" aria-label="编辑">
                 <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>

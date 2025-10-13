@@ -39,6 +39,16 @@
       "pid": "n_user2",
       "role": "assistant",
       "content": "另一种导出方式：你可以使用 branch_table 接口查看当前分支情况，然后决定是否要切换到其他分支继续对话。111"
+    },
+    "n_retry1760378076466": {
+      "pid": "n_user2",
+      "role": "assistant",
+      "content": ""
+    },
+    "n_ass1760378086456": {
+      "pid": "n_retry1760378076466",
+      "role": "assistant",
+      "content": "你可以使用 `export_messages()` 方法导出当前分支：\n\n```python\nmessages = session.export_messages()\n```\n\n这会将当前活动分支的所有消息导出为 OpenAI API 兼容的格式，返回一个包含 `role` 和 `content` 字段的字典列表。\n\n例如：\n```python\n[\n    {\"role\": \"system\", \"content\": \"You are Droid...\"},\n    {\"role\": \"user\", \"content\": \"你好，请介绍一下分支机制。\"},\n    {\"role\": \"assistant\", \"content\": \"分支机制允许你...\"},\n    {\"role\": \"user\", \"content\": \"那怎么导出当前分支为 OpenAI messages 呢？\"}\n]\n```"
     }
   },
   "children": {
@@ -54,7 +64,11 @@
     ],
     "n_user2": [
       "n_ass3",
-      "n_ass4"
+      "n_ass4",
+      "n_retry1760378076466"
+    ],
+    "n_retry1760378076466": [
+      "n_ass1760378086456"
     ]
   },
   "active_path": [
@@ -62,7 +76,8 @@
     "n_user1",
     "n_ass1",
     "n_user2",
-    "n_ass4"
+    "n_retry1760378076466",
+    "n_ass1760378086456"
   ],
-  "updated_at": "2025-10-13T22:15:35+08:00"
+  "updated_at": "2025-10-14T01:54:48+08:00"
 }
