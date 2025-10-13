@@ -11,16 +11,14 @@
       </div>
     </div>
 
-    <CustomScrollbar class="tch-input-wrapper" :width="6">
-      <textarea
-        ref="inputRef"
-        v-model="text"
-        class="tch-input"
-        :placeholder="placeholder"
-        :disabled="sending"
-        @keydown="onKeydown"
-      ></textarea>
-    </CustomScrollbar>
+    <textarea
+      ref="inputRef"
+      v-model="text"
+      class="tch-input"
+      :placeholder="placeholder"
+      :disabled="sending"
+      @keydown="onKeydown"
+    ></textarea>
 
     <div class="tch-tools-right">
       <button
@@ -44,7 +42,6 @@
 
 <script setup>
 import { ref, computed, nextTick } from 'vue'
-import CustomScrollbar from '@/components/common/CustomScrollbar.vue'
 
 const props = defineProps({
   pendingActive: { type: Boolean, default: false },
@@ -165,16 +162,10 @@ defineExpose({ setText, clearText })
   height: 36px;
 }
 
-/* 输入框包装器 */
-.tch-input-wrapper {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
 /* 多行输入区域 */
 .tch-input {
   width: 100%;
+  height: 100%;
   min-height: 100%;
   padding: 10px 8px;
   border: none;
@@ -186,7 +177,25 @@ defineExpose({ setText, clearText })
   font-size: var(--st-content-font-size);
   line-height: 1.6;
   resize: none;
+  overflow-y: auto;
   box-sizing: border-box;
+}
+
+/* 自定义滚动条样式（仅在支持的浏览器） */
+.tch-input::-webkit-scrollbar {
+  width: 6px;
+}
+.tch-input::-webkit-scrollbar-track {
+  background: rgba(var(--st-border), 0.1);
+  border-radius: 3px;
+}
+.tch-input::-webkit-scrollbar-thumb {
+  background: rgba(var(--st-color-text), 0.3);
+  border-radius: 3px;
+  transition: background .2s ease;
+}
+.tch-input::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--st-color-text), 0.5);
 }
 .tch-input::placeholder {
   color: rgba(var(--st-color-text), 0.45);
