@@ -25,10 +25,24 @@
       <div class="floor-right">
         <header class="floor-header">
           <div class="name">{{ nameOf(msg) }}</div>
-          <!-- 右侧区：等待chip + 更多操作按钮 -->
+          <!-- 右侧区：状态chip + 更多操作按钮 -->
           <div class="header-right">
-            <!-- 等待占位动画：右对齐，更多操作按钮左侧 -->
-            <div v-if="pendingActive" class="pending-chip" aria-live="polite">
+            <!-- 发送状态指示（优先级最高） -->
+            <div v-if="sendStatus" class="status-chip" :class="`status-${sendStatus}`" aria-live="polite">
+              <i v-if="sendStatus === 'sending'" data-lucide="loader-circle" class="icon-14 chip-spinner-icon" aria-hidden="true"></i>
+              <i v-else-if="sendStatus === 'success'" data-lucide="check" class="icon-14" aria-hidden="true"></i>
+              <i v-else-if="sendStatus === 'error'" data-lucide="x" class="icon-14" aria-hidden="true"></i>
+              <span class="chip-text">{{ sendMessage }}</span>
+            </div>
+            <!-- 保存状态指示 -->
+            <div v-else-if="saveStatus" class="status-chip" :class="`status-${saveStatus}`" aria-live="polite">
+              <i v-if="saveStatus === 'saving'" data-lucide="loader-circle" class="icon-14 chip-spinner-icon" aria-hidden="true"></i>
+              <i v-else-if="saveStatus === 'success'" data-lucide="check" class="icon-14" aria-hidden="true"></i>
+              <i v-else-if="saveStatus === 'error'" data-lucide="x" class="icon-14" aria-hidden="true"></i>
+              <span class="chip-text">{{ saveMessage }}</span>
+            </div>
+            <!-- 等待占位动画（兼容旧逻辑） -->
+            <div v-else-if="pendingActive" class="pending-chip" aria-live="polite">
               <span class="chip-spinner" aria-hidden="true"></span>
               <span class="chip-text">等待中...{{ pendingSeconds }}s</span>
             </div>
@@ -70,7 +84,7 @@
           <textarea
             v-model="editingContent"
             class="edit-textarea"
-            :disabled="isSaving"
+            :disabled="saveStatus === 'saving'"
             placeholder="输入消息内容..."
             @keydown.ctrl.enter="saveEdit"
             @keydown.meta.enter="saveEdit"
@@ -98,7 +112,7 @@
             <button
               class="act-btn save-btn"
               @click="saveEdit"
-              :disabled="isSaving"
+              :disabled="saveStatus === 'saving'"
               title="保存 (Ctrl+Enter)"
               aria-label="保存"
             >
@@ -107,7 +121,7 @@
             <button
               class="act-btn cancel-btn"
               @click="cancelEdit"
-              :disabled="isSaving"
+              :disabled="saveStatus === 'saving'"
               title="取消 (Esc)"
               aria-label="取消"
             >
@@ -162,6 +176,9 @@ const props = defineProps({
   // 等待态
   pendingActive: { type: Boolean, default: false },
   pendingSeconds: { type: Number, default: 0 },
+  // 发送状态（从父组件传入）
+  sendStatus: { type: String, default: null },
+  sendMessage: { type: String, default: '' },
   // 对话文件路径（用于编辑保存）
   conversationFile: { type: String, default: null },
 })
@@ -179,7 +196,8 @@ const menuOpen = ref(false)
 const copied = ref(false)
 const isEditing = ref(false)
 const editingContent = ref('')
-const isSaving = ref(false)
+const saveStatus = ref(null) // null | 'saving' | 'success' | 'error'
+const saveMessage = ref('')
 
 function refreshIcons() {
   nextTick(() => {
@@ -246,50 +264,65 @@ function cancelEdit() {
 }
 
 async function saveEdit() {
-  if (isSaving.value) return
+  if (saveStatus.value === 'saving') return
   
   const newContent = editingContent.value.trim()
   if (!newContent) {
-    // 内容为空，取消编辑
     cancelEdit()
     return
   }
   
   if (!props.conversationFile) {
     console.error('无法保存编辑：缺少 conversationFile')
-    cancelEdit()
+    saveStatus.value = 'error'
+    saveMessage.value = '缺少对话文件'
+    setTimeout(() => {
+      saveStatus.value = null
+      saveMessage.value = ''
+    }, 2000)
     return
   }
   
   try {
-    isSaving.value = true
+    saveStatus.value = 'saving'
+    saveMessage.value = '保存中...'
     
-    // 导入 ChatBranches API
     const ChatBranches = (await import('@/services/chatBranches.js')).default
     
-    // 调用后端 update_message API
     await ChatBranches.updateMessage({
       file: props.conversationFile,
       node_id: props.msg.id,
       content: newContent
     })
     
-    // 更新本地消息内容
     props.msg.content = newContent
-    
-    // 发出更新事件（可选，如果父组件需要）
     emit('update', props.msg)
     
-    // 退出编辑模式
+    // 立即退出编辑模式并显示成功状态
     isEditing.value = false
     editingContent.value = ''
+    saveStatus.value = 'success'
+    saveMessage.value = '保存成功'
+    refreshIcons()
+    
+    // 1.5秒后清除成功状态提示
+    setTimeout(() => {
+      saveStatus.value = null
+      saveMessage.value = ''
+      refreshIcons()
+    }, 1500)
     
     console.log('消息编辑成功:', props.msg.id)
   } catch (error) {
     console.error('保存编辑失败:', error)
-    // 保持编辑模式，让用户可以重试
+    saveStatus.value = 'error'
+    saveMessage.value = '保存失败'
+    
+    setTimeout(() => {
+      saveStatus.value = null
+      saveMessage.value = ''
+    }, 2500)
   } finally {
-    isSaving.value = false
     refreshIcons()
   }
 }
@@ -590,6 +623,33 @@ async function saveEdit() {
   border-top-color: transparent; animation: st-spin 0.9s linear infinite; opacity: 0.9;
 }
 .chip-text { font-size: 12px; font-weight: 600; min-width: 20px; text-align: center; }
+
+/* 状态 chip（保存/发送状态反馈） */
+.status-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border: 1px solid rgba(var(--st-border), 0.9); border-radius: 9999px;
+  background: rgb(var(--st-surface) / 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  color: rgba(var(--st-color-text), 0.9); box-shadow: var(--st-shadow-sm); margin-right: 8px;
+  transition: all .2s ease;
+}
+.status-chip.status-saving {
+  border-color: rgba(var(--st-primary), 0.4);
+  background: rgba(var(--st-primary), 0.08);
+  color: rgb(var(--st-primary));
+}
+.status-chip.status-success {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.08);
+  color: rgb(34, 197, 94);
+}
+.status-chip.status-error {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.08);
+  color: rgb(220, 38, 38);
+}
+.chip-spinner-icon {
+  animation: st-spin 0.9s linear infinite;
+}
 
 @keyframes st-spin { to { transform: rotate(360deg); } }
 /* 与父 <transition-group name="msg"> 对齐的过渡样式，使动画在根节点生效 */

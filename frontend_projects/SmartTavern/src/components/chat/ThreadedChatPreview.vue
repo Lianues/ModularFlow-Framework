@@ -131,8 +131,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   removeWheel?.()
-  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
-  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null }
 })
 
 watch(() => props.messages.length, () => {
@@ -217,48 +216,61 @@ function regenerateMessage(msg) {
   console.log('请求重新生成：', msg.id)
 }
 
-/* 发送后等待占位：10 秒等待动画 + 禁止再次发送，支持手动停止 */
+/* 发送状态管理 */
 const pendingMessageId = ref(null)
-const pendingSeconds = ref(0)
-let pendingTimer = null
-let pendingInterval = null
+const sendStatus = ref(null) // null | 'sending' | 'success' | 'error'
+const sendStatusMsg = ref('')
+let sendTimer = null
 
-function startPendingFor(id) {
-  // 先清理旧等待
-  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
-  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+function startSendingFor(id) {
+  // 先清理旧状态
+  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null }
   
   pendingMessageId.value = id
-  pendingSeconds.value = 0
+  sendStatus.value = 'sending'
+  sendStatusMsg.value = '发送中...'
+  refreshIcons()
+}
+
+function setSendSuccess(id) {
+  if (pendingMessageId.value !== id) return
+  
+  sendStatus.value = 'success'
+  sendStatusMsg.value = '发送成功'
   refreshIcons()
   
-  // 每100ms更新一次正数计时显示（从0递增至10）
-  const startTime = Date.now()
-  const duration = 10000
-  pendingInterval = setInterval(() => {
-    const elapsed = Date.now() - startTime
-    const current = Math.min(10, Math.floor(elapsed / 1000))
-    pendingSeconds.value = current
-    if (current >= 10) {
-      clearInterval(pendingInterval)
-      pendingInterval = null
-    }
-  }, 100)
-  
-  // 10秒后自动完成
-  pendingTimer = setTimeout(() => {
-    if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+  // 1.5秒后清除状态
+  if (sendTimer) clearTimeout(sendTimer)
+  sendTimer = setTimeout(() => {
     pendingMessageId.value = null
-    pendingTimer = null
+    sendStatus.value = null
+    sendStatusMsg.value = ''
     refreshIcons()
-  }, 10000)
+  }, 1500)
+}
+
+function setSendError(id, error = '发送失败') {
+  if (pendingMessageId.value !== id) return
+  
+  sendStatus.value = 'error'
+  sendStatusMsg.value = error
+  refreshIcons()
+  
+  // 2.5秒后清除状态
+  if (sendTimer) clearTimeout(sendTimer)
+  sendTimer = setTimeout(() => {
+    pendingMessageId.value = null
+    sendStatus.value = null
+    sendStatusMsg.value = ''
+    refreshIcons()
+  }, 2500)
 }
 
 function cancelPending() {
-  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null }
-  if (pendingInterval) { clearInterval(pendingInterval); pendingInterval = null }
+  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null }
   pendingMessageId.value = null
-  pendingSeconds.value = 0
+  sendStatus.value = null
+  sendStatusMsg.value = ''
   refreshIcons()
 }
 
@@ -315,13 +327,16 @@ async function onSubmit(text) {
     props.messages.push(newMessage)
     // 为新消息生成色条调色板
     ensurePaletteFor(newMessage)
-    // 启动等待占位（模拟AI回复）
-    startPendingFor(newMessage.id)
+    // 显示发送中状态
+    startSendingFor(newMessage.id)
 
-    // 更新本地文档（可选，如果需要保持同步）
+    // 更新本地文档（保持同步）
     if (updatedDoc && props.conversationDoc) {
       Object.assign(props.conversationDoc, updatedDoc)
     }
+    
+    // 显示发送成功
+    setSendSuccess(newMessage.id)
 
     // 滚动到底部（丝滑且自然）
     nextTick(() => {
@@ -353,7 +368,10 @@ async function onSubmit(text) {
     console.log('消息发送成功:', newNodeId)
   } catch (error) {
     console.error('发送消息失败:', error)
-    // 可以在这里显示错误提示
+    // 显示发送失败状态
+    if (newMessage && newMessage.id) {
+      setSendError(newMessage.id, '发送失败')
+    }
   }
 }
 
@@ -384,8 +402,10 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :split-before="splitDoc(m).before"
               :split-html="splitDoc(m).html"
               :split-after="splitDoc(m).after"
-              :pending-active="pendingMessageId === m.id"
-              :pending-seconds="pendingSeconds"
+              :pending-active="pendingMessageId === m.id && sendStatus === 'sending'"
+              :pending-seconds="0"
+              :send-status="pendingMessageId === m.id ? sendStatus : null"
+              :send-message="pendingMessageId === m.id ? sendStatusMsg : ''"
               :conversation-file="props.conversationFile"
               @delete="deleteMessage"
               @regenerate="regenerateMessage"
