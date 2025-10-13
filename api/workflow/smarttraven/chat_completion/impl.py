@@ -42,14 +42,14 @@ def _safe_read_json(file_path: str) -> Dict[str, Any]:
 
 def chat_completion_non_streaming(
     conversation_file: str,
-    llm_config_file: str,
+    llm_config_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     非流式AI对话补全
     
     参数：
     - conversation_file: 对话文件路径（相对仓库根）
-    - llm_config_file: LLM配置文件路径（相对仓库根）
+    - llm_config_file: LLM配置文件路径（可选，若不提供则从settings.json自动读取）
     
     返回：
       {
@@ -65,6 +65,21 @@ def chat_completion_non_streaming(
     start_time = time.time()
     
     try:
+        # 步骤0：如果未提供 llm_config_file，从 settings.json 读取
+        if not llm_config_file:
+            settings_result = core.call_api(
+                "smarttavern/chat_branches/settings",
+                {"action": "get", "file": conversation_file},
+                method="POST",
+                namespace="modules"
+            )
+            if not settings_result or "settings" not in settings_result:
+                raise ValueError("Failed to get settings from conversation")
+            
+            llm_config_file = settings_result["settings"].get("llm_config")
+            if not llm_config_file:
+                raise ValueError("No llm_config found in conversation settings")
+        
         # 步骤1：获取对话messages
         messages_result = core.call_api(
             "smarttavern/chat_branches/openai_messages",
@@ -156,14 +171,14 @@ def chat_completion_non_streaming(
 
 def chat_completion_streaming(
     conversation_file: str,
-    llm_config_file: str,
+    llm_config_file: Optional[str] = None,
 ) -> Iterator[Dict[str, Any]]:
     """
     流式AI对话补全
     
     参数：
     - conversation_file: 对话文件路径（相对仓库根）
-    - llm_config_file: LLM配置文件路径（相对仓库根）
+    - llm_config_file: LLM配置文件路径（可选，若不提供则从settings.json自动读取）
     
     生成器yield：
       {"type": "chunk", "content": str}
@@ -174,6 +189,25 @@ def chat_completion_streaming(
       {"type": "end"}
     """
     try:
+        # 步骤0：如果未提供 llm_config_file，从 settings.json 读取
+        if not llm_config_file:
+            settings_result = core.call_api(
+                "smarttavern/chat_branches/settings",
+                {"action": "get", "file": conversation_file},
+                method="POST",
+                namespace="modules"
+            )
+            if not settings_result or "settings" not in settings_result:
+                yield {"type": "error", "message": "Failed to get settings from conversation"}
+                yield {"type": "end"}
+                return
+            
+            llm_config_file = settings_result["settings"].get("llm_config")
+            if not llm_config_file:
+                yield {"type": "error", "message": "No llm_config found in conversation settings"}
+                yield {"type": "end"}
+                return
+        
         # 步骤1：获取对话messages
         messages_result = core.call_api(
             "smarttavern/chat_branches/openai_messages",
@@ -222,8 +256,20 @@ def chat_completion_streaming(
         full_content = ""
         finish_reason = None
         usage = None
+        has_error = False
         
         for chunk in chunk_iter:
+            # 检查是否是错误
+            if chunk.finish_reason == "error":
+                # 错误情况：content 包含错误信息
+                error_msg = chunk.content or "未知错误"
+                has_error = True
+                yield {"type": "error", "message": error_msg}
+                yield {"type": "finish", "finish_reason": "error"}
+                # 直接结束，不保存
+                yield {"type": "end"}
+                return
+            
             if chunk.content:
                 full_content += chunk.content
                 yield {"type": "chunk", "content": chunk.content}
@@ -236,8 +282,8 @@ def chat_completion_streaming(
                 usage = chunk.usage
                 yield {"type": "usage", "usage": chunk.usage}
         
-        # 步骤4：保存完整响应到对话文件
-        if full_content:
+        # 步骤4：仅在无错误且有内容时才保存
+        if not has_error and full_content:
             new_node_id = f"n_ass{int(time.time() * 1000)}"
             
             try:

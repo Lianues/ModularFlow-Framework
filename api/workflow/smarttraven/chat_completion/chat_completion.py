@@ -19,14 +19,14 @@ from .impl import (
 @core.register_api(
     path="smarttraven/chat_completion/complete",
     name="AI对话补全（非流式）",
-    description="读取对话文件，调用AI生成响应，保存到对话文件。适用于一次性获取完整响应的场景",
+    description="读取对话文件，调用AI生成响应，保存到对话文件。若不提供llm_config_file则从对话的settings.json自动读取",
     input_schema={
         "type": "object",
         "properties": {
             "conversation_file": {"type": "string"},
-            "llm_config_file": {"type": "string"},
+            "llm_config_file": {"type": ["string", "null"]},
         },
-        "required": ["conversation_file", "llm_config_file"],
+        "required": ["conversation_file"],
         "additionalProperties": False,
     },
     output_schema={
@@ -47,7 +47,7 @@ from .impl import (
 )
 def complete(
     conversation_file: str,
-    llm_config_file: str,
+    llm_config_file: str = None,
 ) -> Dict[str, Any]:
     return _chat_completion_non_streaming(
         conversation_file=conversation_file,
@@ -58,14 +58,14 @@ def complete(
 @core.register_api(
     path="smarttraven/chat_completion/complete_stream",
     name="AI对话补全（流式）",
-    description="读取对话文件，调用AI流式生成响应，逐块返回并最终保存到对话文件。返回SSE事件流",
+    description="读取对话文件，调用AI流式生成响应，逐块返回并最终保存到对话文件。若不提供llm_config_file则从对话的settings.json自动读取。返回SSE事件流",
     input_schema={
         "type": "object",
         "properties": {
             "conversation_file": {"type": "string"},
-            "llm_config_file": {"type": "string"},
+            "llm_config_file": {"type": ["string", "null"]},
         },
-        "required": ["conversation_file", "llm_config_file"],
+        "required": ["conversation_file"],
         "additionalProperties": False,
     },
     output_schema={
@@ -76,7 +76,7 @@ def complete(
 )
 def complete_stream(
     conversation_file: str,
-    llm_config_file: str,
+    llm_config_file: str = None,
 ) -> Any:
     """
     流式补全：返回SSE

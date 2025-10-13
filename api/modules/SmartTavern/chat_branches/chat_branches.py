@@ -282,8 +282,9 @@ def switch_branch(target_j: int, doc: Dict[str, Any] = None, file: str = None) -
             "persona_file": {"type": "string"},
             "regex_file": {"type": ["string", "null"]},
             "worldbook_file": {"type": ["string", "null"]},
+            "llm_config_file": {"type": ["string", "null"]},
         },
-        "required": ["name", "description", "character_file", "preset_file", "persona_file"],
+        "required": ["name", "description", "character_file", "preset_file", "persona_file", "llm_config_file"],
         "additionalProperties": False,
     },
     output_schema={
@@ -310,6 +311,7 @@ def create_conversation(
     persona_file: str,
     regex_file: str = None,
     worldbook_file: str = None,
+    llm_config_file: str = None,
     type: str = "threaded",
 ) -> Dict[str, Any]:
     return _create_conversation_impl(
@@ -320,6 +322,7 @@ def create_conversation(
         persona_file=persona_file,
         regex_file=regex_file,
         worldbook_file=worldbook_file,
+        llm_config_file=llm_config_file,
         chat_type=type or "threaded",
     )
 
@@ -330,7 +333,7 @@ def create_conversation(
     description=(
         "读取或更新 conversations/{name}.settings.json。"
         "action=get: 读取当前设置；action=update: 更新指定字段。"
-        "允许字段：preset(string)、character(string)、persona(string)、regex_rules(array)、world_books(array)。"
+        "允许字段：preset(string)、character(string)、persona(string)、regex_rules(array)、world_books(array)、llm_config(string)。"
         "使用 file 或 slug 二选一定位。"
     ),
     input_schema={
@@ -344,7 +347,8 @@ def create_conversation(
                     "character": {"type": "string"},
                     "persona": {"type": "string"},
                     "regex_rules": {"type": "array", "items": {"type": "string"}},
-                    "world_books": {"type": "array", "items": {"type": "string"}}
+                    "world_books": {"type": "array", "items": {"type": "string"}},
+                    "llm_config": {"type": "string"}
                 },
                 "additionalProperties": False
             },

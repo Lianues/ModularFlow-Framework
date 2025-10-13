@@ -101,14 +101,26 @@
 
         <!-- 正常模式：显示消息内容 -->
         <section v-else data-part="content" class="floor-content">
-          <HtmlStage
-            v-if="splitHtml"
-            :before="splitBefore"
-            :html="splitHtml"
-            :after="splitAfter"
-          />
-          <template v-else>
-            {{ msg.content }}
+          <!-- 错误框（如果消息有错误）-->
+          <div v-if="msg.error" class="error-box">
+            <div class="error-header">
+              <i data-lucide="alert-circle" class="icon-16" aria-hidden="true"></i>
+              <span class="error-title">AI调用失败</span>
+            </div>
+            <div class="error-message">{{ msg.error }}</div>
+          </div>
+          
+          <!-- 正常内容（仅在无错误时显示）-->
+          <template v-else-if="msg.content">
+            <HtmlStage
+              v-if="splitHtml"
+              :before="splitBefore"
+              :html="splitHtml"
+              :after="splitAfter"
+            />
+            <template v-else>
+              {{ msg.content }}
+            </template>
           </template>
         </section>
 
@@ -640,6 +652,49 @@ async function saveEdit() {
   padding: 0 4px; border-radius: var(--st-radius-sm);
 }
 [data-theme="dark"] .floor-content code { background: rgba(var(--st-color-text), 0.14); }
+
+/* 错误框样式 */
+.error-box {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  border-radius: var(--st-radius-md);
+  background: rgba(220, 38, 38, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.error-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: rgb(220, 38, 38);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.error-title {
+  flex: 1;
+}
+
+.error-message {
+  color: rgb(220, 38, 38);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+[data-theme="dark"] .error-box {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.10);
+}
+
+[data-theme="dark"] .error-header,
+[data-theme="dark"] .error-message {
+  color: rgb(248, 113, 113);
+}
 
 /* 编辑模式样式 */
 .edit-textarea {

@@ -602,6 +602,7 @@ def _allowed_data_dirs() -> List[Path]:
         root / "backend_projects" / "SmartTavern" / "data" / "persona",
         root / "backend_projects" / "SmartTavern" / "data" / "regex_rules",
         root / "backend_projects" / "SmartTavern" / "data" / "world_books",
+        root / "backend_projects" / "SmartTavern" / "data" / "llm_configs",
     ]
 
 def _is_under_any(target: Path, parents: List[Path]) -> bool:
@@ -688,6 +689,7 @@ def create_conversation_impl(
     persona_file: str,
     regex_file: Optional[str] = None,
     worldbook_file: Optional[str] = None,
+    llm_config_file: Optional[str] = None,
     chat_type: str = "threaded",
 ) -> Dict[str, Any]:
     # 校验并读取角色卡，提取 messages[0]（兼容 message 与 messages）
@@ -733,13 +735,18 @@ def create_conversation_impl(
     # - persona: string (单值)
     # - regex_rules: string[] (多选)
     # - world_books: string[] (多选)
+    # - llm_config: string (单值，AI配置)
     settings: Dict[str, Any] = {
         "preset": preset_file,
-        "character": character_file,
+        "world_books": [worldbook_file] if worldbook_file else [],
+        "characters": [character_file],
         "persona": persona_file,
         "regex_rules": [regex_file] if regex_file else [],
-        "world_books": [worldbook_file] if worldbook_file else []
     }
+    # 添加 llm_config（若提供）
+    if llm_config_file:
+        settings["llm_config"] = llm_config_file
+    
     _safe_write_json(settings_path, settings)
 
     # 写入 variables（空对象）
@@ -836,6 +843,7 @@ def settings_impl(
         - persona: string (单值)
         - regex_rules: string[] (多选)
         - world_books: string[] (多选)
+        - llm_config: string (单值，AI配置)
     
     返回：{ settings_file, settings, slug }
     """
@@ -861,7 +869,7 @@ def settings_impl(
     
     settings = _safe_read_json_default(settings_path, default={})
     
-    allowed_keys = {"preset", "character", "persona", "regex_rules", "world_books"}
+    allowed_keys = {"preset", "character", "persona", "regex_rules", "world_books", "llm_config"}
     for k in patch.keys():
         if k not in allowed_keys:
             raise ValueError(f"Unsupported settings field: {k}")
@@ -892,6 +900,8 @@ def settings_impl(
         settings["regex_rules"] = _ensure_list_str(patch.get("regex_rules"), "regex_rules")
     if "world_books" in patch:
         settings["world_books"] = _ensure_list_str(patch.get("world_books"), "world_books")
+    if "llm_config" in patch:
+        settings["llm_config"] = _validate_allowlisted_path_opt(patch.get("llm_config"), "llm_config")
     
     _safe_write_json(settings_path, settings)
     

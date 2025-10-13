@@ -98,6 +98,7 @@ const ChatBranches = {
     persona,
     regex = null,
     worldbook = null,
+    llm_config = null,
   }) {
     return postJSON('smarttavern/chat_branches/create_conversation', {
       name,
@@ -108,12 +109,13 @@ const ChatBranches = {
       persona_file: persona,
       regex_file: regex ?? null,
       worldbook_file: worldbook ?? null,
+      llm_config_file: llm_config ?? null,
     });
   },
 
   // 综合设置管理：读取(action=get)或更新(action=update)对话 settings
   // 使用 file 或 slug 二选一定位
-  // 字段：preset(string)、character(string)、persona(string)、regex_rules(array)、world_books(array)
+  // 字段：preset(string)、character(string)、persona(string)、regex_rules(array)、world_books(array)、llm_config(string)
   // 后端实现见：[python.function(settings)](api/modules/SmartTavern/chat_branches/chat_branches.py:282)
   async settings({ action, patch, file, slug }) {
     if (!action || !['get', 'update'].includes(action)) {

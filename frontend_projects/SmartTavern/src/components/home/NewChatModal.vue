@@ -31,12 +31,14 @@ const characterOptions = ref([])
 const personaOptions = ref([])
 const regexOptions = ref([])
 const worldbookOptions = ref([])
+const llmConfigOptions = ref([])
  
 const selectedPreset = ref('')
 const selectedCharacter = ref('')
 const selectedPersona = ref('')
 const selectedRegex = ref('')
 const selectedWorldbook = ref('')
+const selectedLLMConfig = ref('')
  
 // 加载与提交状态
 const loadingLists = ref(false)
@@ -53,6 +55,7 @@ function resetForm() {
   selectedPersona.value = ''
   selectedRegex.value = ''
   selectedWorldbook.value = ''
+  selectedLLMConfig.value = ''
   newGameError.value = ''
   fetchError.value = ''
   existingFileBases.value = new Set()
@@ -98,12 +101,13 @@ async function loadLists() {
   loadingLists.value = true
   fetchError.value = ''
   try {
-    const [presets, chars, personas, regex, worlds, convs] = await Promise.all([
+    const [presets, chars, personas, regex, worlds, llmConfigs, convs] = await Promise.all([
       DataCatalog.listPresets(),
       DataCatalog.listCharacters(),
       DataCatalog.listPersonas(),
       DataCatalog.listRegexRules(),
       DataCatalog.listWorldBooks(),
+      DataCatalog.listLLMConfigs(),
       DataCatalog.listConversations(), // 新增：获取现有对话列表，用于重名检测
     ])
     const mapOpts = (res, required, placeholder) => {
@@ -116,6 +120,7 @@ async function loadLists() {
       const head = { value: '', label: placeholder, file: '' }
       return required ? [head, ...opts] : [{ value: '', label: '（可不选）', file: '' }, ...opts]
     }
+    llmConfigOptions.value = mapOpts(llmConfigs, true, '请选择AI配置')
     presetOptions.value = mapOpts(presets, true, '请选择预设')
     characterOptions.value = mapOpts(chars, true, '请选择角色卡')
     personaOptions.value   = mapOpts(personas, true, '请选择用户信息')
@@ -159,8 +164,8 @@ watch(() => props.show, (v) => {
  
 async function onSubmit() {
   const name = (newChatName.value ?? '').trim() || '未命名会话'
-  if (!selectedPreset.value || !selectedCharacter.value || !selectedPersona.value) {
-    newGameError.value = '请先选择：预设、角色卡、用户信息（必选）'
+  if (!selectedLLMConfig.value || !selectedPreset.value || !selectedCharacter.value || !selectedPersona.value) {
+    newGameError.value = '请先选择：AI配置、预设、角色卡、用户信息（必选）'
     return
   }
   if (nameDupByFile.value || nameDupByTitle.value) {
@@ -172,6 +177,7 @@ async function onSubmit() {
     name,
     description: (newChatDesc.value ?? '').trim(),
     type: newChatType.value,
+    llm_config: selectedLLMConfig.value,
     preset: selectedPreset.value,
     character: selectedCharacter.value,
     persona: selectedPersona.value,
@@ -254,6 +260,13 @@ function onCancel() {
         <textarea id="new-chat-desc" v-model="newChatDesc" :disabled="submitting" rows="3" placeholder="请输入对话描述"></textarea>
       </div>
  
+      <div class="form-row">
+        <label for="new-chat-llmconfig">AI配置（必选）</label>
+        <select id="new-chat-llmconfig" v-model="selectedLLMConfig" :disabled="submitting">
+          <option v-for="opt in llmConfigOptions" :key="opt.value" :value="opt.value" :disabled="opt.value === ''">{{ opt.label }}</option>
+        </select>
+      </div>
+
       <div class="form-row">
         <label for="new-chat-preset">预设（必选）</label>
         <select id="new-chat-preset" v-model="selectedPreset" :disabled="submitting">

@@ -9,5 +9,6 @@
   "persona": "backend_projects/SmartTavern/data/persona/用户2.json",
   "regex_rules": [
     "backend_projects/SmartTavern/data/regex_rules/remove_xml_tags.json"
-  ]
+  ],
+  "llm_config": "backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json"
 }

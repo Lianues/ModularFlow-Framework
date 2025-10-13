@@ -277,6 +277,13 @@ async function onSubmit(text) {
     return
   }
 
+  // 清除上一个错误的占位符（如果有）
+  const lastMsg = props.messages[props.messages.length - 1]
+  if (lastMsg && lastMsg.error && lastMsg.id && String(lastMsg.id).startsWith('temp_')) {
+    props.messages.pop()
+    console.log('已清除错误的占位消息:', lastMsg.id)
+  }
+
   try {
     // 开始发送（禁用输入框和发送按钮）
     isSending.value = true
@@ -443,18 +450,24 @@ async function callAI() {
   // LLM配置文件（占位，后续可从设置中读取）
   const llmConfigFile = 'backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json'
 
+  // 创建AI占位消息索引
+  const aiPlaceholderIndex = props.messages.length
+  
   // 创建AI占位消息
-  const aiPlaceholder = {
+  props.messages.push({
     id: `temp_${Date.now()}`,
     role: 'assistant',
-    content: ''
-  }
-  props.messages.push(aiPlaceholder)
+    content: '',
+    error: null
+  })
+  
+  const aiPlaceholder = props.messages[aiPlaceholderIndex]
   ensurePaletteFor(aiPlaceholder)
 
   // 打字机缓冲区
   let typewriterBuffer = ''
   let isTyping = false
+  let hasReceivedError = false
 
   try {
     const eventSource = ChatCompletion.completeStream({
@@ -462,6 +475,9 @@ async function callAI() {
       llmConfigFile: llmConfigFile,
       callbacks: {
         onChunk: async (content) => {
+          // 如果已经收到错误，忽略后续内容
+          if (hasReceivedError) return
+          
           // 将新内容加入缓冲区
           typewriterBuffer += content
           
@@ -469,10 +485,10 @@ async function callAI() {
           if (!isTyping && typewriterBuffer.length > 0) {
             isTyping = true
             
-            while (typewriterBuffer.length > 0) {
+            while (typewriterBuffer.length > 0 && !hasReceivedError) {
               const char = typewriterBuffer[0]
               typewriterBuffer = typewriterBuffer.slice(1)
-              aiPlaceholder.content += char
+              props.messages[aiPlaceholderIndex].content += char
               
               // 滚动到底部
               await nextTick()
@@ -491,7 +507,9 @@ async function callAI() {
         
         onSaved: ({ node_id, doc }) => {
           // 保存成功，更新真实ID
-          aiPlaceholder.id = node_id
+          if (hasReceivedError) return
+          
+          props.messages[aiPlaceholderIndex].id = node_id
           console.log('AI响应已保存:', node_id)
           
           // 更新文档
@@ -502,11 +520,18 @@ async function callAI() {
         
         onError: (message) => {
           console.error('AI调用失败:', message)
-          // 移除占位消息
-          const idx = props.messages.findIndex(m => m.id === aiPlaceholder.id)
-          if (idx >= 0) {
-            props.messages.splice(idx, 1)
-          }
+          hasReceivedError = true
+          // 停止打字机效果
+          typewriterBuffer = ''
+          isTyping = false
+          
+          // 直接修改数组元素以触发响应式更新
+          props.messages[aiPlaceholderIndex].error = message || 'AI调用失败'
+          
+          // 强制刷新视图
+          nextTick(() => {
+            refreshIcons()
+          })
         },
         
         onEnd: async () => {
@@ -516,6 +541,12 @@ async function callAI() {
           }
           
           console.log('AI流式调用完成')
+          // 如果有错误，确保刷新显示
+          if (hasReceivedError) {
+            await nextTick()
+            refreshIcons()
+            return
+          }
           // 重新加载分支信息
           await loadBranchInfo()
           refreshIcons()
@@ -525,9 +556,8 @@ async function callAI() {
   } catch (error) {
     console.error('AI调用异常:', error)
     // 移除占位消息
-    const idx = props.messages.findIndex(m => m.id === aiPlaceholder.id)
-    if (idx >= 0) {
-      props.messages.splice(idx, 1)
+    if (props.messages[aiPlaceholderIndex]) {
+      props.messages.splice(aiPlaceholderIndex, 1)
     }
   }
 }

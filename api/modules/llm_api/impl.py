@@ -575,8 +575,10 @@ class LLMAPIManager:
                 yield from self._handle_openai_streaming_response(response, start_time)
 
         except Exception as e:
-            logger.error(f"流式响应处理失败: {str(e)}")
-            yield StreamChunk(content="", finish_reason="error")
+            error_msg = f"流式响应处理失败: {str(e)}"
+            logger.error(error_msg)
+            # 将错误信息放入content字段传递给前端
+            yield StreamChunk(content=f"[错误] {error_msg}", finish_reason="error")
 
     def _handle_openai_streaming_response(self, response, start_time: float) -> Iterator[StreamChunk]:
         """处理OpenAI格式的流式响应"""
@@ -1198,8 +1200,12 @@ def stream_chat_chunks(
             # 透传 manager 的流式分片
             yield chunk
     else:
-        # 若出现非预期返回，降级为单一结束分片
-        yield StreamChunk(content="", finish_reason="error", usage=None)
+        # 若返回 APIResponse（通常是错误），提取错误信息并转换为 StreamChunk
+        if isinstance(resp, APIResponse):
+            error_msg = resp.error or "未知错误"
+            yield StreamChunk(content=f"[错误] {error_msg}", finish_reason="error", usage=None)
+        else:
+            yield StreamChunk(content="[错误] 未知错误类型", finish_reason="error", usage=None)
 
 
 def list_models_impl(
