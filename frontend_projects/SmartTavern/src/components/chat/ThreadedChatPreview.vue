@@ -4,6 +4,7 @@ import { splitHtmlFromText } from '@/features/chat/normalizer.js'
 import usePalette from '@/composables/usePalette.js'
 import InputRow from '@/components/chat/InputRow.vue'
 import MessageItem from '@/components/chat/MessageItem.vue'
+import ChatCompletion from '@/services/chatCompletion.js'
 /**
  * 楼层对话预览（美化版）
  * 布局：头像占位 + 名称/角色 + 对话内容 + 楼层序号（#）
@@ -362,6 +363,9 @@ async function onSubmit(text) {
     })
 
     console.log('消息发送成功:', newNodeId)
+    
+    // 自动调用AI生成响应
+    await callAI()
   } catch (error) {
     console.error('发送消息失败:', error)
     
@@ -399,6 +403,133 @@ async function onBranchSwitched(data) {
   await loadBranchInfo()
   
   refreshIcons()
+}
+
+/**
+ * 打字机效果：逐字显示文本
+ */
+function typewriterEffect(targetObj, text, speed = 30) {
+  return new Promise((resolve) => {
+    let index = 0
+    const timer = setInterval(() => {
+      if (index < text.length) {
+        targetObj.content += text[index]
+        index++
+        
+        // 滚动到底部
+        nextTick(() => {
+          const container = messageListRef.value?.$el?.querySelector('.scroll-container')
+          if (container) {
+            container.scrollTop = container.scrollHeight
+          }
+        })
+      } else {
+        clearInterval(timer)
+        resolve()
+      }
+    }, speed)
+  })
+}
+
+/**
+ * 调用AI生成响应（流式，带打字机效果）
+ */
+async function callAI() {
+  if (!props.conversationFile) {
+    console.warn('无对话文件，跳过AI调用')
+    return
+  }
+
+  // LLM配置文件（占位，后续可从设置中读取）
+  const llmConfigFile = 'backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json'
+
+  // 创建AI占位消息
+  const aiPlaceholder = {
+    id: `temp_${Date.now()}`,
+    role: 'assistant',
+    content: ''
+  }
+  props.messages.push(aiPlaceholder)
+  ensurePaletteFor(aiPlaceholder)
+
+  // 打字机缓冲区
+  let typewriterBuffer = ''
+  let isTyping = false
+
+  try {
+    const eventSource = ChatCompletion.completeStream({
+      conversationFile: props.conversationFile,
+      llmConfigFile: llmConfigFile,
+      callbacks: {
+        onChunk: async (content) => {
+          // 将新内容加入缓冲区
+          typewriterBuffer += content
+          
+          // 如果当前没在打字，启动打字机效果
+          if (!isTyping && typewriterBuffer.length > 0) {
+            isTyping = true
+            
+            while (typewriterBuffer.length > 0) {
+              const char = typewriterBuffer[0]
+              typewriterBuffer = typewriterBuffer.slice(1)
+              aiPlaceholder.content += char
+              
+              // 滚动到底部
+              await nextTick()
+              const container = messageListRef.value?.$el?.querySelector('.scroll-container')
+              if (container) {
+                container.scrollTop = container.scrollHeight
+              }
+              
+              // 打字速度（毫秒）
+              await new Promise(r => setTimeout(r, 30))
+            }
+            
+            isTyping = false
+          }
+        },
+        
+        onSaved: ({ node_id, doc }) => {
+          // 保存成功，更新真实ID
+          aiPlaceholder.id = node_id
+          console.log('AI响应已保存:', node_id)
+          
+          // 更新文档
+          if (doc && props.conversationDoc) {
+            Object.assign(props.conversationDoc, doc)
+          }
+        },
+        
+        onError: (message) => {
+          console.error('AI调用失败:', message)
+          // 移除占位消息
+          const idx = props.messages.findIndex(m => m.id === aiPlaceholder.id)
+          if (idx >= 0) {
+            props.messages.splice(idx, 1)
+          }
+        },
+        
+        onEnd: async () => {
+          // 等待打字机效果完成
+          while (isTyping || typewriterBuffer.length > 0) {
+            await new Promise(r => setTimeout(r, 50))
+          }
+          
+          console.log('AI流式调用完成')
+          // 重新加载分支信息
+          await loadBranchInfo()
+          refreshIcons()
+        }
+      }
+    })
+  } catch (error) {
+    console.error('AI调用异常:', error)
+    // 移除占位消息
+    const idx = props.messages.findIndex(m => m.id === aiPlaceholder.id)
+    if (idx >= 0) {
+      props.messages.splice(idx, 1)
+    }
+  }
 }
 
 function splitDoc(msg) { return splitHtmlFromText(msg.content) }

@@ -334,11 +334,6 @@ async function switchBranch(direction) {
       props.msg.role = result.node.role
       props.msg.content = result.node.content
       
-      // 显示成功状态
-      switchStatus.value = 'success'
-      switchMessage.value = '已切换'
-      refreshIcons()
-      
       // 触发更新事件，传递新的节点信息和完整文档
       emit('branch-switched', {
         msg: props.msg,
@@ -348,6 +343,14 @@ async function switchBranch(direction) {
           n: result.node.n
         }
       })
+      
+      // 等待父组件更新分支信息后再显示成功状态
+      await nextTick()
+      
+      // 显示成功状态
+      switchStatus.value = 'success'
+      switchMessage.value = '已切换'
+      refreshIcons()
       
       // 1秒后清除成功提示
       setTimeout(() => {
