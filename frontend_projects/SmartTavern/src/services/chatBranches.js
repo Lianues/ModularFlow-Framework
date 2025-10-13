@@ -157,6 +157,22 @@ const ChatBranches = {
       content
     });
   },
+
+  // 更新消息内容：修改指定节点的 content
+  // 后端实现见：[python.function(update_message)](api/modules/SmartTavern/chat_branches/chat_branches.py:138)
+  async updateMessage({ file, node_id, content }) {
+    if (!file) {
+      throw new Error('[ChatBranches] updateMessage: file is required');
+    }
+    if (!node_id || content === undefined) {
+      throw new Error('[ChatBranches] updateMessage: node_id and content are required');
+    }
+    return postJSON('smarttavern/chat_branches/update_message', {
+      file,
+      node_id,
+      content
+    });
+  },
 };
 
 export default ChatBranches;

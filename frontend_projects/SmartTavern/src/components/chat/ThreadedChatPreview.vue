@@ -357,8 +357,12 @@ async function onSubmit(text) {
   }
 }
 
-function hasHtmlDoc(msg) { return hasHtmlDocText(msg.content) }
-function getHtmlDoc(msg) { return extractHtmlDocFromText(msg.content) }
+function onMessageUpdate(msg) {
+  // 消息更新后的回调（可选）
+  console.log('消息已更新:', msg.id)
+  refreshIcons()
+}
+
 function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 </script>
 
@@ -382,9 +386,11 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :split-after="splitDoc(m).after"
               :pending-active="pendingMessageId === m.id"
               :pending-seconds="pendingSeconds"
+              :conversation-file="props.conversationFile"
               @delete="deleteMessage"
               @regenerate="regenerateMessage"
               @edit="startEdit"
+              @update="onMessageUpdate"
             />
         </transition-group>
       </div>

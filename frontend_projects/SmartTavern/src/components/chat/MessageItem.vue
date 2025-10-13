@@ -65,7 +65,21 @@
           </div>
         </header>
 
-        <section data-part="content" class="floor-content">
+        <!-- 编辑模式：显示 textarea -->
+        <section v-if="isEditing" data-part="content" class="floor-content editing">
+          <textarea
+            v-model="editingContent"
+            class="edit-textarea"
+            :disabled="isSaving"
+            placeholder="输入消息内容..."
+            @keydown.ctrl.enter="saveEdit"
+            @keydown.meta.enter="saveEdit"
+            @keydown.esc="cancelEdit"
+          ></textarea>
+        </section>
+
+        <!-- 正常模式：显示消息内容 -->
+        <section v-else data-part="content" class="floor-content">
           <HtmlStage
             v-if="splitHtml"
             :before="splitBefore"
@@ -79,7 +93,30 @@
 
         <!-- 楼层页脚：左侧操作按钮 -->
         <div class="floor-footer">
-          <div class="floor-actions">
+          <!-- 编辑模式：显示保存和取消按钮 -->
+          <div v-if="isEditing" class="floor-actions editing-actions">
+            <button
+              class="act-btn save-btn"
+              @click="saveEdit"
+              :disabled="isSaving"
+              title="保存 (Ctrl+Enter)"
+              aria-label="保存"
+            >
+              <i data-lucide="check" class="icon-16" aria-hidden="true"></i>
+            </button>
+            <button
+              class="act-btn cancel-btn"
+              @click="cancelEdit"
+              :disabled="isSaving"
+              title="取消 (Esc)"
+              aria-label="取消"
+            >
+              <i data-lucide="x" class="icon-16" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <!-- 正常模式：显示复制、重试、编辑按钮 -->
+          <div v-else class="floor-actions">
             <transition name="copy-tip">
               <div v-if="copied" class="copy-tip">已复制</div>
             </transition>
@@ -125,9 +162,11 @@ const props = defineProps({
   // 等待态
   pendingActive: { type: Boolean, default: false },
   pendingSeconds: { type: Number, default: 0 },
+  // 对话文件路径（用于编辑保存）
+  conversationFile: { type: String, default: null },
 })
 
-const emit = defineEmits(['delete', 'regenerate', 'edit'])
+const emit = defineEmits(['delete', 'regenerate', 'edit', 'update'])
 
 const roleMap = { user: '用户', assistant: '助手', system: '系统' }
 function roleLabel(role) { return roleMap[role] ?? '未知' }
@@ -135,9 +174,12 @@ function nameOf(msg) { return roleLabel(msg.role) }
 
 const { ensurePaletteFor, stripeStyle } = usePalette()
 
-// 菜单/复制态
+// 菜单/复制/编辑态
 const menuOpen = ref(false)
 const copied = ref(false)
+const isEditing = ref(false)
+const editingContent = ref('')
+const isSaving = ref(false)
 
 function refreshIcons() {
   nextTick(() => {
@@ -190,7 +232,67 @@ function emitDelete() {
   menuOpen.value = false
 }
 function emitRegenerate() { emit('regenerate', props.msg) }
-function emitEdit() { emit('edit', props.msg) }
+function emitEdit() {
+  // 进入编辑模式
+  isEditing.value = true
+  editingContent.value = props.msg.content
+  refreshIcons()
+}
+
+function cancelEdit() {
+  isEditing.value = false
+  editingContent.value = ''
+  refreshIcons()
+}
+
+async function saveEdit() {
+  if (isSaving.value) return
+  
+  const newContent = editingContent.value.trim()
+  if (!newContent) {
+    // 内容为空，取消编辑
+    cancelEdit()
+    return
+  }
+  
+  if (!props.conversationFile) {
+    console.error('无法保存编辑：缺少 conversationFile')
+    cancelEdit()
+    return
+  }
+  
+  try {
+    isSaving.value = true
+    
+    // 导入 ChatBranches API
+    const ChatBranches = (await import('@/services/chatBranches.js')).default
+    
+    // 调用后端 update_message API
+    await ChatBranches.updateMessage({
+      file: props.conversationFile,
+      node_id: props.msg.id,
+      content: newContent
+    })
+    
+    // 更新本地消息内容
+    props.msg.content = newContent
+    
+    // 发出更新事件（可选，如果父组件需要）
+    emit('update', props.msg)
+    
+    // 退出编辑模式
+    isEditing.value = false
+    editingContent.value = ''
+    
+    console.log('消息编辑成功:', props.msg.id)
+  } catch (error) {
+    console.error('保存编辑失败:', error)
+    // 保持编辑模式，让用户可以重试
+  } finally {
+    isSaving.value = false
+    refreshIcons()
+  }
+}
 </script>
 
 <style scoped>
@@ -331,6 +433,66 @@ function emitEdit() { emit('edit', props.msg) }
   padding: 0 4px; border-radius: var(--st-radius-sm);
 }
 [data-theme="dark"] .floor-content code { background: rgba(var(--st-color-text), 0.14); }
+
+/* 编辑模式样式 */
+.edit-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid rgba(var(--st-border), 0.9);
+  border-radius: var(--st-radius-md);
+  background: rgb(var(--st-surface) / 0.9);
+  color: rgb(var(--st-color-text));
+  font-family: var(--st-font-body);
+  font-size: var(--st-content-font-size, 18px);
+  line-height: var(--st-content-line-height, 1.75);
+  resize: vertical;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.edit-textarea:focus {
+  outline: none;
+  border-color: rgba(var(--st-primary), 0.6);
+  box-shadow: 0 0 0 3px rgba(var(--st-primary), 0.08);
+}
+.edit-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 编辑模式的操作按钮样式 */
+.editing-actions {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+.save-btn {
+  background: linear-gradient(135deg, rgba(var(--st-accent),1), rgba(var(--st-primary),1)) !important;
+  color: var(--st-primary-contrast) !important;
+  border-color: transparent !important;
+}
+.save-btn:hover:not(:disabled) {
+  filter: saturate(1.08) brightness(1.04);
+  transform: translateY(-1px);
+}
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  background: rgba(220, 38, 38, 0.1) !important;
+  color: rgb(220, 38, 38) !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+}
+.cancel-btn:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.18) !important;
+  border-color: rgba(220, 38, 38, 0.6) !important;
+  transform: translateY(-1px);
+}
+.cancel-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 /* 菜单 */
 .menu-wrapper { position: relative; }
