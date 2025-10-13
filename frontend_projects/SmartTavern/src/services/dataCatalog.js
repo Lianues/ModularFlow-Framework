@@ -81,6 +81,9 @@ const DataCatalog = {
   listConversations() {
     return postJSON('smarttavern/data_catalog/list_conversations', {});
   },
+  listLLMConfigs() {
+    return postJSON('smarttavern/data_catalog/list_llm_configs', {});
+  },
 
   // Lightweight cache (in-memory + localStorage)
   _lsKey: 'st.datacache.v1',
@@ -133,6 +136,7 @@ const DataCatalog = {
       persona: 'smarttavern/data_catalog/get_persona_detail',
       regex: 'smarttavern/data_catalog/get_regex_rule_detail',
       conversation: 'smarttavern/data_catalog/get_conversation_detail',
+      llmconfig: 'smarttavern/data_catalog/get_llm_config_detail',
     };
     const path = pathMap[type];
     if (!path) throw new Error(`[DataCatalog] Unknown detail type: ${type}`);
@@ -147,6 +151,7 @@ const DataCatalog = {
   getPersonaDetail(file, opts)  { return this._getDetail('persona', file, opts); },
   getRegexRuleDetail(file, opts){ return this._getDetail('regex', file, opts); },
   getConversationDetail(file, opts){ return this._getDetail('conversation', file, opts); },
+  getLLMConfigDetail(file, opts){ return this._getDetail('llmconfig', file, opts); },
 
   // Update APIs (create/update)
   updatePresetFile(file, content, name, description) {
@@ -164,6 +169,9 @@ const DataCatalog = {
   updateRegexRuleFile(file, content, name, description) {
     return postJSON('smarttavern/data_catalog/update_regex_rule_file', { file, content, name, description });
   },
+  updateLLMConfigFile(file, content, name, description) {
+    return postJSON('smarttavern/data_catalog/update_llm_config_file', { file, content, name, description });
+  },
 
   // Small helper to map backend items to UI cards (icon per type)
   mapToCards(items, type = 'generic') {
@@ -173,6 +181,7 @@ const DataCatalog = {
       characters: '👤',
       personas: '🧠',
       regex_rules: '🧹',
+      llm_configs: '🔌',
       generic: '📦',
     };
     const icon = iconMap[type] || iconMap.generic;

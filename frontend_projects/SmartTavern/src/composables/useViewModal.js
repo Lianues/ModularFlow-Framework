@@ -20,7 +20,7 @@ export function useViewModal() {
   // state
   const viewModalOpen    = ref(false)
   const viewModalTitle   = ref('')
-  const viewModalType    = ref('') // 'preset' | 'worldbook' | 'character' | 'persona' | 'regex'
+  const viewModalType    = ref('') // 'preset' | 'worldbook' | 'character' | 'persona' | 'regex' | 'aiconfig'
   const viewModalData    = ref(null)
   const viewModalLoading = ref(false)
   const viewModalError   = ref('')
@@ -51,6 +51,7 @@ export function useViewModal() {
           character: (f) => DataCatalog.getCharacterDetail(f, { useCache: false, persist: false }),
           persona:   (f) => DataCatalog.getPersonaDetail(f,   { useCache: false, persist: false }),
           regex:     (f) => DataCatalog.getRegexRuleDetail(f, { useCache: false, persist: false }),
+          aiconfig:  (f) => DataCatalog.getLLMConfigDetail(f, { useCache: false, persist: false }),
         }
         const fn = fetchers[type]
         if (!fn) throw new Error(`未知类型: ${type}`)

@@ -17,6 +17,7 @@ import WorldbookDetailView from '@/components/content/WorldbookDetailView.vue'
 import CharacterDetailView from '@/components/content/CharacterDetailView.vue'
 import PersonaDetailView from '@/components/content/PersonaDetailView.vue'
 import RegexDetailView from '@/components/content/RegexDetailView.vue'
+import AIConfigDetailView from '@/components/content/AIConfigDetailView.vue'
 import NewChatModal from '@/components/home/NewChatModal.vue'
 import LoadGameModal from '@/components/home/LoadGameModal.vue'
 import GalleryModal from '@/components/home/GalleryModal.vue'
@@ -335,8 +336,9 @@ async function onNewChatConfirm(payload) {
       <transition name="st-subpage">
         <AIConfigPanel
           v-if="showSidebar && aiConfigOpen"
-          :currentPreset="currentPresetData"
+          :conversationFile="currentConversationFile"
           @close="aiConfigOpen = false"
+          @view="(key) => openViewModal('aiconfig', 'AI配置详情 - ' + key, key)"
         />
       </transition>
     </template>
@@ -393,6 +395,11 @@ async function onNewChatConfirm(payload) {
       <RegexDetailView
         v-else-if="viewModalType === 'regex'"
         :regexData="viewModalData"
+        :file="viewModalFile"
+      />
+      <AIConfigDetailView
+        v-else-if="viewModalType === 'aiconfig'"
+        :llmConfigData="viewModalData"
         :file="viewModalFile"
       />
       <div v-else class="modal-placeholder">

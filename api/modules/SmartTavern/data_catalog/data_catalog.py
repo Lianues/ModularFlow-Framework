@@ -22,6 +22,7 @@ from .impl import (
     list_personas_impl,
     list_regex_rules_impl,
     list_conversations_impl,
+    list_llm_configs_impl,
 )
 
 
@@ -738,3 +739,126 @@ def update_regex_rule_file(file: str, content: dict, name: str = None, descripti
     if description is not None:
         payload["description"] = description
     return update_regex_rule_file_impl(file=file, payload=payload)
+
+
+# ---------- LLM配置（llm_configs） ----------
+
+@core.register_api(
+    path="smarttavern/data_catalog/list_llm_configs",
+    name="列出LLM配置清单（名称与描述）",
+    description="扫描 backend_projects/SmartTavern/data/llm_configs 下的 JSON 文件，返回文件相对路径与其 name/description 字段（若存在）。",
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "folder": {"type": "string"},
+            "total": {"type": "integer"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string"},
+                        "name": {"type": ["string", "null"]},
+                        "description": {"type": ["string", "null"]}
+                    },
+                    "required": ["file"],
+                    "additionalProperties": True
+                }
+            },
+            "errors": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": ["string", "null"]},
+                        "error": {"type": "string"}
+                    },
+                    "required": ["error"]
+                }
+            }
+        },
+        "required": ["folder", "total", "items"],
+        "additionalProperties": False
+    },
+)
+def list_llm_configs(base_dir: Optional[str] = None,
+                     fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    return list_llm_configs_impl()
+
+
+@core.register_api(
+    path="smarttavern/data_catalog/get_llm_config_detail",
+    name="获取LLM配置详情",
+    description="读取 backend_projects/SmartTavern/data/llm_configs 下指定 JSON 文件，返回完整内容与基础字段。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "列表接口返回的 file 相对路径（POSIX 风格），例如 backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json"
+            }
+        },
+        "required": ["file"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string", "null"]},
+            "description": {"type": ["string", "null"]},
+            "content": {"type": ["object", "array", "null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def get_llm_config_detail(file: str) -> Dict[str, Any]:
+    from .impl import get_llm_config_detail_impl
+    return get_llm_config_detail_impl(file=file)
+
+
+@core.register_api(
+    path="smarttavern/data_catalog/update_llm_config_file",
+    name="保存LLM配置文件",
+    description="在 llm_configs 目录创建或更新指定 JSON 文件。若提供 name/description，将写入 content 顶层。",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "content": {"type": ["object","array"]},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]}
+        },
+        "required": ["file", "content"],
+        "additionalProperties": False
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "file": {"type": "string"},
+            "name": {"type": ["string","null"]},
+            "description": {"type": ["string","null"]},
+            "content": {"type": ["object","array","null"]},
+            "error": {"type": "string"},
+            "message": {"type": "string"}
+        },
+        "required": [],
+        "additionalProperties": True
+    },
+)
+def update_llm_config_file(file: str, content: dict, name: str = None, description: str = None) -> Dict[str, Any]:
+    from .impl import update_llm_config_file_impl
+    payload: Dict[str, Any] = {"content": content}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    return update_llm_config_file_impl(file=file, payload=payload)

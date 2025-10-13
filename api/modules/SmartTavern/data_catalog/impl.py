@@ -745,3 +745,102 @@ def update_regex_rule_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str,
     root = _repo_root()
     regex_dir = root / "backend_projects" / "SmartTavern" / "data" / "regex_rules"
     return _update_json_in_dir(file, regex_dir, payload)
+
+
+# ---------- 实现：列出 llm_configs ----------
+
+def list_llm_configs_impl(base_dir: Optional[str] = None,
+                          fields: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    扫描 llm_configs 目录，返回文件相对路径与所需字段（name/description）
+    """
+    root = _repo_root()
+    default_folder = root / "backend_projects" / "SmartTavern" / "data" / "llm_configs"
+
+    if base_dir:
+        b = Path(base_dir)
+        folder = (root / b).resolve() if not b.is_absolute() else b.resolve()
+    else:
+        folder = default_folder
+
+    want_name = True
+    want_desc = True
+    if isinstance(fields, list) and fields:
+        fs = [str(x).strip().lower() for x in fields if isinstance(x, str)]
+        want_name = "name" in fs
+        want_desc = "description" in fs
+
+    items: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+
+    if not folder.exists() or not folder.is_dir():
+        return {
+            "folder": _path_rel_to_root(folder, root),
+            "total": 0,
+            "items": [],
+            "errors": [{"file": None, "error": f"Folder not found: {folder}"}]
+        }
+
+    for p in sorted(folder.glob("*.json")):
+        doc, err = _safe_read_json(p)
+        if err:
+            errors.append({"file": _path_rel_to_root(p, root), "error": err})
+            continue
+
+        name = _ensure_str((doc or {}).get("name")) if want_name else None
+        desc = _ensure_str((doc or {}).get("description")) if want_desc else None
+
+        item: Dict[str, Any] = {"file": _path_rel_to_root(p, root)}
+        if want_name:
+            item["name"] = name
+        if want_desc:
+            item["description"] = desc
+        items.append(item)
+
+    out: Dict[str, Any] = {
+        "folder": _path_rel_to_root(folder, root),
+        "total": len(items),
+        "items": items
+    }
+    if errors:
+        out["errors"] = errors
+    return out
+
+
+# ---------- 实现：读取单个 llm_config 详情 ----------
+
+def get_llm_config_detail_impl(file: str) -> Dict[str, Any]:
+    """
+    读取 backend_projects/SmartTavern/data/llm_configs 下指定 JSON 文件，返回完整内容与基础字段。
+    """
+    root = _repo_root()
+    llm_dir = root / "backend_projects" / "SmartTavern" / "data" / "llm_configs"
+
+    if not isinstance(file, str) or not file:
+        return {"error": "INVALID_INPUT", "message": "file 必须为非空字符串"}
+
+    target = (root / Path(file)).resolve()
+    if not _is_within(target, llm_dir):
+        return {"error": "OUT_OF_SCOPE", "message": "仅允许读取 llm_configs 目录下的文件"}
+
+    doc, err = _safe_read_json(target)
+    if err:
+        return {"error": "READ_FAILED", "message": err, "file": _path_rel_to_root(target, root)}
+
+    name = _ensure_str((doc or {}).get("name"))
+    desc = _ensure_str((doc or {}).get("description"))
+
+    return {
+        "file": _path_rel_to_root(target, root),
+        "name": name,
+        "description": desc,
+        "content": doc,
+    }
+
+
+# ---------- 实现：更新/创建 llm_config 文件 ----------
+
+def update_llm_config_file_impl(file: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    root = _repo_root()
+    llm_dir = root / "backend_projects" / "SmartTavern" / "data" / "llm_configs"
+    return _update_json_in_dir(file, llm_dir, payload)
