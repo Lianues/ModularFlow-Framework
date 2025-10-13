@@ -148,27 +148,37 @@
             </button>
           </div>
 
-          <!-- 正常模式：显示复制、重试、编辑按钮 -->
+          <!-- 正常模式：显示操作按钮 -->
           <div v-else class="floor-actions">
-            <transition name="copy-tip">
-              <div v-if="copied" class="copy-tip">已复制</div>
-            </transition>
+            <!-- 错误消息只显示重试按钮 -->
+            <template v-if="msg.error">
+              <button class="act-btn" @click="emitRegenerate" title="重试" aria-label="重试">
+                <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
+              </button>
+            </template>
+            
+            <!-- 正常消息显示完整按钮 -->
+            <template v-else>
+              <transition name="copy-tip">
+                <div v-if="copied" class="copy-tip">已复制</div>
+              </transition>
 
-            <button
-              class="act-btn"
-              :class="{ success: copied }"
-              @click="copyMessage"
-              :title="copied ? '已复制' : '复制'"
-              :aria-label="copied ? '已复制' : '复制'"
-            >
-              <i :data-lucide="copied ? 'check' : 'copy'" class="icon-16" aria-hidden="true"></i>
-            </button>
-            <button class="act-btn" @click="emitRegenerate" title="重试" aria-label="重试">
-              <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
-            </button>
-            <button class="act-btn" @click="emitEdit" title="编辑" aria-label="编辑">
-              <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>
-            </button>
+              <button
+                class="act-btn"
+                :class="{ success: copied }"
+                @click="copyMessage"
+                :title="copied ? '已复制' : '复制'"
+                :aria-label="copied ? '已复制' : '复制'"
+              >
+                <i :data-lucide="copied ? 'check' : 'copy'" class="icon-16" aria-hidden="true"></i>
+              </button>
+              <button class="act-btn" @click="emitRegenerate" title="重试" aria-label="重试">
+                <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
+              </button>
+              <button class="act-btn" @click="emitEdit" title="编辑" aria-label="编辑">
+                <i data-lucide="pencil" class="icon-16" aria-hidden="true"></i>
+              </button>
+            </template>
           </div>
 
           <!-- 右侧：分支切换器（仅最后一条消息显示） -->
