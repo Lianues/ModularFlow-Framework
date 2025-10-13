@@ -29,6 +29,7 @@ from .impl import (
     update_message_content as _update_message_content,
     truncate_after_node as _truncate_after_node,
     append_new_message as _append_new_message,
+    switch_branch_impl as _switch_branch_impl,
     create_conversation_impl as _create_conversation_impl,
     settings_impl as _settings_impl,
     variables_impl as _variables_impl,
@@ -217,6 +218,50 @@ def truncate_after(node_id: str, doc: Dict[str, Any] = None, file: str = None) -
 )
 def append_message(node_id: str, pid: str, role: str, content: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
     return _append_new_message(node_id=node_id, pid=pid, role=role, content=content, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/switch_branch",
+    name="切换分支",
+    description="切换当前 active_path 最后节点的分支到目标序号（相邻切换：±1）",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "target_j": {"type": "integer", "minimum": 1},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["target_j"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["target_j", "doc"]},
+            {"required": ["target_j", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "doc": {"type": "object", "additionalProperties": True},
+            "node": {
+                "type": "object",
+                "properties": {
+                    "node_id": {"type": "string"},
+                    "pid": {"type": "string"},
+                    "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+                    "content": {"type": "string"},
+                    "j": {"type": "integer"},
+                    "n": {"type": "integer"}
+                },
+                "required": ["node_id", "pid", "role", "content", "j", "n"],
+                "additionalProperties": False
+            }
+        },
+        "required": ["doc", "node"],
+        "additionalProperties": False
+    },
+)
+def switch_branch(target_j: int, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _switch_branch_impl(target_j=target_j, doc=doc, file=file)
 
 
 @core.register_api(

@@ -418,6 +418,101 @@ def truncate_after_node(
     return loaded_doc
 
 
+def switch_branch_impl(
+    target_j: int,
+    doc: Optional[Dict[str, Any]] = None,
+    file: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    切换当前 active_path 最后节点的分支。
+    
+    参数：
+    - target_j: 目标分支序号（1-based，相邻切换：当前j±1）
+    - doc/file: 二选一输入
+    
+    返回：
+      {
+        "doc": 更新后的完整文档（active_path 更新，updated_at 更新）,
+        "node": {
+          "node_id": 新节点ID,
+          "pid": 父节点ID,
+          "role": 角色,
+          "content": 内容,
+          "j": 当前分支序号,
+          "n": 总分支数
+        }
+      }
+    
+    说明：
+    - 获取当前 active_path 的最后节点
+    - 从其父节点的 children 中切换到第 target_j 个兄弟节点
+    - 更新 active_path，替换最后一个节点为目标节点
+    - 若 target_j 超出范围则报错
+    """
+    loaded_doc = _load_doc_from_file_or_obj(doc, file)
+    nodes = loaded_doc.get("nodes") or {}
+    children_map = loaded_doc.get("children") or {}
+    active_path = list(loaded_doc.get("active_path") or [])
+    
+    if not active_path:
+        raise ValueError("active_path is empty")
+    
+    # 获取当前最后节点
+    current_node_id = active_path[-1]
+    current_node = nodes.get(current_node_id)
+    if not current_node:
+        raise ValueError(f"Current node not found: {current_node_id}")
+    
+    # 获取父节点
+    parent_id = current_node.get("pid")
+    if parent_id is None:
+        raise ValueError("Cannot switch branch for root node")
+    
+    # 获取父节点的所有子节点
+    siblings = children_map.get(parent_id, [])
+    if not siblings:
+        raise ValueError(f"No siblings found for parent: {parent_id}")
+    
+    # 验证 target_j 范围
+    if target_j < 1 or target_j > len(siblings):
+        raise ValueError(f"Invalid target_j={target_j}, must be between 1 and {len(siblings)}")
+    
+    # 获取目标节点（j 是 1-based）
+    target_node_id = siblings[target_j - 1]
+    target_node = nodes.get(target_node_id)
+    if not target_node:
+        raise ValueError(f"Target node not found: {target_node_id}")
+    
+    # 更新 active_path：替换最后一个节点
+    active_path[-1] = target_node_id
+    loaded_doc["active_path"] = active_path
+    _update_timestamp(loaded_doc)
+    
+    # 如果传入了 file 参数，保存更新后的文档到文件
+    if file is not None and isinstance(file, str) and file.strip():
+        root = _repo_root()
+        conversations_dir = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+        target_path = (root / Path(file)).resolve()
+        
+        if not _is_within(target_path, conversations_dir):
+            raise ValueError(f"File must be within conversations directory: {file}")
+        
+        _safe_write_json(target_path, loaded_doc)
+    
+    # 返回文档和新节点信息
+    return {
+        "doc": loaded_doc,
+        "node": {
+            "node_id": target_node_id,
+            "pid": parent_id,
+            "role": target_node.get("role") or "assistant",
+            "content": target_node.get("content") or "",
+            "j": target_j,
+            "n": len(siblings)
+        }
+    }
+
+
 def append_new_message(
     node_id: str,
     pid: str,

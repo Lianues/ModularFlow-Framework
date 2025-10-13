@@ -1,7 +1,9 @@
 {
   "name": "分支演示对话",
   "description": "示例：分支重试对话（演示数据）",
-  "roots": ["n_root"],
+  "roots": [
+    "n_root"
+  ],
   "nodes": {
     "n_root": {
       "pid": null,
@@ -32,6 +34,11 @@
       "pid": "n_user2",
       "role": "assistant",
       "content": "可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。"
+    },
+    "n_ass4": {
+      "pid": "n_user2",
+      "role": "assistant",
+      "content": "另一种导出方式：你可以使用 branch_table 接口查看当前分支情况，然后决定是否要切换到其他分支继续对话。111"
     }
   },
   "children": {
@@ -46,7 +53,8 @@
       "n_user2"
     ],
     "n_user2": [
-      "n_ass3"
+      "n_ass3",
+      "n_ass4"
     ]
   },
   "active_path": [
@@ -54,7 +62,7 @@
     "n_user1",
     "n_ass1",
     "n_user2",
-    "n_ass3"
+    "n_ass4"
   ],
-  "updated_at": "2025-10-13T16:13:10+08:00"
+  "updated_at": "2025-10-13T22:15:35+08:00"
 }

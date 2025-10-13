@@ -188,6 +188,21 @@ const ChatBranches = {
       node_id
     });
   },
+
+  // 切换分支：切换 active_path 最后节点到目标分支序号
+  // 后端实现见：[python.function(switch_branch)](api/modules/SmartTavern/chat_branches/chat_branches.py:222)
+  async switchBranch({ file, target_j }) {
+    if (!file) {
+      throw new Error('[ChatBranches] switchBranch: file is required');
+    }
+    if (!target_j || target_j < 1) {
+      throw new Error('[ChatBranches] switchBranch: target_j must be >= 1');
+    }
+    return postJSON('smarttavern/chat_branches/switch_branch', {
+      file,
+      target_j
+    });
+  },
 };
 
 export default ChatBranches;

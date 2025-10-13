@@ -159,8 +159,38 @@
             </button>
           </div>
 
-          <!-- 右侧空位留给父组件（如分支切换器） -->
+          <!-- 右侧：分支切换器（仅最后一条消息显示） -->
           <div style="flex:1"></div>
+          <div v-if="isLast && branchInfo && branchInfo.j && branchInfo.n" class="branch-switcher">
+            <!-- 切换状态提示 -->
+            <div v-if="switchStatus" class="status-chip" :class="`status-${switchStatus}`" aria-live="polite">
+              <i v-if="switchStatus === 'switching'" data-lucide="loader-circle" class="icon-14 chip-spinner-icon" aria-hidden="true"></i>
+              <i v-else-if="switchStatus === 'success'" data-lucide="check" class="icon-14" aria-hidden="true"></i>
+              <span class="chip-text">{{ switchMessage }}</span>
+            </div>
+            
+            <button
+              class="branch-btn"
+              @click="switchBranch('left')"
+              :disabled="branchInfo.j <= 1 || switchStatus === 'switching'"
+              title="切换到前一个分支"
+              aria-label="前一个分支"
+            >
+              <i data-lucide="chevron-left" class="icon-14" aria-hidden="true"></i>
+            </button>
+            <div class="branch-indicator">
+              {{ branchInfo.j }}/{{ branchInfo.n }}
+            </div>
+            <button
+              class="branch-btn"
+              @click="switchBranch('right')"
+              :disabled="branchInfo.j >= branchInfo.n || switchStatus === 'switching'"
+              title="切换到下一个分支"
+              aria-label="下一个分支"
+            >
+              <i data-lucide="chevron-right" class="icon-14" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -188,9 +218,11 @@ const props = defineProps({
   sendMessage: { type: String, default: '' },
   // 对话文件路径（用于编辑保存）
   conversationFile: { type: String, default: null },
+  // 分支信息 { j, n }
+  branchInfo: { type: Object, default: null },
 })
 
-const emit = defineEmits(['delete', 'regenerate', 'edit', 'update'])
+const emit = defineEmits(['delete', 'regenerate', 'edit', 'update', 'branch-switched'])
 
 const roleMap = { user: '用户', assistant: '助手', system: '系统' }
 function roleLabel(role) { return roleMap[role] ?? '未知' }
@@ -207,6 +239,8 @@ const saveStatus = ref(null) // null | 'saving' | 'success' | 'error'
 const saveMessage = ref('')
 const deleteStatus = ref(null) // null | 'deleting' | 'success' | 'error'
 const deleteMessage = ref('')
+const switchStatus = ref(null) // null | 'switching' | 'success'
+const switchMessage = ref('')
 
 function refreshIcons() {
   nextTick(() => {
@@ -252,6 +286,84 @@ function copyMessage() {
     })
   } catch (_) {}
   menuOpen.value = false
+}
+
+async function switchBranch(direction) {
+  if (switchStatus.value === 'switching') return
+  
+  if (!props.branchInfo || !props.conversationFile) {
+    console.error('无法切换分支：缺少分支信息或对话文件')
+    return
+  }
+  
+  // 计算目标 j 值
+  const currentJ = props.branchInfo.j
+  const totalN = props.branchInfo.n
+  let targetJ = currentJ
+  
+  if (direction === 'left') {
+    targetJ = currentJ - 1
+  } else if (direction === 'right') {
+    targetJ = currentJ + 1
+  }
+  
+  // 验证范围
+  if (targetJ < 1 || targetJ > totalN) {
+    console.warn(`目标分支 ${targetJ} 超出范围 [1, ${totalN}]`)
+    return
+  }
+  
+  try {
+    switchStatus.value = 'switching'
+    switchMessage.value = '切换中...'
+    refreshIcons()
+    
+    console.log(`切换分支: ${direction}, ${currentJ} -> ${targetJ}`)
+    
+    const ChatBranches = (await import('@/services/chatBranches.js')).default
+    
+    // 调用后端切换分支接口
+    const result = await ChatBranches.switchBranch({
+      file: props.conversationFile,
+      target_j: targetJ
+    })
+    
+    // 更新消息内容
+    if (result.node) {
+      props.msg.id = result.node.node_id
+      props.msg.role = result.node.role
+      props.msg.content = result.node.content
+      
+      // 显示成功状态
+      switchStatus.value = 'success'
+      switchMessage.value = '已切换'
+      refreshIcons()
+      
+      // 触发更新事件，传递新的节点信息和完整文档
+      emit('branch-switched', {
+        msg: props.msg,
+        doc: result.doc,
+        branchInfo: {
+          j: result.node.j,
+          n: result.node.n
+        }
+      })
+      
+      // 1秒后清除成功提示
+      setTimeout(() => {
+        switchStatus.value = null
+        switchMessage.value = ''
+        refreshIcons()
+      }, 1000)
+    }
+    
+    console.log('分支切换成功:', result.node)
+  } catch (error) {
+    console.error('切换分支失败:', error)
+    switchStatus.value = null
+    switchMessage.value = ''
+    refreshIcons()
+  }
 }
 
 async function emitDelete() {
@@ -784,4 +896,61 @@ async function saveEdit() {
 :global([data-scope="message-list"]) .floor-card.msg-enter-active:nth-last-child(1) { transition-delay: 24ms; }
 :global([data-scope="message-list"]) .floor-card.msg-enter-active:nth-last-child(2) { transition-delay: 48ms; }
 :global([data-scope="message-list"]) .floor-card.msg-enter-active:nth-last-child(3) { transition-delay: 72ms; }
+
+/* 分支切换器容器 */
+.branch-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 分支切换按钮 */
+.branch-btn {
+  appearance: none;
+  background: rgba(var(--st-primary), 0.08);
+  border: 1px solid rgba(var(--st-primary), 0.3);
+  color: rgb(var(--st-primary));
+  width: 28px;
+  height: 28px;
+  border-radius: var(--st-radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .18s cubic-bezier(.22,.61,.36,1);
+}
+.branch-btn:hover:not(:disabled) {
+  background: rgba(var(--st-primary), 0.15);
+  border-color: rgba(var(--st-primary), 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--st-primary), 0.15);
+}
+.branch-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+.branch-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: rgba(var(--st-border), 0.05);
+  border-color: rgba(var(--st-border), 0.2);
+  color: rgba(var(--st-color-text), 0.3);
+}
+
+/* 分支指示器（显示在切换按钮中间） */
+.branch-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border: 1px solid rgba(var(--st-primary), 0.35);
+  border-radius: 9999px;
+  background: rgba(var(--st-primary), 0.08);
+  color: rgb(var(--st-primary));
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  min-width: 48px;
+  text-align: center;
+}
 </style>

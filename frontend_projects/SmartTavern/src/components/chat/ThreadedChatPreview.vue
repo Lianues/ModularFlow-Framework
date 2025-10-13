@@ -56,11 +56,13 @@ function refreshIcons() {
   })
 }
 
-/* 单条消息删除由子组件上抛，这里仅维护列表状态 */
-function deleteMessage(msgId) {
+/* 单条消息删除由子组件上抛，这里维护列表状态并重新加载分支信息 */
+async function deleteMessage(msgId) {
   const idx = props.messages.findIndex(m => m.id === msgId)
   if (idx >= 0) {
     props.messages.splice(idx, 1)
+    // 删除后重新加载分支信息
+    await loadBranchInfo()
   }
   refreshIcons()
 }
@@ -78,17 +80,40 @@ onBeforeUnmount(() => {
   } catch (_) {}
 })
 
-// 分支切换（演示功能）
-const activeBranch = ref(1)
-const totalBranches = ref(2)
+// 分支信息管理
+const branchInfoMap = ref({}) // 存储每个节点的分支信息 { node_id: { j, n } }
 
-function switchBranch(direction) {
-  if (direction === 'left' && activeBranch.value > 1) {
-    activeBranch.value--
-  } else if (direction === 'right' && activeBranch.value < totalBranches.value) {
-    activeBranch.value++
+/**
+ * 加载分支信息
+ */
+async function loadBranchInfo() {
+  if (!props.conversationFile) {
+    console.warn('无对话文件，跳过分支信息加载')
+    return
   }
-  console.log(`切换到分支 ${activeBranch.value}/${totalBranches.value}`)
+  
+  try {
+    const ChatBranches = (await import('@/services/chatBranches.js')).default
+    const result = await ChatBranches.branchTableByFile(props.conversationFile)
+    
+    // 构建节点ID到分支信息的映射
+    const newMap = {}
+    if (result.levels && Array.isArray(result.levels)) {
+      result.levels.forEach(level => {
+        if (level.node_id && level.j !== null && level.n !== null) {
+          newMap[level.node_id] = {
+            j: level.j,
+            n: level.n
+          }
+        }
+      })
+    }
+    
+    branchInfoMap.value = newMap
+    console.log('分支信息加载成功:', newMap)
+  } catch (error) {
+    console.error('加载分支信息失败:', error)
+  }
 }
 
 /* 输入框逻辑 */
@@ -98,7 +123,10 @@ const inputRef = ref(null)
 const inputRowRef = ref(null)
 let removeWheel = null
 
-onMounted(() => {
+onMounted(async () => {
+  // 加载分支信息
+  await loadBranchInfo()
+  
   // 首次挂载后强制更新滚动条（确保容器尺寸已稳定）
   messageListRef.value?.update?.()
 
@@ -292,6 +320,9 @@ async function onSubmit(text) {
       Object.assign(props.conversationDoc, updatedDoc)
     }
 
+    // 重新加载分支信息
+    await loadBranchInfo()
+
     // 清空输入框
     inputRowRef.value?.clearText?.()
     isSending.value = false
@@ -355,6 +386,21 @@ function onMessageUpdate(msg) {
   refreshIcons()
 }
 
+async function onBranchSwitched(data) {
+  // 分支切换后的回调
+  console.log('分支已切换:', data)
+  
+  // 更新本地文档
+  if (data.doc && props.conversationDoc) {
+    Object.assign(props.conversationDoc, data.doc)
+  }
+  
+  // 重新加载完整的分支信息（因为节点ID已改变，需要重建映射）
+  await loadBranchInfo()
+  
+  refreshIcons()
+}
+
 function splitDoc(msg) { return splitHtmlFromText(msg.content) }
 </script>
 
@@ -369,7 +415,7 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
         <transition-group name="msg" tag="div">
             <MessageItem
               v-for="(m, idx) in props.messages"
-              :key="m.id"
+              :key="idx"
               :msg="m"
               :idx="idx"
               :is-last="idx === props.messages.length - 1"
@@ -381,10 +427,12 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :send-status="m.id === lastSentMessageId ? 'success' : null"
               :send-message="m.id === lastSentMessageId ? '发送成功' : ''"
               :conversation-file="props.conversationFile"
+              :branch-info="branchInfoMap[m.id] || null"
               @delete="deleteMessage"
               @regenerate="regenerateMessage"
               @edit="startEdit"
               @update="onMessageUpdate"
+              @branch-switched="onBranchSwitched"
             />
         </transition-group>
       </div>
