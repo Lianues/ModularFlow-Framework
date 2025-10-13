@@ -8,12 +8,12 @@ API 封装层：SmartTavern.chat_branches（无状态版）
 
 最小分支树文件结构（仅四个字段）：
 {
-  "root": "node_id",
+  "roots": ["node_id1", "node_id2", ...],  // 所有根节点ID数组
   "nodes": {
     "node_id": { "pid": "parent_id|null", "role": "system|user|assistant", "content": "..." }
   },
   "children": { "parent_id": ["child_id1","child_id2",...] },   // 可选
-  "active_path": ["root","...","leafId"]                        // 可选
+  "active_path": ["current_root","...","leafId"]                // 第一个元素是当前使用的根节点
 }
 
 注意：

@@ -214,7 +214,7 @@ def main():
 
     with main_path.open("r", encoding="utf-8") as f:
         created_doc = json.load(f)
-    assert created_doc.get("root") == "n_root1"
+    assert created_doc.get("roots") == ["n_root1"]
     assert "nodes" in created_doc and "n_root1" in created_doc["nodes"]
     assert isinstance(created_doc.get("active_path"), list) and created_doc["active_path"][-1] == "n_root1"
     print(f"[OK] create_conversation OK, file={res['file']}")

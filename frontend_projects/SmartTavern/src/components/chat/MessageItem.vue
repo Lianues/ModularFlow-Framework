@@ -255,18 +255,12 @@ function copyMessage() {
 }
 
 async function emitDelete() {
-  console.log('[MessageItem] emitDelete 被调用, msg.id:', props.msg.id)
-  console.log('[MessageItem] conversationFile:', props.conversationFile)
-  
-  if (deleteStatus.value === 'deleting') {
-    console.log('[MessageItem] 正在删除中，忽略')
-    return
-  }
+  if (deleteStatus.value === 'deleting') return
   
   menuOpen.value = false
   
   if (!props.conversationFile) {
-    console.error('[MessageItem] 无法删除：缺少 conversationFile')
+    console.error('无法删除：缺少 conversationFile')
     deleteStatus.value = 'error'
     deleteMessage.value = '缺少对话文件'
     setTimeout(() => {
@@ -281,17 +275,13 @@ async function emitDelete() {
     deleteMessage.value = '删除中...'
     refreshIcons()
     
-    console.log('[MessageItem] 开始调用后端 truncateAfter API')
     const ChatBranches = (await import('@/services/chatBranches.js')).default
     
     // 调用后端修剪接口，删除此节点及其所有子孙
-    console.log('[MessageItem] 调用参数:', { file: props.conversationFile, node_id: props.msg.id })
     await ChatBranches.truncateAfter({
       file: props.conversationFile,
       node_id: props.msg.id
     })
-    
-    console.log('[MessageItem] 后端API调用成功')
     
     // 后端成功后，触发前端删除事件
     deleteStatus.value = 'success'
@@ -300,13 +290,12 @@ async function emitDelete() {
     
     // 短暂显示成功状态后触发删除
     setTimeout(() => {
-      console.log('[MessageItem] 触发 delete 事件')
       emit('delete', props.msg.id)
       deleteStatus.value = null
       deleteMessage.value = ''
     }, 500)
     
-    console.log('[MessageItem] 消息删除成功:', props.msg.id)
+    console.log('消息删除成功:', props.msg.id)
   } catch (error) {
     console.error('删除失败:', error)
     deleteStatus.value = 'error'

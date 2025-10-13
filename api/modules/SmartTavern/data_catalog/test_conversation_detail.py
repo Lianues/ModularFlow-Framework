@@ -64,7 +64,7 @@ def main():
     print(f"  - active_path: {doc.get('active_path', [])}")
     
     pp("对话文档结构", {
-        "root": doc.get("root"),
+        "roots": doc.get("roots"),
         "nodes_count": len(doc.get("nodes", {})),
         "active_path": doc.get("active_path"),
         "children": doc.get("children", {})

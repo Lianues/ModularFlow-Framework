@@ -8,13 +8,13 @@ SmartTavern.chat_branches 实现层（无状态版）
 
 最小分支树文件格式（仅四个字段）：
 {
-  "root": "node_id",
+  "roots": ["node_id1", "node_id2", ...],  // 所有根节点ID数组
   "nodes": {
     "node_id": { "pid": "parent_id|null", "role": "system|user|assistant", "content": "..." },
     ...
   },
   "children": { "parent_id": ["child_id1","child_id2",...] },   // 可选；若缺省将由 nodes[*].pid 推导
-  "active_path": ["root", "...", "leafId"]                      // 可选；若缺省或不连通将被规范化
+  "active_path": ["current_root", "...", "leafId"]              // 第一个元素是当前使用的根节点
 }
 """
 from __future__ import annotations
@@ -113,25 +113,32 @@ def _buckets_from_doc(doc: Dict[str, Any]) -> Dict[str, List[str]]:
 
 def _normalize_path_from_doc(doc: Dict[str, Any]) -> List[str]:
     """
-    规范化 active_path，确保从 root 连通。
+    规范化 active_path，确保从当前根节点连通。
     规则：
-      - 若 active_path 缺省，则为 [root]
-      - 若 active_path[0] != root，则在前置 root
+      - active_path[0] 是当前使用的根节点
+      - 若 active_path 缺省，则从 roots[0] 开始
       - 自左向右逐步验证连通，遇到不连通则截断
     """
-    root = doc.get("root")
+    roots = doc.get("roots") or []
     nodes_doc = (doc.get("nodes") or {})
-    if root is None or root not in nodes_doc:
-        raise ValueError("invalid doc: missing/invalid root")
-
-    buckets = _buckets_from_doc(doc)
     active_path = list(doc.get("active_path") or [])
-    if not isinstance(active_path, list) or not active_path:
-        active_path = [root]
-    if active_path[0] != root:
-        active_path = [root] + active_path
-
-    norm: List[str] = [root]
+    
+    # 确定当前根节点
+    if active_path and active_path[0] in nodes_doc:
+        current_root = active_path[0]
+    elif roots and roots[0] in nodes_doc:
+        current_root = roots[0]
+        active_path = [current_root]
+    else:
+        raise ValueError("invalid doc: no valid root found in roots or active_path")
+    
+    # 验证当前根节点是否在 roots 中
+    if roots and current_root not in roots:
+        raise ValueError(f"active_path root '{current_root}' not in roots array")
+    
+    buckets = _buckets_from_doc(doc)
+    norm: List[str] = [current_root]
+    
     for i in range(1, len(active_path)):
         prev = norm[-1]
         nxt = active_path[i]
@@ -192,23 +199,39 @@ def branch_table_from_doc(
       }
     说明：
       - j/n 来自父节点 children 顺序位置（1-based）；若不可判定则为 null
+      - depth=1 时表示根节点，j/n 来自 roots 数组中的位置
     """
     loaded_doc = _load_doc_from_file_or_obj(doc, file)
     path = _normalize_path_from_doc(loaded_doc)
     buckets = _buckets_from_doc(loaded_doc)
+    roots = loaded_doc.get("roots") or []
+    
     L = len(path)
     latest = {"depth": L, "j": None, "n": None, "node_id": path[-1] if L >= 1 else None}
     levels: List[Dict[str, Any]] = []
-    for depth in range(2, L + 1):
-        parent_id = path[depth - 2]
-        child_id = path[depth - 1]
-        children = buckets.get(parent_id, [])
-        n = len(children)
-        j = (children.index(child_id) + 1) if child_id in children else None
-        row = {"depth": depth, "node_id": child_id, "j": j, "n": n}
-        levels.append(row)
-        if depth == L:
-            latest.update({"j": j, "n": n})
+    
+    # 从 depth=1 开始（包括根节点）
+    for depth in range(1, L + 1):
+        if depth == 1:
+            # 根节点：从 roots 数组中查找当前根的位置
+            current_root = path[0]
+            n = len(roots)
+            j = (roots.index(current_root) + 1) if current_root in roots else None
+            row = {"depth": 1, "node_id": current_root, "j": j, "n": n}
+            levels.append(row)
+            if depth == L:
+                latest.update({"j": j, "n": n})
+        else:
+            parent_id = path[depth - 2]
+            child_id = path[depth - 1]
+            children = buckets.get(parent_id, [])
+            n = len(children)
+            j = (children.index(child_id) + 1) if child_id in children else None
+            row = {"depth": depth, "node_id": child_id, "j": j, "n": n}
+            levels.append(row)
+            if depth == L:
+                latest.update({"j": j, "n": n})
+    
     return {"latest": latest, "levels": levels}
 
 
@@ -596,7 +619,7 @@ def create_conversation_impl(
     doc: Dict[str, Any] = {
         "name": str(name or "").strip() or filename_base,
         "description": str(description or "").strip(),
-        "root": "n_root1",
+        "roots": ["n_root1"],  # 根节点数组
         "nodes": {
             "n_root1": {"pid": None, "role": root_role, "content": root_content}
         },

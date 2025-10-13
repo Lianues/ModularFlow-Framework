@@ -1,7 +1,7 @@
 {
   "name": "分支演示对话",
   "description": "示例：分支重试对话（演示数据）",
-  "root": "n_root",
+  "roots": ["n_root"],
   "nodes": {
     "n_root": {
       "pid": null,
@@ -32,11 +32,6 @@
       "pid": "n_user2",
       "role": "assistant",
       "content": "可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。可调用 openai_messages 接口，返回 [{role, content}] 数组直接给 LLM 使用。"
-    },
-    "n_user_test_1760292595": {
-      "pid": "n_ass3",
-      "role": "user",
-      "content": "这是一条测试消息，由自动化测试脚本添加"
     }
   },
   "children": {
@@ -52,9 +47,6 @@
     ],
     "n_user2": [
       "n_ass3"
-    ],
-    "n_ass3": [
-      "n_user_test_1760292595"
     ]
   },
   "active_path": [
@@ -62,8 +54,7 @@
     "n_user1",
     "n_ass1",
     "n_user2",
-    "n_ass3",
-    "n_user_test_1760292595"
+    "n_ass3"
   ],
-  "updated_at": "2025-10-13T02:22:29+08:00"
+  "updated_at": "2025-10-13T16:13:10+08:00"
 }

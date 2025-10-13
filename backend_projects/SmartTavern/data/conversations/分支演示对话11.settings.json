@@ -1,8 +1,0 @@
-{
-  "type": "threaded",
-  "preset_file": "backend_projects/SmartTavern/data/presets/Default.json",
-  "character_file": "backend_projects/SmartTavern/data/characters/心与露.json",
-  "persona_file": "backend_projects/SmartTavern/data/persona/用户2.json",
-  "regex_file": null,
-  "worldbook_file": null
-}
