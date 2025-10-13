@@ -16,20 +16,21 @@
       v-model="text"
       class="tch-input"
       :placeholder="placeholder"
+      :disabled="sending"
       @keydown="onKeydown"
     ></textarea>
 
     <div class="tch-tools-right">
       <button
         class="tch-send"
-        :disabled="pendingActive ? false : !text.trim()"
+        :disabled="sending || (pendingActive ? false : !text.trim())"
         @click="pendingActive ? onCancel() : onSubmit()"
         :title="pendingActive ? '停止等待' : sendButtonTitle"
         :aria-label="pendingActive ? '停止等待' : '发送'"
         data-tooltip-target="tt-send"
       >
-        <i :data-lucide="pendingActive ? 'square' : 'send'" class="icon-16" aria-hidden="true"></i>
-        <span class="tch-send-text">{{ pendingActive ? stopLabel : sendLabel }}</span>
+        <i :data-lucide="sending ? 'loader-circle' : (pendingActive ? 'square' : 'send')" class="icon-16" :class="{'icon-spin': sending}" aria-hidden="true"></i>
+        <span class="tch-send-text">{{ sending ? '发送中' : (pendingActive ? stopLabel : sendLabel) }}</span>
       </button>
       <div id="tt-send" role="tooltip" class="absolute z-10 invisible inline-block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-md shadow-sm opacity-0 tooltip">
         发送
@@ -44,6 +45,7 @@ import { ref, computed, nextTick } from 'vue'
 
 const props = defineProps({
   pendingActive: { type: Boolean, default: false },
+  sending: { type: Boolean, default: false },
   placeholder: { type: String, default: '输入消息... (Enter 发送，Shift+Enter 换行)' },
   sendLabel: { type: String, default: '发送' },
   stopLabel: { type: String, default: '停止' }
@@ -71,6 +73,10 @@ function onSubmit() {
   const t = text.value.trim()
   if (!t) return
   emit('submit', t)
+  // 注意：不再自动清空，由父组件在发送成功后调用 clearText()
+}
+
+function clearText() {
   text.value = ''
   nextTick(() => inputRef.value?.focus?.())
 }
@@ -84,7 +90,7 @@ function setText(value) {
   nextTick(() => inputRef.value?.focus?.())
 }
 
-defineExpose({ setText })
+defineExpose({ setText, clearText })
 </script>
 
 <style scoped>
@@ -180,13 +186,19 @@ defineExpose({ setText })
 .tch-input:focus {
   outline: none;
 }
+.tch-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
 
 /* 发送按钮 */
 .tch-send {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 10px 12px;
+  min-width: 90px;
   border-radius: var(--st-radius-md);
   background: linear-gradient(135deg, rgba(var(--st-primary),1), rgba(var(--st-accent),1));
   color: var(--st-primary-contrast);
@@ -216,6 +228,16 @@ defineExpose({ setText })
 .tch-send-text {
   font-weight: 600;
   letter-spacing: .2px;
+  min-width: 3em;
+  text-align: center;
+}
+
+/* 发送按钮旋转动画 */
+.icon-spin {
+  animation: icon-spin 0.9s linear infinite;
+}
+@keyframes icon-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* 焦点可见态统一 */

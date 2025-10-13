@@ -131,7 +131,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   removeWheel?.()
-  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null }
+  if (sendErrorTimer) { clearTimeout(sendErrorTimer); sendErrorTimer = null }
 })
 
 watch(() => props.messages.length, () => {
@@ -217,73 +217,21 @@ function regenerateMessage(msg) {
 }
 
 /* 发送状态管理 */
-const pendingMessageId = ref(null)
-const sendStatus = ref(null) // null | 'sending' | 'success' | 'error'
-const sendStatusMsg = ref('')
-let sendTimer = null
-
-function startSendingFor(id) {
-  // 先清理旧状态
-  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null }
-  
-  pendingMessageId.value = id
-  sendStatus.value = 'sending'
-  sendStatusMsg.value = '发送中...'
-  refreshIcons()
-}
-
-function setSendSuccess(id) {
-  if (pendingMessageId.value !== id) return
-  
-  sendStatus.value = 'success'
-  sendStatusMsg.value = '发送成功'
-  refreshIcons()
-  
-  // 1.5秒后清除状态
-  if (sendTimer) clearTimeout(sendTimer)
-  sendTimer = setTimeout(() => {
-    pendingMessageId.value = null
-    sendStatus.value = null
-    sendStatusMsg.value = ''
-    refreshIcons()
-  }, 1500)
-}
-
-function setSendError(id, error = '发送失败') {
-  if (pendingMessageId.value !== id) return
-  
-  sendStatus.value = 'error'
-  sendStatusMsg.value = error
-  refreshIcons()
-  
-  // 2.5秒后清除状态
-  if (sendTimer) clearTimeout(sendTimer)
-  sendTimer = setTimeout(() => {
-    pendingMessageId.value = null
-    sendStatus.value = null
-    sendStatusMsg.value = ''
-    refreshIcons()
-  }, 2500)
-}
-
-function cancelPending() {
-  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null }
-  pendingMessageId.value = null
-  sendStatus.value = null
-  sendStatusMsg.value = ''
-  refreshIcons()
-}
+const isSending = ref(false)
+const sendErrorMsg = ref('')
+let sendErrorTimer = null
 
 /**
- * 提交输入（来自 InputRow），创建用户消息并触发等待占位与滚动
- * 注意：当 pending 中时不允许再次提交
+ * 提交输入（来自 InputRow），创建用户消息并保存到后端
+ * 成功后才添加到列表并清空输入框
+ * 失败时保留输入框内容让用户重试
  */
 async function onSubmit(text) {
   const t = (text ?? '').trim()
   if (!t) return
 
-  // 若等待中则直接返回（不允许再次发送）
-  if (pendingMessageId?.value) return
+  // 若正在发送则直接返回
+  if (isSending.value) return
 
   // 检查是否有对话文件和文档
   if (!props.conversationFile || !props.conversationDoc) {
@@ -292,13 +240,17 @@ async function onSubmit(text) {
   }
 
   try {
+    // 开始发送（禁用输入框和发送按钮）
+    isSending.value = true
+    sendErrorMsg.value = ''
+    if (sendErrorTimer) clearTimeout(sendErrorTimer)
+
     // 获取当前 active_path 的最后一个节点作为父节点
     const activePath = props.conversationDoc.active_path || []
     const parentId = activePath[activePath.length - 1]
     
     if (!parentId) {
-      console.error('无法确定父节点ID')
-      return
+      throw new Error('无法确定父节点ID')
     }
 
     // 生成新节点ID（n_user + 时间戳）
@@ -316,29 +268,26 @@ async function onSubmit(text) {
       content: t
     })
 
-    // 创建新消息用于显示
+    // 发送成功：创建新消息并添加到列表
     const newMessage = {
       id: newNodeId,
       role: 'user',
       content: t
     }
 
-    // 添加到消息列表
     props.messages.push(newMessage)
-    // 为新消息生成色条调色板
     ensurePaletteFor(newMessage)
-    // 显示发送中状态
-    startSendingFor(newMessage.id)
 
-    // 更新本地文档（保持同步）
+    // 更新本地文档
     if (updatedDoc && props.conversationDoc) {
       Object.assign(props.conversationDoc, updatedDoc)
     }
-    
-    // 显示发送成功
-    setSendSuccess(newMessage.id)
 
-    // 滚动到底部（丝滑且自然）
+    // 清空输入框
+    inputRowRef.value?.clearText?.()
+    isSending.value = false
+
+    // 滚动到底部
     nextTick(() => {
       setTimeout(() => {
         if (messageListRef.value?.$el) {
@@ -347,12 +296,11 @@ async function onSubmit(text) {
             try {
               container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
             } catch (_) {
-              // 回退：rAF 动画
               const start = container.scrollTop
               const end = container.scrollHeight
               const dur = 420
               const t0 = performance.now()
-              const ease = t => 1 - Math.pow(1 - t, 3) // easeOutCubic
+              const ease = t => 1 - Math.pow(1 - t, 3)
               const step = (now) => {
                 const p = Math.min(1, (now - t0) / dur)
                 container.scrollTop = start + (end - start) * ease(p)
@@ -368,10 +316,19 @@ async function onSubmit(text) {
     console.log('消息发送成功:', newNodeId)
   } catch (error) {
     console.error('发送消息失败:', error)
-    // 显示发送失败状态
-    if (newMessage && newMessage.id) {
-      setSendError(newMessage.id, '发送失败')
-    }
+    
+    // 发送失败：恢复输入框，显示错误提示
+    isSending.value = false
+    sendErrorMsg.value = error?.message || '发送失败'
+    
+    // 2.5秒后自动清除错误提示
+    if (sendErrorTimer) clearTimeout(sendErrorTimer)
+    sendErrorTimer = setTimeout(() => {
+      sendErrorMsg.value = ''
+      refreshIcons()
+    }, 2500)
+    
+    refreshIcons()
   }
 }
 
@@ -402,10 +359,10 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :split-before="splitDoc(m).before"
               :split-html="splitDoc(m).html"
               :split-after="splitDoc(m).after"
-              :pending-active="pendingMessageId === m.id && sendStatus === 'sending'"
+              :pending-active="false"
               :pending-seconds="0"
-              :send-status="pendingMessageId === m.id ? sendStatus : null"
-              :send-message="pendingMessageId === m.id ? sendStatusMsg : ''"
+              :send-status="null"
+              :send-message="''"
               :conversation-file="props.conversationFile"
               @delete="deleteMessage"
               @regenerate="regenerateMessage"
@@ -417,12 +374,22 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
     </CustomScrollbar>
 
     <!-- 输入区：抽离为组件 InputRow，职责单一，便于复用与测试 -->
-    <InputRow
-      ref="inputRowRef"
-      :pending-active="!!pendingMessageId"
-      @submit="onSubmit"
-      @cancel="cancelPending"
-    />
+    <div class="input-container">
+      <!-- 发送错误提示（悬浮在输入框上方，不占用布局） -->
+      <transition name="error-tip">
+        <div v-if="sendErrorMsg" class="send-error-tip">
+          <i data-lucide="alert-circle" class="icon-14" aria-hidden="true"></i>
+          <span>{{ sendErrorMsg }}</span>
+        </div>
+      </transition>
+      
+      <InputRow
+        ref="inputRowRef"
+        :sending="isSending"
+        :pending-active="false"
+        @submit="onSubmit"
+      />
+    </div>
   </div>
 </template>
 
@@ -1168,9 +1135,52 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
   will-change: opacity, transform, filter;
 }
 
-/* 轻微阶梯延时：最新的 1~3 条入场动画更靠后，营造自然“瀑布式”感觉 */
+/* 轻微阶梯延时：最新的 1~3 条入场动画更靠后，营造自然"瀑布式"感觉 */
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(1) { transition-delay: 24ms; }
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(2) { transition-delay: 48ms; }
 [data-scope="message-list"] .floor-card.msg-enter-active:nth-last-child(3) { transition-delay: 72ms; }
+
+/* 输入容器 */
+.input-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 发送错误提示（绝对定位在输入框上方） */
+.send-error-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  border-radius: var(--st-radius-md);
+  background: rgba(220, 38, 38, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: rgb(220, 38, 38);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(220, 38, 38, 0.15), var(--st-shadow-sm);
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* 错误提示动画（从下往上淡入） */
+.error-tip-enter-from,
+.error-tip-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.error-tip-enter-active,
+.error-tip-leave-active {
+  transition: opacity .25s ease, transform .28s cubic-bezier(.22,.61,.36,1);
+}
 
 </style>
