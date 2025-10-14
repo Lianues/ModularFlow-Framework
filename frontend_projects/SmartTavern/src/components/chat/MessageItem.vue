@@ -107,13 +107,13 @@
             <span class="waiting-text">等待AI响应（{{ waitingSeconds }}s）</span>
           </div>
           
-          <!-- 错误框（如果消息有错误）-->
-          <div v-else-if="msg.error" class="error-box">
+          <!-- 错误框（如果节点有错误）-->
+          <div v-else-if="nodeError" class="error-box">
             <div class="error-header">
               <i data-lucide="alert-circle" class="icon-16" aria-hidden="true"></i>
               <span class="error-title">AI调用失败</span>
             </div>
-            <div class="error-message">{{ msg.error }}</div>
+            <div class="error-message">{{ nodeError }}</div>
           </div>
           
           <!-- 正常内容（仅在无错误时显示）-->
@@ -157,7 +157,7 @@
           <!-- 正常模式：显示操作按钮 -->
           <div v-else class="floor-actions">
             <!-- 错误的 assistant 消息且是最后一条时显示重试按钮 -->
-            <template v-if="msg.error && msg.role === 'assistant' && isLastOfRole">
+            <template v-if="nodeError && msg.role === 'assistant' && isLastOfRole">
               <button class="act-btn" @click="emitRegenerate" title="重试" aria-label="重试">
                 <i data-lucide="refresh-cw" class="icon-16" aria-hidden="true"></i>
               </button>
@@ -255,9 +255,9 @@
             <button
               class="branch-btn"
               @click="switchBranch('right')"
-              :disabled="branchInfo.j >= branchInfo.n || switchStatus === 'switching'"
-              title="切换到下一个分支"
-              aria-label="下一个分支"
+              :disabled="switchStatus === 'switching'"
+              :title="branchInfo.j >= branchInfo.n ? '创建新分支（重试）' : '切换到下一个分支'"
+              :aria-label="branchInfo.j >= branchInfo.n ? '创建新分支' : '下一个分支'"
             >
               <i data-lucide="chevron-right" class="icon-14" aria-hidden="true"></i>
             </button>
@@ -285,9 +285,11 @@ const props = defineProps({
   // 等待态
   pendingActive: { type: Boolean, default: false },
   pendingSeconds: { type: Number, default: 0 },
-  // AI等待状态
+  // AI等待状态（从独立状态管理器传入）
   waitingAI: { type: Boolean, default: false },
   waitingSeconds: { type: Number, default: 0 },
+  // 节点错误状态（从独立状态管理器传入）
+  nodeError: { type: String, default: null },
   // 发送状态（从父组件传入）
   sendStatus: { type: String, default: null },
   sendMessage: { type: String, default: '' },
@@ -382,9 +384,16 @@ async function switchBranch(direction) {
     targetJ = currentJ + 1
   }
   
-  // 验证范围
-  if (targetJ < 1 || targetJ > totalN) {
-    console.warn(`目标分支 ${targetJ} 超出范围 [1, ${totalN}]`)
+  // 向左超出范围：直接返回
+  if (targetJ < 1) {
+    console.warn(`目标分支 ${targetJ} 小于 1`)
+    return
+  }
+  
+  // 向右超出范围：触发重试（创建新分支）
+  if (targetJ > totalN) {
+    console.log(`已到最后分支，触发重试创建新分支`)
+    emitRegenerate()
     return
   }
   
@@ -467,25 +476,68 @@ async function emitDelete() {
     
     const ChatBranches = (await import('@/services/chatBranches.js')).default
     
-    // 调用后端修剪接口，删除此节点及其所有子孙
-    await ChatBranches.truncateAfter({
+    // 获取删除前的消息深度（在消息列表中的位置）
+    const beforeDepth = props.idx + 1
+    
+    // 调用后端删除分支接口（智能保留兄弟节点并切换）
+    const updatedDoc = await ChatBranches.deleteBranch({
       file: props.conversationFile,
       node_id: props.msg.id
     })
     
-    // 后端成功后，触发前端删除事件
-    deleteStatus.value = 'success'
-    deleteMessage.value = '删除成功'
-    refreshIcons()
+    // 检查删除后的 active_path 长度
+    const newActivePath = updatedDoc.active_path || []
+    const afterDepth = newActivePath.length
     
-    // 短暂显示成功状态后触发删除
-    setTimeout(() => {
-      emit('delete', props.msg.id)
-      deleteStatus.value = null
-      deleteMessage.value = ''
-    }, 500)
-    
-    console.log('消息删除成功:', props.msg.id)
+    // 如果 active_path 长度变短，说明没有兄弟分支，被截断到父节点了
+    if (afterDepth < beforeDepth) {
+      // 没有兄弟分支，直接删除消息
+      deleteStatus.value = 'success'
+      deleteMessage.value = '删除成功'
+      refreshIcons()
+      
+      setTimeout(() => {
+        emit('delete', props.msg.id)
+        deleteStatus.value = null
+        deleteMessage.value = ''
+      }, 500)
+      
+      console.log('分支删除成功（无兄弟分支，已截断）')
+    } else {
+      // active_path 长度不变，说明切换到了兄弟分支
+      const newLastNodeId = newActivePath[newActivePath.length - 1]
+      const newNode = updatedDoc.nodes?.[newLastNodeId]
+      
+      if (newNode && newLastNodeId !== props.msg.id) {
+        // 更新当前消息为新分支内容
+        props.msg.id = newLastNodeId
+        props.msg.role = newNode.role
+        props.msg.content = newNode.content
+        
+        // 触发分支切换事件（更新文档和分支信息）
+        emit('branch-switched', {
+          msg: props.msg,
+          doc: updatedDoc
+        })
+        
+        deleteStatus.value = 'success'
+        deleteMessage.value = '已切换到相邻分支'
+        refreshIcons()
+        
+        setTimeout(() => {
+          deleteStatus.value = null
+          deleteMessage.value = ''
+          refreshIcons()
+        }, 1500)
+        
+        console.log('分支删除成功，已切换到:', newLastNodeId)
+      } else {
+        // 兜底：如果节点ID相同或找不到新节点，直接删除
+        emit('delete', props.msg.id)
+        deleteStatus.value = null
+        deleteMessage.value = ''
+      }
+    }
   } catch (error) {
     console.error('删除失败:', error)
     deleteStatus.value = 'error'

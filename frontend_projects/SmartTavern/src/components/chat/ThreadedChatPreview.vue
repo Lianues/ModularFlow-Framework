@@ -62,6 +62,9 @@ async function deleteMessage(msgId) {
   const idx = props.messages.findIndex(m => m.id === msgId)
   if (idx >= 0) {
     props.messages.splice(idx, 1)
+    // 清理该节点的状态和流式内容索引
+    delete nodeStates.value[msgId]
+    delete streamContentIndex.value[msgId]
     // 删除后重新加载分支信息
     await loadBranchInfo()
   }
@@ -83,6 +86,12 @@ onBeforeUnmount(() => {
 
 // 分支信息管理
 const branchInfoMap = ref({}) // 存储每个节点的分支信息 { node_id: { j, n } }
+
+// 节点状态管理（等待/错误状态按节点ID独立存储）
+const nodeStates = ref({}) // { node_id: { waitingAI, waitingSeconds, error } }
+
+// 流式内容索引（后台存储流式接收的完整内容）
+const streamContentIndex = ref({}) // { node_id: string } - 存储流式接收的完整内容
 
 /**
  * 加载分支信息
@@ -318,23 +327,28 @@ async function retryAssistantMessage(assistantMsg) {
     // 找到助手消息在列表中的位置并替换为新节点
     const msgIndex = props.messages.findIndex(m => m.id === assistantMsg.id)
     if (msgIndex >= 0) {
-      // 替换为新分支节点（显示等待状态）
+      // 替换为新分支节点（不在消息对象中存储状态）
       props.messages[msgIndex] = {
         id: newNodeId,
         role: 'assistant',
-        content: '',
-        waitingAI: true,
-        waitingSeconds: 0
+        content: ''
       }
       
       ensurePaletteFor(props.messages[msgIndex])
+    }
+    
+    // 设置新节点的等待状态（独立存储）
+    nodeStates.value[newNodeId] = {
+      waitingAI: true,
+      waitingSeconds: 0,
+      error: null
     }
     
     // 重新加载分支信息
     await loadBranchInfo()
     
     // 调用流式 AI 填充（AI workflow 会检测到空节点并更新它，而不是创建新节点）
-    await callAIForRetry(msgIndex, newNodeId)
+    await callAIForRetry(newNodeId)
     
   } catch (error) {
     console.error('重试助手消息失败:', error)
@@ -344,7 +358,7 @@ async function retryAssistantMessage(assistantMsg) {
 /**
  * 为重试场景调用 AI（直接更新指定节点，不创建占位消息）
  */
-async function callAIForRetry(messageIndex, nodeId) {
+async function callAIForRetry(nodeId) {
   if (!props.conversationFile) {
     console.warn('无对话文件，跳过AI调用')
     return
@@ -352,13 +366,13 @@ async function callAIForRetry(messageIndex, nodeId) {
 
   const llmConfigFile = 'backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json'
 
-  // 等待计时器
+  // 等待计时器（更新节点状态）
   let waitingTimer = null
   let waitingStartTime = Date.now()
   waitingTimer = setInterval(() => {
     const elapsed = Math.floor((Date.now() - waitingStartTime) / 1000)
-    if (props.messages[messageIndex]) {
-      props.messages[messageIndex].waitingSeconds = elapsed
+    if (nodeStates.value[nodeId]) {
+      nodeStates.value[nodeId].waitingSeconds = elapsed
     }
   }, 1000)
 
@@ -374,8 +388,8 @@ async function callAIForRetry(messageIndex, nodeId) {
       callbacks: {
         onChunk: async (content) => {
           // 第一个 chunk 到达，停止等待动画
-          if (props.messages[messageIndex] && props.messages[messageIndex].waitingAI) {
-            props.messages[messageIndex].waitingAI = false
+          if (nodeStates.value[nodeId]?.waitingAI) {
+            nodeStates.value[nodeId].waitingAI = false
             if (waitingTimer) {
               clearInterval(waitingTimer)
               waitingTimer = null
@@ -384,6 +398,13 @@ async function callAIForRetry(messageIndex, nodeId) {
           
           if (hasReceivedError) return
           
+          // 先写入后台索引（完整内容）
+          if (!streamContentIndex.value[nodeId]) {
+            streamContentIndex.value[nodeId] = ''
+          }
+          streamContentIndex.value[nodeId] += content
+          
+          // 将新内容加入打字机缓冲区
           typewriterBuffer += content
           
           if (!isTyping && typewriterBuffer.length > 0) {
@@ -392,8 +413,11 @@ async function callAIForRetry(messageIndex, nodeId) {
             while (typewriterBuffer.length > 0 && !hasReceivedError) {
               const char = typewriterBuffer[0]
               typewriterBuffer = typewriterBuffer.slice(1)
-              if (props.messages[messageIndex]) {
-                props.messages[messageIndex].content += char
+              
+              // 找到对应节点并更新显示内容
+              const msg = props.messages.find(m => m.id === nodeId)
+              if (msg) {
+                msg.content += char
               }
               
               await nextTick()
@@ -433,10 +457,14 @@ async function callAIForRetry(messageIndex, nodeId) {
           typewriterBuffer = ''
           isTyping = false
           
-          if (props.messages[messageIndex]) {
-            props.messages[messageIndex].waitingAI = false
-            props.messages[messageIndex].error = message || 'AI调用失败'
+          // 设置错误状态（独立存储）
+          if (nodeStates.value[nodeId]) {
+            nodeStates.value[nodeId].waitingAI = false
+            nodeStates.value[nodeId].error = message || 'AI调用失败'
           }
+          
+          // 清理流式索引（发生错误）
+          delete streamContentIndex.value[nodeId]
           
           nextTick(() => {
             refreshIcons()
@@ -453,8 +481,9 @@ async function callAIForRetry(messageIndex, nodeId) {
             await new Promise(r => setTimeout(r, 50))
           }
           
-          if (props.messages[messageIndex]) {
-            props.messages[messageIndex].waitingAI = false
+          // 停止等待状态
+          if (nodeStates.value[nodeId]) {
+            nodeStates.value[nodeId].waitingAI = false
           }
           
           console.log('AI流式调用完成')
@@ -463,6 +492,10 @@ async function callAIForRetry(messageIndex, nodeId) {
             refreshIcons()
             return
           }
+          
+          // 流式接收成功完成，清理索引
+          delete streamContentIndex.value[nodeId]
+          
           await loadBranchInfo()
           refreshIcons()
         }
@@ -476,10 +509,12 @@ async function callAIForRetry(messageIndex, nodeId) {
       waitingTimer = null
     }
     
-    if (props.messages[messageIndex]) {
-      props.messages[messageIndex].waitingAI = false
-      props.messages[messageIndex].error = error?.message || 'AI调用失败'
+    // 设置错误状态并清理流式索引
+    if (nodeStates.value[nodeId]) {
+      nodeStates.value[nodeId].waitingAI = false
+      nodeStates.value[nodeId].error = error?.message || 'AI调用失败'
     }
+    delete streamContentIndex.value[nodeId]
   }
 }
 
@@ -510,9 +545,15 @@ async function onSubmit(text) {
 
   // 清除上一个错误的占位符（如果有）
   const lastMsg = props.messages[props.messages.length - 1]
-  if (lastMsg && lastMsg.error && lastMsg.id && String(lastMsg.id).startsWith('temp_')) {
-    props.messages.pop()
-    console.log('已清除错误的占位消息:', lastMsg.id)
+  if (lastMsg && lastMsg.id && String(lastMsg.id).startsWith('temp_')) {
+    const lastNodeError = nodeStates.value[lastMsg.id]?.error
+    if (lastNodeError) {
+      const msgId = lastMsg.id
+      props.messages.pop()
+      delete nodeStates.value[msgId]
+      delete streamContentIndex.value[msgId]
+      console.log('已清除错误的占位消息:', msgId)
+    }
   }
 
   try {
@@ -637,6 +678,18 @@ async function onBranchSwitched(data) {
     Object.assign(props.conversationDoc, data.doc)
   }
   
+  // 清理消息对象上可能残留的临时状态属性（向后兼容）
+  if (data.msg) {
+    delete data.msg.waitingAI
+    delete data.msg.waitingSeconds
+    delete data.msg.error
+    
+    // 如果后台索引中有该节点的流式内容，同步到消息显示
+    if (streamContentIndex.value[data.msg.id]) {
+      data.msg.content = streamContentIndex.value[data.msg.id]
+    }
+  }
+  
   // 重新加载完整的分支信息（因为节点ID已改变，需要重建映射）
   await loadBranchInfo()
   
@@ -678,32 +731,40 @@ async function callAI() {
     return
   }
 
-  // LLM配置文件（占位，后续可从设置中读取）
+  // LLM配置文件
   const llmConfigFile = 'backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json'
 
-  // 创建AI占位消息索引
-  const aiPlaceholderIndex = props.messages.length
+  // 生成临时节点ID
+  const tempNodeId = `temp_${Date.now()}`
   
-  // 创建AI占位消息
+  // 创建AI占位消息（不在对象中存储状态）
   props.messages.push({
-    id: `temp_${Date.now()}`,
+    id: tempNodeId,
     role: 'assistant',
-    content: '',
-    error: null,
-    waitingAI: true,
-    waitingSeconds: 0
+    content: ''
   })
   
-  const aiPlaceholder = props.messages[aiPlaceholderIndex]
-  ensurePaletteFor(aiPlaceholder)
+  ensurePaletteFor(props.messages[props.messages.length - 1])
 
-  // 等待计时器
+  // 设置节点状态（独立存储）
+  nodeStates.value[tempNodeId] = {
+    waitingAI: true,
+    waitingSeconds: 0,
+    error: null
+  }
+
+  // 等待计时器（更新节点状态）
   let waitingTimer = null
   let waitingStartTime = Date.now()
   waitingTimer = setInterval(() => {
     const elapsed = Math.floor((Date.now() - waitingStartTime) / 1000)
-    props.messages[aiPlaceholderIndex].waitingSeconds = elapsed
+    if (nodeStates.value[tempNodeId]) {
+      nodeStates.value[tempNodeId].waitingSeconds = elapsed
+    }
   }, 1000)
+
+  // 当前处理的节点ID（会在 onSaved 时更新为真实ID）
+  let currentNodeId = tempNodeId
 
   // 打字机缓冲区
   let typewriterBuffer = ''
@@ -717,8 +778,8 @@ async function callAI() {
       callbacks: {
         onChunk: async (content) => {
           // 第一个 chunk 到达，停止等待动画
-          if (props.messages[aiPlaceholderIndex].waitingAI) {
-            props.messages[aiPlaceholderIndex].waitingAI = false
+          if (nodeStates.value[currentNodeId]?.waitingAI) {
+            nodeStates.value[currentNodeId].waitingAI = false
             if (waitingTimer) {
               clearInterval(waitingTimer)
               waitingTimer = null
@@ -728,7 +789,13 @@ async function callAI() {
           // 如果已经收到错误，忽略后续内容
           if (hasReceivedError) return
           
-          // 将新内容加入缓冲区
+          // 先写入后台索引（完整内容）
+          if (!streamContentIndex.value[currentNodeId]) {
+            streamContentIndex.value[currentNodeId] = ''
+          }
+          streamContentIndex.value[currentNodeId] += content
+          
+          // 将新内容加入缓冲区（用于打字机显示）
           typewriterBuffer += content
           
           // 如果当前没在打字，启动打字机效果
@@ -738,7 +805,12 @@ async function callAI() {
             while (typewriterBuffer.length > 0 && !hasReceivedError) {
               const char = typewriterBuffer[0]
               typewriterBuffer = typewriterBuffer.slice(1)
-              props.messages[aiPlaceholderIndex].content += char
+              
+              // 通过节点ID查找消息并更新显示内容
+              const msg = props.messages.find(m => m.id === currentNodeId)
+              if (msg) {
+                msg.content += char
+              }
               
               // 滚动到底部
               await nextTick()
@@ -747,20 +819,19 @@ async function callAI() {
                 container.scrollTop = container.scrollHeight
               }
               
-              // 智能打字速度：根据缓冲区大小动态调整
-              // 缓冲区越大，速度越快，避免延迟累积
+              // 智能打字速度
               const bufferLen = typewriterBuffer.length
               let speed
               if (bufferLen < 10) {
-                speed = 30  // 慢速，打字机效果明显
+                speed = 30
               } else if (bufferLen < 50) {
-                speed = 15  // 中速
+                speed = 15
               } else if (bufferLen < 100) {
-                speed = 8   // 快速
+                speed = 8
               } else if (bufferLen < 200) {
-                speed = 4   // 很快
+                speed = 4
               } else {
-                speed = 1   // 极快，几乎立即显示
+                speed = 1
               }
               
               await new Promise(r => setTimeout(r, speed))
@@ -774,8 +845,19 @@ async function callAI() {
           // 保存成功，更新真实ID
           if (hasReceivedError) return
           
-          props.messages[aiPlaceholderIndex].id = node_id
+          const oldNodeId = currentNodeId
+          const msg = props.messages.find(m => m.id === oldNodeId)
+          if (msg) {
+            msg.id = node_id
+          }
           console.log('AI响应已保存:', node_id)
+          
+          // 迁移节点状态到新ID并更新当前节点ID引用
+          if (nodeStates.value[oldNodeId]) {
+            nodeStates.value[node_id] = nodeStates.value[oldNodeId]
+            delete nodeStates.value[oldNodeId]
+          }
+          currentNodeId = node_id
           
           // 更新文档
           if (doc && props.conversationDoc) {
@@ -797,9 +879,14 @@ async function callAI() {
           typewriterBuffer = ''
           isTyping = false
           
-          // 标记错误并停止等待动画
-          props.messages[aiPlaceholderIndex].waitingAI = false
-          props.messages[aiPlaceholderIndex].error = message || 'AI调用失败'
+          // 标记错误并停止等待动画（独立存储）
+          if (nodeStates.value[currentNodeId]) {
+            nodeStates.value[currentNodeId].waitingAI = false
+            nodeStates.value[currentNodeId].error = message || 'AI调用失败'
+          }
+          
+          // 清理流式索引（发生错误）
+          delete streamContentIndex.value[currentNodeId]
           
           // 强制刷新视图
           nextTick(() => {
@@ -820,8 +907,8 @@ async function callAI() {
           }
           
           // 停止等待动画
-          if (props.messages[aiPlaceholderIndex]) {
-            props.messages[aiPlaceholderIndex].waitingAI = false
+          if (nodeStates.value[currentNodeId]) {
+            nodeStates.value[currentNodeId].waitingAI = false
           }
           
           console.log('AI流式调用完成')
@@ -831,6 +918,10 @@ async function callAI() {
             refreshIcons()
             return
           }
+          
+          // 流式接收成功完成，清理索引（内容已完整保存到后端）
+          delete streamContentIndex.value[currentNodeId]
+          
           // 重新加载分支信息
           await loadBranchInfo()
           refreshIcons()
@@ -846,9 +937,14 @@ async function callAI() {
       waitingTimer = null
     }
     
-    // 移除占位消息
-    if (props.messages[aiPlaceholderIndex]) {
-      props.messages.splice(aiPlaceholderIndex, 1)
+    // 移除占位消息、节点状态和流式索引（通过节点ID查找）
+    const msgIndex = props.messages.findIndex(m => m.id === currentNodeId)
+    if (msgIndex >= 0) {
+      props.messages.splice(msgIndex, 1)
+    }
+    if (currentNodeId) {
+      delete nodeStates.value[currentNodeId]
+      delete streamContentIndex.value[currentNodeId]
     }
   }
 }
@@ -891,8 +987,9 @@ function splitDoc(msg) { return splitHtmlFromText(msg.content) }
               :split-after="splitDoc(m).after"
               :pending-active="false"
               :pending-seconds="0"
-              :waiting-a-i="m.waitingAI || false"
-              :waiting-seconds="m.waitingSeconds || 0"
+              :waiting-a-i="nodeStates[m.id]?.waitingAI || false"
+              :waiting-seconds="nodeStates[m.id]?.waitingSeconds || 0"
+              :node-error="nodeStates[m.id]?.error || null"
               :send-status="m.id === lastSentMessageId ? 'success' : null"
               :send-message="m.id === lastSentMessageId ? '发送成功' : ''"
               :conversation-file="props.conversationFile"
