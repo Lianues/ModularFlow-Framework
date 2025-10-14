@@ -146,40 +146,77 @@ def chat_completion_non_streaming(
         ai_content = llm_response.get("content", "")
         
         # 步骤4：保存AI响应到对话文件
-        # 生成新节点ID
-        new_node_id = f"n_ass{int(time.time() * 1000)}"
-        
-        # 获取当前对话文档以确定父节点
         # 从 messages_result 中获取 path（active_path）
         active_path = messages_result.get("path", [])
         if not active_path:
             raise ValueError("No active_path found in conversation")
         
         parent_id = active_path[-1]
+        last_node_id = active_path[-1]
         
-        # 调用 append_message 保存AI响应
-        append_result = core.call_api(
-            "smarttavern/chat_branches/append_message",
-            {
-                "file": conversation_file,
-                "node_id": new_node_id,
-                "pid": parent_id,
-                "role": "assistant",
-                "content": ai_content
-            },
-            method="POST",
-            namespace="modules"
+        # 读取对话文档获取节点信息
+        root = _repo_root()
+        conv_file_path = (root / Path(conversation_file)).resolve()
+        with conv_file_path.open("r", encoding="utf-8") as f:
+            conv_doc = json.load(f)
+        
+        nodes = conv_doc.get("nodes", {})
+        last_node = nodes.get(last_node_id, {})
+        
+        # 判断是否是空的 assistant 节点（重试创建的占位节点）
+        is_empty_assistant = (
+            last_node.get("role") == "assistant" and
+            last_node.get("content", "").strip() == ""
         )
         
-        return {
-            "success": True,
-            "node_id": new_node_id,
-            "content": ai_content,
-            "usage": llm_response.get("usage"),
-            "response_time": time.time() - start_time,
-            "model_used": llm_response.get("model_used"),
-            "doc": append_result  # 返回更新后的文档
-        }
+        if is_empty_assistant:
+            # 更新现有节点
+            update_result = core.call_api(
+                "smarttavern/chat_branches/update_message",
+                {
+                    "file": conversation_file,
+                    "node_id": last_node_id,
+                    "content": ai_content
+                },
+                method="POST",
+                namespace="modules"
+            )
+            
+            return {
+                "success": True,
+                "node_id": last_node_id,
+                "content": ai_content,
+                "usage": llm_response.get("usage"),
+                "response_time": time.time() - start_time,
+                "model_used": llm_response.get("model_used"),
+                "doc": update_result
+            }
+        else:
+            # 创建新节点
+            new_node_id = f"n_ass{int(time.time() * 1000)}"
+            
+            append_result = core.call_api(
+                "smarttavern/chat_branches/append_message",
+                {
+                    "file": conversation_file,
+                    "node_id": new_node_id,
+                    "pid": parent_id,
+                    "role": "assistant",
+                    "content": ai_content
+                },
+                method="POST",
+                namespace="modules"
+            )
+            
+            return {
+                "success": True,
+                "node_id": new_node_id,
+                "content": ai_content,
+                "usage": llm_response.get("usage"),
+                "response_time": time.time() - start_time,
+                "model_used": llm_response.get("model_used"),
+                "doc": append_result
+            }
         
     except Exception as e:
         return {
@@ -323,28 +360,78 @@ def chat_completion_streaming(
         
         # 步骤4：仅在无错误且有内容时才保存
         if not has_error and full_content:
-            new_node_id = f"n_ass{int(time.time() * 1000)}"
-            
             try:
-                append_result = core.call_api(
-                    "smarttavern/chat_branches/append_message",
-                    {
-                        "file": conversation_file,
-                        "node_id": new_node_id,
-                        "pid": parent_id,
-                        "role": "assistant",
-                        "content": full_content
-                    },
+                # 检查 active_path 末尾节点是否是空的 assistant 节点（重试场景）
+                # 如果是，更新该节点；否则创建新节点
+                last_node_id = active_path[-1]
+                
+                # 读取对话文档获取节点信息
+                doc_result = core.call_api(
+                    "smarttavern/chat_branches/openai_messages",
+                    {"file": conversation_file},
                     method="POST",
                     namespace="modules"
                 )
                 
-                yield {
-                    "type": "saved",
-                    "node_id": new_node_id,
-                    "doc": append_result,
-                    "usage": usage
-                }
+                # 从完整文档中获取节点信息（需要读取原始文件）
+                import json
+                root = _repo_root()
+                conv_file_path = (root / Path(conversation_file)).resolve()
+                with conv_file_path.open("r", encoding="utf-8") as f:
+                    conv_doc = json.load(f)
+                
+                nodes = conv_doc.get("nodes", {})
+                last_node = nodes.get(last_node_id, {})
+                
+                # 判断是否是空的 assistant 节点（重试创建的占位节点）
+                is_empty_assistant = (
+                    last_node.get("role") == "assistant" and
+                    last_node.get("content", "").strip() == ""
+                )
+                
+                if is_empty_assistant:
+                    # 更新现有节点
+                    update_result = core.call_api(
+                        "smarttavern/chat_branches/update_message",
+                        {
+                            "file": conversation_file,
+                            "node_id": last_node_id,
+                            "content": full_content
+                        },
+                        method="POST",
+                        namespace="modules"
+                    )
+                    
+                    yield {
+                        "type": "saved",
+                        "node_id": last_node_id,
+                        "doc": update_result,
+                        "usage": usage
+                    }
+                else:
+                    # 创建新节点
+                    new_node_id = f"n_ass{int(time.time() * 1000)}"
+                    
+                    append_result = core.call_api(
+                        "smarttavern/chat_branches/append_message",
+                        {
+                            "file": conversation_file,
+                            "node_id": new_node_id,
+                            "pid": parent_id,
+                            "role": "assistant",
+                            "content": full_content
+                        },
+                        method="POST",
+                        namespace="modules"
+                    )
+                    
+                    yield {
+                        "type": "saved",
+                        "node_id": new_node_id,
+                        "doc": append_result,
+                        "usage": usage
+                    }
+                    
             except Exception as e:
                 yield {"type": "error", "message": f"Failed to save response: {str(e)}"}
         

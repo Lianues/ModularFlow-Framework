@@ -205,6 +205,51 @@ const ChatBranches = {
       target_j
     });
   },
+
+  // 重试分支：创建新分支节点
+  async retryBranch({ file, new_node_id, retry_node_id, role, content }) {
+    if (!file) {
+      throw new Error('[ChatBranches] retryBranch: file is required');
+    }
+    if (!new_node_id || !retry_node_id || !role || content === undefined) {
+      throw new Error('[ChatBranches] retryBranch: new_node_id, retry_node_id, role, content are required');
+    }
+    return postJSON('smarttavern/chat_branches/retry_branch', {
+      file,
+      new_node_id,
+      retry_node_id,
+      role,
+      content
+    });
+  },
+
+  // 删除分支：删除单个分支节点并智能切换
+  async deleteBranch({ file, node_id }) {
+    if (!file) {
+      throw new Error('[ChatBranches] deleteBranch: file is required');
+    }
+    if (!node_id) {
+      throw new Error('[ChatBranches] deleteBranch: node_id is required');
+    }
+    return postJSON('smarttavern/chat_branches/delete_branch', {
+      file,
+      node_id
+    });
+  },
+
+  // 智能重试用户消息
+  async retryUserMessage({ file, user_node_id }) {
+    if (!file) {
+      throw new Error('[ChatBranches] retryUserMessage: file is required');
+    }
+    if (!user_node_id) {
+      throw new Error('[ChatBranches] retryUserMessage: user_node_id is required');
+    }
+    return postJSON('smarttavern/chat_branches/retry_user_message', {
+      file,
+      user_node_id
+    });
+  },
 };
 
 export default ChatBranches;

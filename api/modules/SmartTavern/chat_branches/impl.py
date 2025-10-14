@@ -586,6 +586,262 @@ def append_new_message(
     return loaded_doc
 
 
+def delete_branch(
+    node_id: str,
+    doc: Optional[Dict[str, Any]] = None,
+    file: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    删除单个分支节点：删除该节点及其所有子孙，更新 active_path，如果删除的是当前分支则切换到相邻分支。
+    
+    参数：
+    - node_id: 要删除的节点
+    - doc/file: 二选一输入
+    
+    返回：
+      更新后的完整 doc
+      
+    逻辑：
+    1. 删除节点及其子孙
+    2. 从父节点的 children 中移除
+    3. 如果删除的节点在 active_path 中：
+       - 如果有兄弟节点，切换到前一个或后一个兄弟
+       - 如果没有兄弟节点，截断 active_path 到父节点
+    """
+    loaded_doc = _load_doc_from_file_or_obj(doc, file)
+    nodes = loaded_doc.get("nodes") or {}
+    children_map = loaded_doc.get("children") or {}
+    active_path = list(loaded_doc.get("active_path") or [])
+    
+    if node_id not in nodes:
+        raise ValueError(f"Node not found: {node_id}")
+    
+    # 获取父节点
+    parent_id = nodes[node_id].get("pid")
+    
+    # 收集要删除的所有节点（节点本身 + 所有子孙）
+    to_delete = set([node_id])
+    stack = list(children_map.get(node_id, []))
+    while stack:
+        current = stack.pop()
+        if current in to_delete:
+            continue
+        to_delete.add(current)
+        for child in (children_map.get(current) or []):
+            if child not in to_delete:
+                stack.append(child)
+    
+    # 删除所有节点
+    for nid in to_delete:
+        nodes.pop(nid, None)
+        children_map.pop(nid, None)
+    
+    # 从父节点的 children 中移除
+    if parent_id and parent_id in children_map:
+        children_map[parent_id] = [cid for cid in children_map[parent_id] if cid not in to_delete]
+        if not children_map[parent_id]:
+            children_map.pop(parent_id, None)
+    
+    # 从其他节点的 children 中移除被删节点的引用
+    for pid in list(children_map.keys()):
+        children_map[pid] = [cid for cid in children_map[pid] if cid not in to_delete]
+        if not children_map[pid]:
+            children_map.pop(pid, None)
+    
+    # 更新 active_path
+    if node_id in active_path:
+        node_idx = active_path.index(node_id)
+        # 截断到该节点之前
+        active_path = active_path[:node_idx]
+        
+        # 如果有父节点且父节点有其他子节点，智能切换到相邻分支
+        if parent_id and parent_id in children_map and children_map[parent_id]:
+            # 获取删除前的兄弟节点列表（包含被删除的节点）
+            old_siblings = children_map[parent_id] + [node_id]
+            # 找到被删除节点在原列表中的位置
+            if node_id in old_siblings:
+                old_j = old_siblings.index(node_id)  # 0-based
+                new_siblings = children_map[parent_id]  # 删除后的列表
+                
+                if new_siblings:
+                    # 如果删除的不是最后一个，切换到同位置（原来的下一个继承了当前位置）
+                    if old_j < len(new_siblings):
+                        active_path.append(new_siblings[old_j])
+                    # 如果删除的是最后一个，切换到新的最后一个
+                    else:
+                        active_path.append(new_siblings[-1])
+    
+    loaded_doc["nodes"] = nodes
+    loaded_doc["children"] = children_map
+    loaded_doc["active_path"] = active_path
+    _update_timestamp(loaded_doc)
+    
+    # 保存文件
+    if file is not None and isinstance(file, str) and file.strip():
+        root = _repo_root()
+        conversations_dir = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+        target = (root / Path(file)).resolve()
+        
+        if not _is_within(target, conversations_dir):
+            raise ValueError(f"File must be within conversations directory: {file}")
+        
+        _safe_write_json(target, loaded_doc)
+    
+    return loaded_doc
+
+
+def retry_branch(
+    new_node_id: str,
+    retry_node_id: str,
+    role: str,
+    content: str,
+    doc: Optional[Dict[str, Any]] = None,
+    file: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    重试分支：创建新分支节点，继承原节点的父节点，并替换 active_path 中的位置。
+    
+    参数：
+    - new_node_id: 新节点 ID（必须唯一）
+    - retry_node_id: 要重试的节点 ID（必须存在）
+    - role: system|user|assistant
+    - content: 消息内容
+    - doc/file: 二选一输入
+    
+    返回：
+      更新后的完整 doc（新节点添加，children 更新，active_path 更新）
+      
+    逻辑：
+    1. 继承 retry_node 的 pid 作为新节点的 pid
+    2. 在父节点的 children 末尾添加新节点
+    3. 在 active_path 中，将 retry_node_id 替换为 new_node_id
+    4. 删除 retry_node_id 之后的所有 active_path 节点
+    """
+    loaded_doc = _load_doc_from_file_or_obj(doc, file)
+    nodes = loaded_doc.get("nodes") or {}
+    children_map = loaded_doc.get("children") or {}
+    active_path = list(loaded_doc.get("active_path") or [])
+    
+    if new_node_id in nodes:
+        raise ValueError(f"New node ID already exists: {new_node_id}")
+    
+    if retry_node_id not in nodes:
+        raise ValueError(f"Retry node not found: {retry_node_id}")
+    
+    if role not in ("system", "user", "assistant"):
+        raise ValueError(f"Invalid role: {role}")
+    
+    # 获取要重试节点的父节点
+    retry_node = nodes[retry_node_id]
+    pid = retry_node.get("pid")
+    
+    if pid is None:
+        raise ValueError("Cannot retry root node")
+    
+    if pid not in nodes:
+        raise ValueError(f"Parent node not found: {pid}")
+    
+    # 创建新节点（继承相同的 pid）
+    nodes[new_node_id] = {
+        "pid": pid,
+        "role": role,
+        "content": content
+    }
+    
+    # 在父节点的 children 末尾添加新节点
+    if pid not in children_map:
+        children_map[pid] = []
+    children_map[pid].append(new_node_id)
+    
+    # 更新 active_path：找到 retry_node_id 的位置并替换，删除其后的所有节点
+    if retry_node_id in active_path:
+        retry_idx = active_path.index(retry_node_id)
+        # 截断到重试节点之前，然后追加新节点
+        active_path = active_path[:retry_idx] + [new_node_id]
+    else:
+        # 如果 retry_node 不在当前路径，将新节点追加到路径末尾（兜底逻辑）
+        if active_path and active_path[-1] == pid:
+            active_path.append(new_node_id)
+    
+    loaded_doc["nodes"] = nodes
+    loaded_doc["children"] = children_map
+    loaded_doc["active_path"] = active_path
+    _update_timestamp(loaded_doc)
+    
+    # 如果传入了 file 参数，保存更新后的文档到文件
+    if file is not None and isinstance(file, str) and file.strip():
+        root = _repo_root()
+        conversations_dir = root / "backend_projects" / "SmartTavern" / "data" / "conversations"
+        target = (root / Path(file)).resolve()
+        
+        if not _is_within(target, conversations_dir):
+            raise ValueError(f"File must be within conversations directory: {file}")
+        
+        _safe_write_json(target, loaded_doc)
+    
+    return loaded_doc
+
+def retry_user_message(
+    user_node_id: str,
+    doc: Optional[Dict[str, Any]] = None,
+    file: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    智能重试用户消息：
+    1. 如果用户消息后有助手消息，返回第一个助手消息的 ID（前端可以调用 retry_branch）
+    2. 如果用户消息后没有助手消息，返回特殊标记（前端需要创建新助手消息并调用 AI）
+    
+    参数：
+    - user_node_id: 用户消息节点 ID
+    - doc/file: 二选一输入
+    
+    返回：
+      {
+        "action": "retry_assistant" | "create_assistant",
+        "assistant_node_id": str (action=retry_assistant 时存在),
+        "user_node_id": str,
+        "pid": str (action=create_assistant 时，新助手消息的父节点)
+      }
+    """
+    loaded_doc = _load_doc_from_file_or_obj(doc, file)
+    nodes = loaded_doc.get("nodes") or {}
+    children_map = loaded_doc.get("children") or {}
+    
+    if user_node_id not in nodes:
+        raise ValueError(f"User node not found: {user_node_id}")
+    
+    user_node = nodes[user_node_id]
+    if user_node.get("role") != "user":
+        raise ValueError(f"Node {user_node_id} is not a user message")
+    
+    # 检查是否有子节点
+    children = children_map.get(user_node_id, [])
+    
+    # 查找第一个助手消息子节点
+    assistant_child = None
+    for child_id in children:
+        child = nodes.get(child_id)
+        if child and child.get("role") == "assistant":
+            assistant_child = child_id
+            break
+    
+    if assistant_child:
+        # 有助手消息，返回重试助手消息的指示
+        return {
+            "action": "retry_assistant",
+            "assistant_node_id": assistant_child,
+            "user_node_id": user_node_id
+        }
+    else:
+        # 没有助手消息，返回创建新助手消息的指示
+        return {
+            "action": "create_assistant",
+            "user_node_id": user_node_id,
+            "pid": user_node_id  # 新助手消息的父节点就是这个用户消息
+        }
+
+
+
 # ---------- 创建初始对话：从角色卡 messages[0] 生成根节点，并输出对话三件套 ----------
 
 def _conversations_dir() -> Path:

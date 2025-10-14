@@ -248,8 +248,239 @@ function onKeydown(e) {
 function startEdit(msg) {
   inputRowRef.value?.setText?.(msg.content)
 }
-function regenerateMessage(msg) {
-  console.log('请求重新生成：', msg.id)
+
+/**
+ * 重新生成消息（重试）
+ * - assistant 消息：创建新分支
+ * - user 消息：智能判断（有后续助手则重试助手，无则创建新助手并调用 AI）
+ */
+async function regenerateMessage(msg) {
+  console.log('请求重新生成：', msg.id, msg.role)
+  
+  if (!props.conversationFile || !props.conversationDoc) {
+    console.error('缺少对话文件或文档')
+    return
+  }
+  
+  const ChatBranches = (await import('@/services/chatBranches.js')).default
+  
+  try {
+    if (msg.role === 'assistant') {
+      // 助手消息重试：创建新分支并调用 AI
+      await retryAssistantMessage(msg)
+    } else if (msg.role === 'user') {
+      // 用户消息重试：智能判断
+      const result = await ChatBranches.retryUserMessage({
+        file: props.conversationFile,
+        user_node_id: msg.id
+      })
+      
+      if (result.action === 'retry_assistant') {
+        // 有后续助手消息，重试助手消息
+        const assistantMsg = props.messages.find(m => m.id === result.assistant_node_id)
+        if (assistantMsg) {
+          await retryAssistantMessage(assistantMsg)
+        }
+      } else if (result.action === 'create_assistant') {
+        // 没有助手消息，直接调用 AI（省略用户消息发送步骤）
+        await callAI()
+      }
+    }
+  } catch (error) {
+    console.error('重试失败:', error)
+  }
+}
+
+/**
+ * 重试助手消息：创建新分支节点（保留原分支），然后调用 AI 填充
+ */
+async function retryAssistantMessage(assistantMsg) {
+  const ChatBranches = (await import('@/services/chatBranches.js')).default
+  
+  // 生成新节点 ID
+  const newNodeId = `n_ass${Date.now()}`
+  
+  try {
+    // 调用 retry_branch 创建新分支节点（空内容）
+    const updatedDoc = await ChatBranches.retryBranch({
+      file: props.conversationFile,
+      new_node_id: newNodeId,
+      retry_node_id: assistantMsg.id,
+      role: 'assistant',
+      content: ''  // 空内容，等待 AI 填充
+    })
+    
+    // 更新本地文档
+    if (updatedDoc && props.conversationDoc) {
+      Object.assign(props.conversationDoc, updatedDoc)
+    }
+    
+    // 找到助手消息在列表中的位置并替换为新节点
+    const msgIndex = props.messages.findIndex(m => m.id === assistantMsg.id)
+    if (msgIndex >= 0) {
+      // 替换为新分支节点（显示等待状态）
+      props.messages[msgIndex] = {
+        id: newNodeId,
+        role: 'assistant',
+        content: '',
+        waitingAI: true,
+        waitingSeconds: 0
+      }
+      
+      ensurePaletteFor(props.messages[msgIndex])
+    }
+    
+    // 重新加载分支信息
+    await loadBranchInfo()
+    
+    // 调用流式 AI 填充（AI workflow 会检测到空节点并更新它，而不是创建新节点）
+    await callAIForRetry(msgIndex, newNodeId)
+    
+  } catch (error) {
+    console.error('重试助手消息失败:', error)
+  }
+}
+
+/**
+ * 为重试场景调用 AI（直接更新指定节点，不创建占位消息）
+ */
+async function callAIForRetry(messageIndex, nodeId) {
+  if (!props.conversationFile) {
+    console.warn('无对话文件，跳过AI调用')
+    return
+  }
+
+  const llmConfigFile = 'backend_projects/SmartTavern/data/llm_configs/openai_gpt4.json'
+
+  // 等待计时器
+  let waitingTimer = null
+  let waitingStartTime = Date.now()
+  waitingTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - waitingStartTime) / 1000)
+    if (props.messages[messageIndex]) {
+      props.messages[messageIndex].waitingSeconds = elapsed
+    }
+  }, 1000)
+
+  // 打字机缓冲区
+  let typewriterBuffer = ''
+  let isTyping = false
+  let hasReceivedError = false
+
+  try {
+    const eventSource = ChatCompletion.completeStream({
+      conversationFile: props.conversationFile,
+      llmConfigFile: llmConfigFile,
+      callbacks: {
+        onChunk: async (content) => {
+          // 第一个 chunk 到达，停止等待动画
+          if (props.messages[messageIndex] && props.messages[messageIndex].waitingAI) {
+            props.messages[messageIndex].waitingAI = false
+            if (waitingTimer) {
+              clearInterval(waitingTimer)
+              waitingTimer = null
+            }
+          }
+          
+          if (hasReceivedError) return
+          
+          typewriterBuffer += content
+          
+          if (!isTyping && typewriterBuffer.length > 0) {
+            isTyping = true
+            
+            while (typewriterBuffer.length > 0 && !hasReceivedError) {
+              const char = typewriterBuffer[0]
+              typewriterBuffer = typewriterBuffer.slice(1)
+              if (props.messages[messageIndex]) {
+                props.messages[messageIndex].content += char
+              }
+              
+              await nextTick()
+              const container = messageListRef.value?.$el?.querySelector('.scroll-container')
+              if (container) {
+                container.scrollTop = container.scrollHeight
+              }
+              
+              const bufferLen = typewriterBuffer.length
+              let speed = bufferLen < 10 ? 30 : bufferLen < 50 ? 15 : bufferLen < 100 ? 8 : bufferLen < 200 ? 4 : 1
+              await new Promise(r => setTimeout(r, speed))
+            }
+            
+            isTyping = false
+          }
+        },
+        
+        onSaved: ({ node_id, doc }) => {
+          if (hasReceivedError) return
+          
+          console.log('AI响应已保存到节点:', node_id)
+          
+          if (doc && props.conversationDoc) {
+            Object.assign(props.conversationDoc, doc)
+          }
+        },
+        
+        onError: (message) => {
+          console.error('AI调用失败:', message)
+          hasReceivedError = true
+          
+          if (waitingTimer) {
+            clearInterval(waitingTimer)
+            waitingTimer = null
+          }
+          
+          typewriterBuffer = ''
+          isTyping = false
+          
+          if (props.messages[messageIndex]) {
+            props.messages[messageIndex].waitingAI = false
+            props.messages[messageIndex].error = message || 'AI调用失败'
+          }
+          
+          nextTick(() => {
+            refreshIcons()
+          })
+        },
+        
+        onEnd: async () => {
+          if (waitingTimer) {
+            clearInterval(waitingTimer)
+            waitingTimer = null
+          }
+          
+          while (isTyping || typewriterBuffer.length > 0) {
+            await new Promise(r => setTimeout(r, 50))
+          }
+          
+          if (props.messages[messageIndex]) {
+            props.messages[messageIndex].waitingAI = false
+          }
+          
+          console.log('AI流式调用完成')
+          if (hasReceivedError) {
+            await nextTick()
+            refreshIcons()
+            return
+          }
+          await loadBranchInfo()
+          refreshIcons()
+        }
+      }
+    })
+  } catch (error) {
+    console.error('AI调用异常:', error)
+    
+    if (waitingTimer) {
+      clearInterval(waitingTimer)
+      waitingTimer = null
+    }
+    
+    if (props.messages[messageIndex]) {
+      props.messages[messageIndex].waitingAI = false
+      props.messages[messageIndex].error = error?.message || 'AI调用失败'
+    }
+  }
 }
 
 /* 发送状态管理 */

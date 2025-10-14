@@ -28,7 +28,10 @@ from .impl import (
     get_latest_message_from_doc as _get_latest_message_from_doc,
     update_message_content as _update_message_content,
     truncate_after_node as _truncate_after_node,
+    delete_branch as _delete_branch,
     append_new_message as _append_new_message,
+    retry_branch as _retry_branch,
+    retry_user_message as _retry_user_message,
     switch_branch_impl as _switch_branch_impl,
     create_conversation_impl as _create_conversation_impl,
     settings_impl as _settings_impl,
@@ -218,6 +221,97 @@ def truncate_after(node_id: str, doc: Dict[str, Any] = None, file: str = None) -
 )
 def append_message(node_id: str, pid: str, role: str, content: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
     return _append_new_message(node_id=node_id, pid=pid, role=role, content=content, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/delete_branch",
+    name="删除分支",
+    description="删除单个分支节点及其子孙，自动切换到相邻分支",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "node_id": {"type": "string"},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["node_id"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["node_id", "doc"]},
+            {"required": ["node_id", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "additionalProperties": True
+    },
+)
+def delete_branch(node_id: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _delete_branch(node_id=node_id, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/retry_branch",
+    name="重试分支",
+    description="创建新分支节点，继承原节点的父节点，在children末尾添加，并更新active_path",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "new_node_id": {"type": "string"},
+            "retry_node_id": {"type": "string"},
+            "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+            "content": {"type": "string"},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["new_node_id", "retry_node_id", "role", "content"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["new_node_id", "retry_node_id", "role", "content", "doc"]},
+            {"required": ["new_node_id", "retry_node_id", "role", "content", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "additionalProperties": True
+    },
+)
+def retry_branch(new_node_id: str, retry_node_id: str, role: str, content: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _retry_branch(new_node_id=new_node_id, retry_node_id=retry_node_id, role=role, content=content, doc=doc, file=file)
+
+
+@core.register_api(
+    path="smarttavern/chat_branches/retry_user_message",
+    name="智能重试用户消息",
+    description="判断用户消息后是否有助手消息，返回相应的重试策略",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "user_node_id": {"type": "string"},
+            "doc": {"type": "object", "additionalProperties": True},
+            "file": {"type": "string"}
+        },
+        "required": ["user_node_id"],
+        "additionalProperties": False,
+        "oneOf": [
+            {"required": ["user_node_id", "doc"]},
+            {"required": ["user_node_id", "file"]}
+        ]
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["retry_assistant", "create_assistant"]},
+            "assistant_node_id": {"type": "string"},
+            "user_node_id": {"type": "string"},
+            "pid": {"type": "string"}
+        },
+        "required": ["action", "user_node_id"],
+        "additionalProperties": False
+    },
+)
+def retry_user_message(user_node_id: str, doc: Dict[str, Any] = None, file: str = None) -> Dict[str, Any]:
+    return _retry_user_message(user_node_id=user_node_id, doc=doc, file=file)
 
 
 @core.register_api(
