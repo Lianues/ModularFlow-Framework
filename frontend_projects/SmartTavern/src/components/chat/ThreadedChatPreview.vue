@@ -121,6 +121,9 @@ async function loadBranchInfo() {
     
     branchInfoMap.value = newMap
     console.log('分支信息加载成功:', newMap)
+    
+    // 刷新图标（确保新出现的分支按钮图标被渲染）
+    refreshIcons()
   } catch (error) {
     console.error('加载分支信息失败:', error)
   }
@@ -286,10 +289,18 @@ async function regenerateMessage(msg) {
       
       if (result.action === 'retry_assistant') {
         // 有后续助手消息，重试助手消息
-        const assistantMsg = props.messages.find(m => m.id === result.assistant_node_id)
-        if (assistantMsg) {
-          await retryAssistantMessage(assistantMsg)
+        let assistantMsg = props.messages.find(m => m.id === result.assistant_node_id)
+        
+        // 如果在当前消息列表中找不到，创建临时对象（用于重试）
+        if (!assistantMsg) {
+          assistantMsg = {
+            id: result.assistant_node_id,
+            role: 'assistant',
+            content: ''
+          }
         }
+        
+        await retryAssistantMessage(assistantMsg)
       } else if (result.action === 'create_assistant') {
         // 没有助手消息，直接调用 AI（省略用户消息发送步骤）
         await callAI()
